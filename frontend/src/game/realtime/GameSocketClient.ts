@@ -14,6 +14,7 @@ import type {
   SocketAck,
   SocketErrorPayload,
   VisibilityViewportPayload,
+  WorldSpawnPayload,
 } from '../../contracts/socket';
 import type { Locale } from '../../i18n/dictionaries';
 import { createRequestId } from '../../utils/requestId';
@@ -21,16 +22,15 @@ import { gameStore } from '../state/gameStore';
 
 const ACK_TIMEOUT_MS = 8_000;
 const SERVER_RECONNECT_DELAY_MS = 1_200;
-
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type ChatListener = (message: ChatMessagePayload) => void;
 
 export class GameSocketClient {
-  private socket: GameSocket | undefined = undefined;
+  private socket: GameSocket | undefined;
   private locale: Locale;
   private forceTokenRefresh = false;
   private manualDisconnect = false;
-  private serverReconnectTimer: number | undefined = undefined;
+  private serverReconnectTimer: number | undefined;
   private readonly chatListeners = new Set<ChatListener>();
   private readonly pageHideHandler = () => this.socket?.disconnect();
   private readonly pageShowHandler = () => {
@@ -40,10 +40,7 @@ export class GameSocketClient {
     }
   };
 
-  constructor(
-    private readonly user: User,
-    locale: Locale,
-  ) {
+  constructor(private readonly user: User, locale: Locale) {
     this.locale = locale;
   }
 
@@ -51,7 +48,6 @@ export class GameSocketClient {
     if (this.socket) return;
     this.manualDisconnect = false;
     gameStore.markConnecting();
-
     const gameServerUrl = runtimeConfig.gameServerUrl.replace(/\/+$/, '');
     const socket = io(`${gameServerUrl}/game`, {
       path: runtimeConfig.socketPath,
@@ -73,7 +69,6 @@ export class GameSocketClient {
         }
       },
     });
-
     this.socket = socket;
     this.bindEvents(socket);
     window.addEventListener('pagehide', this.pageHideHandler);
@@ -85,10 +80,8 @@ export class GameSocketClient {
     this.manualDisconnect = true;
     window.removeEventListener('pagehide', this.pageHideHandler);
     window.removeEventListener('pageshow', this.pageShowHandler);
-    if (this.serverReconnectTimer !== undefined) {
-      window.clearTimeout(this.serverReconnectTimer);
-      this.serverReconnectTimer = undefined;
-    }
+    if (this.serverReconnectTimer !== undefined) window.clearTimeout(this.serverReconnectTimer);
+    this.serverReconnectTimer = undefined;
     this.socket?.removeAllListeners();
     this.socket?.disconnect();
     this.socket = undefined;
@@ -96,10 +89,7 @@ export class GameSocketClient {
     gameStore.reset();
   }
 
-  setLocale(locale: Locale): void {
-    this.locale = locale;
-  }
-
+  setLocale(locale: Locale): void { this.locale = locale; }
   subscribeChat(listener: ChatListener): () => void {
     this.chatListeners.add(listener);
     return () => this.chatListeners.delete(listener);
@@ -107,12 +97,8 @@ export class GameSocketClient {
 
   async sendChat(channel: ChatChannel, text: string): Promise<void> {
     const socket = this.requireSocket();
-    const response = await this.withAck<ChatMessagePayload>((acknowledge) => {
-      socket.emit(
-        'chat:send',
-        { requestId: createRequestId('chat'), channel, text },
-        acknowledge,
-      );
+    const response = await this.withAck<ChatMessagePayload>((ack) => {
+      socket.emit('chat:send', { requestId: createRequestId('chat'), channel, text }, ack);
     });
     if (!response.ok) {
       gameStore.addNotification(response.error);
@@ -122,12 +108,8 @@ export class GameSocketClient {
 
   async createCharacter(name: string, characterClass: CharacterClass): Promise<void> {
     const socket = this.requireSocket();
-    const response = await this.withAck<CharacterCreateResult>((acknowledge) => {
-      socket.emit(
-        'character:create',
-        { requestId: createRequestId('character'), name, characterClass },
-        acknowledge,
-      );
+    const response = await this.withAck<CharacterCreateResult>((ack) => {
+      socket.emit('character:create', { requestId: createRequestId('character'), name, characterClass }, ack);
     });
     if (!response.ok) {
       gameStore.addNotification(response.error);
@@ -136,26 +118,31 @@ export class GameSocketClient {
     gameStore.spawn(response.data);
   }
 
+  async enterWorld(): Promise<void> {
+    const socket = this.requireSocket();
+    const response = await this.withAck<WorldSpawnPayload>((ack) => socket.emit('world:enter', ack));
+    if (!response.ok) {
+      gameStore.addNotification(response.error);
+      throw new Error(response.error.message);
+    }
+    gameStore.spawn(response.data);
+    gameStore.enterWorld();
+  }
+
   async requestStep(direction: Direction): Promise<boolean> {
     const socket = this.requireSocket();
-    const response = await this.withAck<MovementCommittedPayload>((acknowledge) => {
-      socket.emit(
-        'movement:step',
-        { requestId: createRequestId('step'), direction },
-        acknowledge,
-      );
+    const response = await this.withAck<MovementCommittedPayload>((ack) => {
+      socket.emit('movement:step', { requestId: createRequestId('step'), direction }, ack);
     });
-    if (!response.ok && response.error.code !== 'MOVE_TOO_FAST') {
-      gameStore.addNotification(response.error);
-    }
+    if (!response.ok && response.error.code !== 'MOVE_TOO_FAST') gameStore.addNotification(response.error);
     return response.ok;
   }
 
   async requestTarget(targetX: number, targetY: number): Promise<number> {
     const socket = this.requireSocket();
     const requestId = createRequestId('path');
-    const response = await this.withAck<PathAcceptedPayload>((acknowledge) => {
-      socket.emit('movement:target', { requestId, targetX, targetY }, acknowledge);
+    const response = await this.withAck<PathAcceptedPayload>((ack) => {
+      socket.emit('movement:target', { requestId, targetX, targetY }, ack);
     });
     if (!response.ok) {
       gameStore.clearPlannedPath();
@@ -170,34 +157,28 @@ export class GameSocketClient {
     gameStore.clearPlannedPath();
     const socket = this.socket;
     if (!socket?.connected) return;
-    await this.withAck<MovementStopPayload>((acknowledge) => {
-      socket.emit('movement:stop', { requestId: createRequestId('stop') }, acknowledge);
+    await this.withAck<MovementStopPayload>((ack) => {
+      socket.emit('movement:stop', { requestId: createRequestId('stop') }, ack);
     }).catch(() => undefined);
   }
 
   async updateViewport(halfWidth: number, halfHeight: number): Promise<void> {
     const socket = this.socket;
     if (!socket?.connected) return;
-    const response = await this.withAck<VisibilityViewportPayload>((acknowledge) => {
-      socket.emit(
-        'visibility:viewport',
-        {
-          requestId: createRequestId('viewport'),
-          halfWidth: Math.max(1, Math.min(128, Math.trunc(halfWidth))),
-          halfHeight: Math.max(1, Math.min(128, Math.trunc(halfHeight))),
-        },
-        acknowledge,
-      );
+    const response = await this.withAck<VisibilityViewportPayload>((ack) => {
+      socket.emit('visibility:viewport', {
+        requestId: createRequestId('viewport'),
+        halfWidth: Math.max(1, Math.min(128, Math.trunc(halfWidth))),
+        halfHeight: Math.max(1, Math.min(128, Math.trunc(halfHeight))),
+      }, ack);
     });
     if (!response.ok) gameStore.addNotification(response.error);
   }
 
   private bindEvents(socket: GameSocket): void {
     socket.on('connect', () => {
-      if (this.serverReconnectTimer !== undefined) {
-        window.clearTimeout(this.serverReconnectTimer);
-        this.serverReconnectTimer = undefined;
-      }
+      if (this.serverReconnectTimer !== undefined) window.clearTimeout(this.serverReconnectTimer);
+      this.serverReconnectTimer = undefined;
       gameStore.markConnected();
     });
     socket.on('disconnect', (reason) => {
@@ -209,19 +190,12 @@ export class GameSocketClient {
       }
     });
     socket.on('connect_error', (error) => {
-      if (error.message === 'AUTH_INVALID' || error.message === 'AUTH_REQUIRED') {
-        this.forceTokenRefresh = true;
-      }
+      if (error.message === 'AUTH_INVALID' || error.message === 'AUTH_REQUIRED') this.forceTokenRefresh = true;
       gameStore.markDisconnected(error.message);
     });
-    socket.io.on('reconnect_attempt', () => {
-      this.forceTokenRefresh = true;
-    });
-
+    socket.io.on('reconnect_attempt', () => { this.forceTokenRefresh = true; });
     socket.on('session:ready', (payload) => gameStore.setSessionReady(payload));
-    socket.on('character:required', ({ allowedClasses }) =>
-      gameStore.requireCharacter(allowedClasses),
-    );
+    socket.on('character:required', ({ allowedClasses }) => gameStore.requireCharacter(allowedClasses));
     socket.on('world:spawn', (payload) => gameStore.spawn(payload));
     socket.on('world:playerEntered', (player) => gameStore.upsertPlayer(player));
     socket.on('world:playerMoved', (player) => gameStore.upsertPlayer(player));
@@ -239,31 +213,22 @@ export class GameSocketClient {
     if (this.serverReconnectTimer !== undefined || this.manualDisconnect) return;
     this.serverReconnectTimer = window.setTimeout(() => {
       this.serverReconnectTimer = undefined;
-      if (!this.manualDisconnect && this.socket === socket && !socket.connected) {
-        socket.connect();
-      }
+      if (!this.manualDisconnect && this.socket === socket && !socket.connected) socket.connect();
     }, SERVER_RECONNECT_DELAY_MS);
   }
 
   private requireSocket(): GameSocket {
     if (!this.socket?.connected) {
-      const error: SocketErrorPayload = {
-        code: 'SOCKET_DISCONNECTED',
-        message: 'The game socket is not connected.',
-      };
+      const error: SocketErrorPayload = { code: 'SOCKET_DISCONNECTED', message: 'The game socket is not connected.' };
       gameStore.addNotification(error);
       throw new Error(error.message);
     }
     return this.socket;
   }
 
-  private withAck<T>(
-    emit: (acknowledge: (response: SocketAck<T>) => void) => void,
-  ): Promise<SocketAck<T>> {
+  private withAck<T>(emit: (acknowledge: (response: SocketAck<T>) => void) => void): Promise<SocketAck<T>> {
     return new Promise((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        reject(new Error('The game server did not acknowledge the request.'));
-      }, ACK_TIMEOUT_MS);
+      const timeout = window.setTimeout(() => reject(new Error('The game server did not acknowledge the request.')), ACK_TIMEOUT_MS);
       emit((response) => {
         window.clearTimeout(timeout);
         resolve(response);
