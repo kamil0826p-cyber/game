@@ -1,24 +1,36 @@
+import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Button } from '../components/common/Button';
 import { LocaleToggle } from '../components/common/LocaleToggle';
 import { MobileUnsupportedNotice } from '../components/common/MobileUnsupportedNotice';
 import { OutfitPreview } from '../components/common/OutfitPreview';
 import { Panel } from '../components/common/Panel';
-import { gameStore, useGameState } from '../game/state/gameStore';
+import { useGameConnection } from '../game/realtime/GameConnectionProvider';
+import { useGameState } from '../game/state/gameStore';
 import { useI18n } from '../i18n/I18nProvider';
 import { CLASS_PRESENTATION } from '../mock/outfitCatalog';
 
 export function CharacterSelectScreen(): React.JSX.Element {
   const state = useGameState();
+  const connection = useGameConnection();
   const { signOut } = useAuth();
   const { t } = useI18n();
+  const [entering, setEntering] = useState(false);
   const character = state.self;
   const map = state.map;
 
-  if (!character || !map) {
-    return <div />;
-  }
+  if (!character || !map) return <div />;
   const classInfo = CLASS_PRESENTATION[character.characterClass];
+
+  const enterWorld = async () => {
+    if (entering) return;
+    setEntering(true);
+    try {
+      await connection.enterWorld();
+    } finally {
+      setEntering(false);
+    }
+  };
 
   return (
     <main className="auth-background flex h-dvh items-center justify-center overflow-hidden p-5 text-slate-100 md:overflow-y-auto">
@@ -40,18 +52,12 @@ export function CharacterSelectScreen(): React.JSX.Element {
 
         <section className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[0.8fr_1.2fr]">
           <div className="character-pedestal">
-            <OutfitPreview
-              outfitKey={character.outfitKey}
-              characterClass={character.characterClass}
-            />
+            <OutfitPreview outfitKey={character.outfitKey} characterClass={character.characterClass} />
           </div>
-
           <div className="flex flex-col justify-center">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="font-display text-4xl text-slate-50">{character.name}</h2>
-              <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>
-                {map.zoneType}
-              </span>
+              <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{map.zoneType}</span>
             </div>
             <p className={`mt-2 text-sm font-semibold uppercase tracking-[0.18em] ${classInfo.accent}`}>
               Level {character.level} {classInfo.label}
@@ -66,7 +72,7 @@ export function CharacterSelectScreen(): React.JSX.Element {
               <Meter label="Health" value={character.hp} max={character.maxHp} tone="health" />
               <Meter label="Energy" value={character.energy} max={character.maxEnergy} tone="energy" />
             </div>
-            <Button className="mt-8 justify-center py-3 text-base" onClick={() => gameStore.enterWorld()} type="button">
+            <Button className="mt-8 justify-center py-3 text-base" onClick={() => void enterWorld()} type="button" busy={entering}>
               {t('character.enterWorld')}
             </Button>
           </div>
