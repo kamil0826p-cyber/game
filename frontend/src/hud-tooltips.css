@@ -1,0 +1,78 @@
+.hud-tooltip-anchor {
+  overflow: visible;
+}
+
+.hud-tooltip-bubble {
+  position: absolute;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 32px));
+  border: 1px solid rgba(235, 206, 120, 0.62);
+  border-radius: 7px;
+  padding: 0.48rem 0.66rem;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  background: linear-gradient(180deg, rgba(64, 40, 17, 0.99), rgba(15, 9, 5, 0.99));
+  color: #f7e7b0;
+  box-shadow: inset 0 0 0 1px rgba(255, 231, 169, 0.07), 0 10px 28px rgba(0, 0, 0, 0.6);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+}
+
+.hud-tooltip-bubble kbd {
+  position: static;
+  display: inline-flex;
+  min-width: 1.35rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(235, 206, 120, 0.3);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  color: #d8aa45;
+  font-family: ui-monospace, monospace;
+  font-size: 0.62rem;
+}
+
+.hud-tooltip-anchor:hover .hud-tooltip-bubble,
+.hud-tooltip-anchor:focus-visible .hud-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
+.hud-tooltip-bubble-top {
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translate(-50%, 5px);
+}
+
+.hud-tooltip-anchor:hover .hud-tooltip-bubble-top,
+.hud-tooltip-anchor:focus-visible .hud-tooltip-bubble-top {
+  transform: translate(-50%, 0);
+}
+
+.hud-tooltip-bubble-left {
+  top: 50%;
+  right: calc(100% + 10px);
+  transform: translate(5px, -50%);
+}
+
+.hud-tooltip-anchor:hover .hud-tooltip-bubble-left,
+.hud-tooltip-anchor:focus-visible .hud-tooltip-bubble-left {
+  transform: translate(0, -50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-tooltip-bubble {
+    transition: none;
+  }
+}
