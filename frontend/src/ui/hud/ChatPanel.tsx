@@ -89,11 +89,11 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
           </p>
         ))}
       </div>
-      <form onSubmit={(event) => void submit(event)} className="flex border-t border-white/10 bg-black/20 p-2">
+      <form onSubmit={(event) => void submit(event)} className="flex border-t border-amber-400/20 bg-amber-950/10 p-2">
         <input
           value={input}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setInput(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent px-2 text-xs text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
+          className="min-w-0 flex-1 bg-transparent px-2 text-xs text-amber-50 caret-amber-300 outline-none placeholder:text-amber-200/45 disabled:cursor-not-allowed"
           placeholder={tab === 'System' ? 'System channel is read-only' : t('chat.placeholder')}
           maxLength={160}
           disabled={tab === 'System' || sending}
