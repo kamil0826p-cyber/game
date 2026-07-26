@@ -9,7 +9,6 @@ const classColors = {
   ARCHER: 0x4f9467,
 } as const;
 
-
 export class CharacterView {
   readonly container = new Container();
   private readonly shadow: Graphics;
@@ -64,14 +63,6 @@ export class CharacterView {
     this.nameplate.addChild(badge, this.nameText);
     this.nameplate.position.set(0, -72);
     this.nameplate.zIndex = 4;
-
-    if (localPlayer) {
-      const selection = new Graphics()
-        .ellipse(0, -1, 21, 9)
-        .stroke({ color: 0xfacc15, width: 2, alpha: 0.85 });
-      selection.zIndex = 3;
-      this.container.addChild(selection);
-    }
 
     this.container.addChild(this.shadow, this.fallback, this.sprite, this.nameplate);
     const x = (state.x + 0.5) * WORLD_TILE_SIZE;
