@@ -44,4 +44,5 @@ export interface CreatePlayerSessionInput {
   mapId: string;
   x: number;
   y: number;
+  activeInWorld?: boolean;
 }
