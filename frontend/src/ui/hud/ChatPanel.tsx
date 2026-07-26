@@ -23,12 +23,9 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
   const scrollRef = useRef<HTMLDivElement>(null);
   const tabs: ChatTab[] = ['Global', 'Local', 'System'];
 
-  useEffect(
-    () => connection.subscribeChat((message) => {
-      setMessages((current) => [...current.slice(-99), message]);
-    }),
-    [connection],
-  );
+  useEffect(() => connection.subscribeChat((message) => {
+    setMessages((current) => [...current.slice(-99), message]);
+  }), [connection]);
 
   const visibleMessages = useMemo(() => {
     if (tab === 'System') {
@@ -40,14 +37,12 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
       }));
     }
     const channel: ChatChannel = tab === 'Global' ? 'GLOBAL' : 'LOCAL';
-    return messages
-      .filter((message) => message.channel === channel)
-      .map((message) => ({
-        id: message.id,
-        author: message.author,
-        text: message.text,
-        tone: message.channel === 'LOCAL' ? ('local' as const) : ('player' as const),
-      }));
+    return messages.filter((message) => message.channel === channel).map((message) => ({
+      id: message.id,
+      author: message.author,
+      text: message.text,
+      tone: message.channel === 'LOCAL' ? ('local' as const) : ('player' as const),
+    }));
   }, [messages, notifications, tab]);
 
   useEffect(() => {
@@ -69,38 +64,29 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
   };
 
   return (
-    <section className="hud-panel pointer-events-auto flex h-[220px] w-[min(430px,calc(100vw-24px))] flex-col" aria-label="Chat">
-      <nav className="flex border-b border-white/10 bg-slate-950/45">
+    <section className="hud-panel chat-console pointer-events-auto flex h-[230px] w-[min(440px,calc(100vw-40px))] flex-col" aria-label="Chat">
+      <header className="chat-console-header">
+        <div><i /><span>Comms</span></div>
+        <small>Live network</small>
+      </header>
+      <nav className="flex border-b border-white/5">
         {tabs.map((candidate) => (
           <button key={candidate} type="button" onClick={() => setTab(candidate)} className={`chat-tab ${tab === candidate ? 'chat-tab-active' : ''}`}>
             {candidate === 'Global' ? t('chat.global') : candidate === 'Local' ? t('chat.local') : t('chat.system')}
           </button>
         ))}
-        <span className="ml-auto self-center pr-3 text-[9px] uppercase tracking-wider text-emerald-300/60">Live</span>
       </nav>
-      <div ref={scrollRef} className="scrollbar-thin flex-1 space-y-1.5 overflow-y-auto p-3 text-xs">
-        {visibleMessages.length === 0 ? (
-          <p className="text-slate-500">No messages yet.</p>
-        ) : visibleMessages.map((message) => (
-          <p key={message.id} className="leading-5 text-slate-300">
-            <strong className={message.tone === 'warning' ? 'text-amber-300' : message.tone === 'local' ? 'text-emerald-300' : 'text-violet-300'}>
-              [{message.author}]
-            </strong>{' '}{message.text}
+      <div ref={scrollRef} className="scrollbar-thin flex-1 space-y-1.5 overflow-y-auto px-3 py-2 text-xs">
+        {visibleMessages.length === 0 ? <p className="chat-empty">No transmissions received.</p> : visibleMessages.map((message) => (
+          <p key={message.id} className="chat-message">
+            <strong data-tone={message.tone}>{message.author}</strong><span>{message.text}</span>
           </p>
         ))}
       </div>
-      <form onSubmit={(event) => void submit(event)} className="flex border-t border-white/10 bg-black/20 p-2">
-        <input
-          value={input}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setInput(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent px-2 text-xs text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
-          placeholder={tab === 'System' ? 'System channel is read-only' : t('chat.placeholder')}
-          maxLength={160}
-          disabled={tab === 'System' || sending}
-        />
-        <button type="submit" disabled={tab === 'System' || sending || input.trim().length === 0} className="rounded border border-amber-400/30 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200 hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-40">
-          {sending ? '...' : 'Send'}
-        </button>
+      <form onSubmit={(event) => void submit(event)} className="chat-compose">
+        <span>&gt;</span>
+        <input value={input} onChange={(event: ChangeEvent<HTMLInputElement>) => setInput(event.target.value)} placeholder={tab === 'System' ? 'System channel is read-only' : t('chat.placeholder')} maxLength={160} disabled={tab === 'System' || sending} />
+        <button type="submit" disabled={tab === 'System' || sending || input.trim().length === 0}>{sending ? '...' : 'SEND'}</button>
       </form>
     </section>
   );
