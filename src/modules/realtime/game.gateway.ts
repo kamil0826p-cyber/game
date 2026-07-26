@@ -13,6 +13,7 @@ import { ZodError, type ZodType } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { FirebaseSocketAuthMiddleware } from '../../auth/firebase-socket-auth.middleware.js';
 import type {
+  ChatMessagePayload,
   GameNamespace,
   GameSocket,
   MovementCommittedPayload,
@@ -21,11 +22,13 @@ import type {
   WorldSpawnPayload,
 } from '../../contracts/socket.events.js';
 import {
+  chatSendSchema,
   createCharacterSchema,
   moveStepSchema,
   moveStopSchema,
   moveTargetSchema,
   viewportUpdateSchema,
+  type ChatSendPayload,
   type CreateCharacterPayload,
   type MoveStepPayload,
   type MoveStopPayload,
@@ -39,6 +42,9 @@ import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { SessionLifecycleService } from './session-lifecycle.service.js';
 
+const CHAT_COOLDOWN_MS = 750;
+const LOCAL_CHAT_RADIUS = 12;
+
 @WebSocketGateway({
   namespace: '/game',
   transports: ['websocket'],
@@ -47,6 +53,7 @@ export class GameGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
 {
   private readonly logger = new Logger(GameGateway.name);
+  private readonly lastChatSentAt = new Map<string, number>();
   private acceptingConnections = true;
 
   @WebSocketServer()
@@ -81,6 +88,8 @@ export class GameGateway
 
   async handleDisconnect(client: GameSocket): Promise<void> {
     try {
+      const characterId = client.data.characterId;
+      if (characterId) this.lastChatSentAt.delete(characterId);
       await this.lifecycle.disconnect(client);
     } catch (error) {
       this.logger.error(
@@ -182,6 +191,58 @@ export class GameGateway
         this.visibility.refreshViewer(activeSession);
         return { ok: true, data: { ...activeSession.viewport } } as const;
       });
+    } catch (error) {
+      return { ok: false, error: this.toSocketError(error, client) };
+    }
+  }
+
+  @SubscribeMessage('chat:send')
+  sendChatMessage(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() rawPayload: unknown,
+  ): SocketAck<ChatMessagePayload> {
+    try {
+      this.assertAcceptingConnections();
+      const payload = this.parse<ChatSendPayload>(chatSendSchema, rawPayload);
+      const session = this.requireSession(client);
+      const now = Date.now();
+      const previous = this.lastChatSentAt.get(session.characterId) ?? 0;
+      if (now - previous < CHAT_COOLDOWN_MS) {
+        return {
+          ok: false,
+          error: {
+            code: 'CHAT_RATE_LIMITED',
+            message: 'You are sending messages too quickly.',
+            details: { retryAfterMs: CHAT_COOLDOWN_MS - (now - previous) },
+          },
+        };
+      }
+
+      this.lastChatSentAt.set(session.characterId, now);
+      const message: ChatMessagePayload = {
+        id: `${session.characterId}:${now}:${payload.requestId}`,
+        channel: payload.channel,
+        characterId: session.characterId,
+        author: session.name,
+        text: payload.text,
+        mapId: session.mapId,
+        sentAt: now,
+      };
+
+      const recipients = this.worldState.listSessions().filter((candidate) => {
+        if (candidate.realmId !== session.realmId) return false;
+        if (payload.channel === 'GLOBAL') return true;
+        return (
+          candidate.mapId === session.mapId &&
+          Math.abs(candidate.x - session.x) <= LOCAL_CHAT_RADIUS &&
+          Math.abs(candidate.y - session.y) <= LOCAL_CHAT_RADIUS
+        );
+      });
+
+      for (const recipient of recipients) {
+        this.publisher.emit(recipient.socketId, 'chat:message', message);
+      }
+      return { ok: true, data: message };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
