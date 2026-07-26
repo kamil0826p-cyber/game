@@ -30,9 +30,9 @@ export function ActionBar(): React.JSX.Element {
   }, []);
 
   return (
-    <section className="hud-panel pointer-events-auto flex gap-1.5 p-2" aria-label="Mock quick actions">
+    <section className="hud-panel pointer-events-auto flex gap-1.5 p-2" aria-label="Quick actions">
       {slots.map((slot, index) => (
-        <button key={slot.label} type="button" title={`${slot.label} (visual mock)`} onClick={() => { setActive(index); window.setTimeout(() => setActive(undefined), 180); }} className={`action-slot ${active === index ? 'action-slot-active' : ''}`}>
+        <button key={slot.label} type="button" title={slot.label} onClick={() => { setActive(index); window.setTimeout(() => setActive(undefined), 180); }} className={`action-slot ${active === index ? 'action-slot-active' : ''}`}>
           <span className="text-xl">{slot.icon}</span><kbd>{index + 1}</kbd>
         </button>
       ))}

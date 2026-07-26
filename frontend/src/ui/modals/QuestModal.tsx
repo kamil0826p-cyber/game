@@ -6,7 +6,7 @@ export function QuestModal({ onClose }: { onClose: () => void }): React.JSX.Elem
   const [selected, setSelected] = useState(0);
   const quest = MOCK_QUESTS[selected] ?? MOCK_QUESTS[0]!;
   return (
-    <Modal title="Quest Log" subtitle="Static quest previews" icon="▱" onClose={onClose} widthClass="max-w-3xl">
+    <Modal title="Quest Log" subtitle="Current adventures and objectives" icon="▱" onClose={onClose} widthClass="max-w-3xl">
       <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
         <nav className="space-y-2">
           {MOCK_QUESTS.map((entry, index) => (
@@ -24,7 +24,7 @@ export function QuestModal({ onClose }: { onClose: () => void }): React.JSX.Elem
           </div>
         </article>
       </div>
-      <p className="mock-banner mt-5">Quest acceptance, objective tracking, rewards, and backend persistence are not implemented.</p>
+      <p className="mock-banner mt-5">Quest tracking, rewards, and persistence will be expanded in a future gameplay update.</p>
     </Modal>
   );
 }
