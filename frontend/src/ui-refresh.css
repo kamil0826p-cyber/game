@@ -46,6 +46,10 @@
   border-radius: 14px;
 }
 
+.hud-panel.hud-tooltip-container {
+  overflow: visible;
+}
+
 .hud-panel::before,
 .fantasy-panel::before {
   position: absolute;
