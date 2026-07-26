@@ -7,6 +7,7 @@ import { I18nProvider } from './i18n/I18nProvider';
 import './styles.css';
 import './ui-refresh.css';
 import './medieval-gold-theme.css';
+import './hud-tooltips.css';
 
 const root = document.getElementById('root');
 if (!root) {

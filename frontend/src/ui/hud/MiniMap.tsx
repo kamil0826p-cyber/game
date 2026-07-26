@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MapStatePayload, PublicPlayerState, SelfCharacterState } from '../../contracts/game';
 import type { LoadedMapDefinition } from '../../contracts/tiled';
 import { mapRepository } from '../../game/map/MapRepository';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface MiniMapProps {
   map: MapStatePayload;
@@ -9,11 +10,16 @@ interface MiniMapProps {
   players: Readonly<Record<string, PublicPlayerState>>;
 }
 
+const zoneLabelKey = {
+  SAFE: 'map.zone.safe',
+  OUTLAW: 'map.zone.outlaw',
+  PVP: 'map.zone.pvp',
+} as const;
+
 export function MiniMap({ map, character, players }: MiniMapProps): React.JSX.Element {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [definition, setDefinition] = useState<LoadedMapDefinition | undefined>(
-    undefined,
-  );
+  const [definition, setDefinition] = useState<LoadedMapDefinition | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -65,11 +71,11 @@ export function MiniMap({ map, character, players }: MiniMapProps): React.JSX.El
     <section className="hud-panel pointer-events-auto w-[210px] p-2" aria-label="Mini-map">
       <div className="mb-1.5 flex items-center justify-between px-1">
         <span className="truncate font-display text-sm text-amber-100">{map.name}</span>
-        <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{map.zoneType}</span>
+        <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{t(zoneLabelKey[map.zoneType])}</span>
       </div>
       <canvas ref={canvasRef} width={384} height={240} className="pixelated aspect-[8/5] w-full rounded border border-black/60 bg-slate-950/80" />
       <div className="mt-1.5 flex justify-between px-1 text-[9px] uppercase tracking-wider text-slate-500">
-        <span>Players {Object.keys(players).length + 1}</span><span>{character.x}, {character.y}</span>
+        <span>{t('common.players')} {Object.keys(players).length + 1}</span><span>{character.x}, {character.y}</span>
       </div>
     </section>
   );

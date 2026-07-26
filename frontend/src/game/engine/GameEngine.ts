@@ -1,11 +1,10 @@
 import {
   Application,
   Container,
-  Graphics,
   Rectangle,
   type FederatedPointerEvent,
 } from 'pixi.js';
-import type { Coordinates, PublicPlayerState } from '../../contracts/game';
+import type { PublicPlayerState } from '../../contracts/game';
 import type { LoadedMapDefinition } from '../../contracts/tiled';
 import { KeyboardMovementController } from '../input/KeyboardMovementController';
 import { mapRepository } from '../map/MapRepository';
@@ -32,7 +31,6 @@ export class GameEngine {
   private readonly app = new Application();
   private readonly world = new Container();
   private readonly playerLayer = new Container();
-  private readonly pathLayer = new Graphics();
   private readonly mapRenderer = new MapRenderer();
   private readonly characterViews = new Map<string, CharacterView>();
   private keyboard?: KeyboardMovementController;
@@ -74,9 +72,8 @@ export class GameEngine {
     this.world.sortableChildren = true;
     this.playerLayer.sortableChildren = true;
     this.mapRenderer.container.zIndex = 0;
-    this.pathLayer.zIndex = 1;
     this.playerLayer.zIndex = 2;
-    this.world.addChild(this.mapRenderer.container, this.pathLayer, this.playerLayer);
+    this.world.addChild(this.mapRenderer.container, this.playerLayer);
     this.app.stage.addChild(this.world);
     this.app.stage.eventMode = 'static';
     this.app.stage.hitArea = new Rectangle(0, 0, this.app.screen.width, this.app.screen.height);
@@ -126,7 +123,6 @@ export class GameEngine {
       }
     }
     this.syncCharacters(state);
-    this.drawPath(state.plannedPath);
   };
 
   private async loadMap(key: string): Promise<void> {
@@ -294,28 +290,6 @@ export class GameEngine {
     event.preventDefault();
     void this.client.stopMovement();
   };
-
-  private drawPath(path: readonly Coordinates[]): void {
-    this.pathLayer.clear();
-    if (path.length === 0) {
-      return;
-    }
-    const points = path.map((step) => ({
-      x: (step.x + 0.5) * WORLD_TILE_SIZE,
-      y: (step.y + 0.5) * WORLD_TILE_SIZE,
-    }));
-    this.pathLayer.moveTo(points[0]!.x, points[0]!.y);
-    for (const point of points.slice(1)) {
-      this.pathLayer.lineTo(point.x, point.y);
-    }
-    this.pathLayer.stroke({ color: 0xfcd34d, width: 3, alpha: 0.6 });
-    for (const point of points) {
-      this.pathLayer
-        .circle(point.x, point.y, 5)
-        .fill({ color: 0xfef3c7, alpha: 0.75 })
-        .stroke({ color: 0x92400e, width: 1, alpha: 0.8 });
-    }
-  }
 
   private onResize(): void {
     if (this.destroyed) {

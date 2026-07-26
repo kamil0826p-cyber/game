@@ -11,13 +11,13 @@ import { getUnlockedOutfits } from '../characters/outfit.catalog.js';
 import { MapService } from '../maps/map.service.js';
 import type { RuntimeMap } from '../maps/runtime-map.types.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
+import { MovementService } from '../movement/movement.service.js';
 import { PlayerPersistenceService } from '../persistence/player-persistence.service.js';
 import { RealmService } from '../realm/realm.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { VisibilityService } from '../world/visibility.service.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
-import { MovementService } from '../movement/movement.service.js';
 import { SessionClaimExecutor } from './session-claim.executor.js';
 
 @Injectable()
@@ -43,9 +43,7 @@ export class SessionLifecycleService {
     this.assertSocketConnected(client);
     client.data.sessionState = 'INITIALIZING';
     const auth = client.data.auth;
-    if (!auth) {
-      throw new GameError(GAME_ERROR_CODES.AUTH_REQUIRED, 'errors.auth.required');
-    }
+    if (!auth) throw new GameError(GAME_ERROR_CODES.AUTH_REQUIRED, 'errors.auth.required');
 
     client.data.locale = this.localization.resolveLocale(
       client.handshake.auth?.locale ?? client.handshake.query.locale,
@@ -61,7 +59,6 @@ export class SessionLifecycleService {
     }
 
     this.assertSocketConnected(client);
-
     client.emit('session:ready', {
       realm: { id: realm.id, slug: realm.slug, name: realm.name },
       requiresCharacter: !character,
@@ -70,13 +67,11 @@ export class SessionLifecycleService {
 
     if (!character) {
       client.data.sessionState = 'CHARACTER_REQUIRED';
-      client.emit('character:required', {
-        allowedClasses: ['MAGE', 'WARRIOR', 'ARCHER'],
-      });
+      client.emit('character:required', { allowedClasses: ['MAGE', 'WARRIOR', 'ARCHER'] });
       return;
     }
 
-    await this.spawn(client, character);
+    await this.prepareCharacterSelection(client, character);
   }
 
   async createCharacter(
@@ -88,17 +83,14 @@ export class SessionLifecycleService {
       throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
     }
     if (this.worldState.getBySocketId(client.id)) {
-      throw new GameError(
-        GAME_ERROR_CODES.CHARACTER_ALREADY_EXISTS,
-        'errors.character.exists',
-      );
+      throw new GameError(GAME_ERROR_CODES.CHARACTER_ALREADY_EXISTS, 'errors.character.exists');
     }
 
     client.data.sessionState = 'INITIALIZING';
     try {
       const character = await this.characters.createCharacter(client.data.userId, input);
       this.assertSocketConnected(client);
-      return await this.spawn(client, character);
+      return await this.prepareCharacterSelection(client, character);
     } catch (error) {
       if (client.connected && !this.worldState.getBySocketId(client.id)) {
         client.data.sessionState = 'CHARACTER_REQUIRED';
@@ -107,40 +99,62 @@ export class SessionLifecycleService {
     }
   }
 
+  async enterWorld(client: GameSocket): Promise<WorldSpawnPayload> {
+    this.assertSocketConnected(client);
+    const session = this.worldState.getBySocketId(client.id);
+    if (!session || client.data.sessionState !== 'CHARACTER_SELECT') {
+      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    }
+
+    const map = await this.maps.getMap(session.mapId);
+    const position = this.maps.findNearestWalkable(
+      map,
+      { x: session.x, y: session.y },
+      (x, y) => map.zoneType !== 'SAFE' && this.worldState.isOccupied(map.id, x, y, session.characterId),
+    );
+    if (position.x !== session.x || position.y !== session.y) {
+      this.worldState.updatePosition(session, {
+        mapId: map.id,
+        x: position.x,
+        y: position.y,
+        direction: session.direction,
+      });
+    }
+
+    this.worldState.activateSession(session);
+    client.data.sessionState = 'IN_WORLD';
+    const payload = this.buildPayload(session, map, this.visibility.addSession(session));
+    client.emit('world:spawn', payload);
+    return payload;
+  }
+
   async disconnect(client: GameSocket): Promise<void> {
     client.data.sessionState = 'DISCONNECTED';
     const session = this.worldState.getBySocketId(client.id);
-    if (!session) {
-      return;
-    }
+    if (!session) return;
 
     const snapshot = await this.movement.quiesce(session, () => {
       const activeSession = this.worldState.getBySocketId(client.id);
-      if (!activeSession || activeSession.connectionId !== session.connectionId) {
-        return undefined;
-      }
-
+      if (!activeSession || activeSession.connectionId !== session.connectionId) return undefined;
       const captured = this.persistence.capture(activeSession);
-      this.visibility.removeSession(activeSession);
+      if (activeSession.activeInWorld) this.visibility.removeSession(activeSession);
       this.worldState.removeSessionBySocket(client.id);
       return captured;
     });
 
-    if (snapshot) {
-      await this.persistence.queueDetachedSnapshot(snapshot);
-    }
+    if (snapshot) await this.persistence.queueDetachedSnapshot(snapshot);
   }
 
-  private spawn(
+  private prepareCharacterSelection(
     client: GameSocket,
     character: PersistedCharacterState,
   ): Promise<WorldSpawnPayload> {
     return this.sessionClaims.run(character.id, () =>
-      this.spawnWithExclusiveClaim(client, character),
+      this.prepareWithExclusiveClaim(client, character),
     );
   }
 
-  private async spawnWithExclusiveClaim(
+  private async prepareWithExclusiveClaim(
     client: GameSocket,
     initialCharacter: PersistedCharacterState,
   ): Promise<WorldSpawnPayload> {
@@ -148,37 +162,17 @@ export class SessionLifecycleService {
     await this.persistence.flushDetachedCharacter(initialCharacter.id);
 
     const existing = this.worldState.getByCharacterId(initialCharacter.id);
-    if (existing) {
-      await this.replaceExistingSession(existing);
-    }
+    if (existing) await this.replaceExistingSession(existing);
 
-    // A transport disconnect can race the replacement queue. Flush once more before
-    // reloading so the replacement always starts from the newest durable revision.
     await this.persistence.flushDetachedCharacter(initialCharacter.id);
-    const character = await this.characters.findCharacterForCurrentRealm(
-      initialCharacter.userId,
-    );
+    const character = await this.characters.findCharacterForCurrentRealm(initialCharacter.userId);
     if (!character) {
-      throw new GameError(
-        GAME_ERROR_CODES.CHARACTER_REQUIRED,
-        'errors.character.required',
-      );
+      throw new GameError(GAME_ERROR_CODES.CHARACTER_REQUIRED, 'errors.character.required');
     }
 
     this.assertSocketConnected(client);
     const resolved = await this.resolveSpawn(character);
     this.assertSocketConnected(client);
-
-    // Recheck dynamic occupancy immediately before registration. No await occurs between
-    // this reservation decision and addSession, so a non-safe tile cannot be double-spawned
-    // by two connection continuations in the same authoritative realm process.
-    const finalPosition = this.maps.findNearestWalkable(
-      resolved.map,
-      { x: resolved.x, y: resolved.y },
-      (x, y) =>
-        resolved.map.zoneType !== 'SAFE' &&
-        this.worldState.isOccupied(resolved.map.id, x, y, character.id),
-    );
 
     const session = this.worldState.createSession({
       socketId: client.id,
@@ -186,8 +180,9 @@ export class SessionLifecycleService {
       locale: client.data.locale ?? 'en',
       character,
       mapId: resolved.map.id,
-      x: finalPosition.x,
-      y: finalPosition.y,
+      x: resolved.x,
+      y: resolved.y,
+      activeInWorld: false,
     });
     const collision = this.worldState.addSession(session);
     if (collision) {
@@ -195,11 +190,33 @@ export class SessionLifecycleService {
     }
 
     client.data.characterId = session.characterId;
-    client.data.sessionState = 'IN_WORLD';
-    const nearbyPlayers = this.visibility.addSession(session);
-    const payload: WorldSpawnPayload = {
+    client.data.sessionState = 'CHARACTER_SELECT';
+    const payload = this.buildPayload(session, resolved.map, []);
+    client.emit('world:spawn', payload);
+
+    if (session.dirty) {
+      const snapshot = this.persistence.capture(session);
+      void this.persistence.persistSnapshot(snapshot, 'repair').then(() => {
+        this.worldState.markPersisted(snapshot.characterId, snapshot.connectionId, snapshot.revision);
+      }).catch((error: unknown) => {
+        this.logger.error(
+          `Initial position repair failed for character ${snapshot.characterId}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
+    }
+
+    return payload;
+  }
+
+  private buildPayload(
+    session: PlayerSession,
+    map: RuntimeMap,
+    nearbyPlayers: ReturnType<VisibilityService['addSession']>,
+  ): WorldSpawnPayload {
+    return {
       self: this.worldState.toSelfState(session),
-      map: this.movementService.toMapState(resolved.map),
+      map: this.movementService.toMapState(map),
       nearbyPlayers,
       unlockedOutfits: getUnlockedOutfits(session.characterClass, session.level).map((outfit) => ({
         key: outfit.key,
@@ -208,28 +225,6 @@ export class SessionLifecycleService {
       movementStepMs: this.config.values.MOVE_STEP_MS,
       serverTime: Date.now(),
     };
-    client.emit('world:spawn', payload);
-
-    if (session.dirty) {
-      const snapshot = this.persistence.capture(session);
-      void this.persistence
-        .persistSnapshot(snapshot, 'repair')
-        .then(() => {
-          this.worldState.markPersisted(
-            snapshot.characterId,
-            snapshot.connectionId,
-            snapshot.revision,
-          );
-        })
-        .catch((error: unknown) => {
-          this.logger.error(
-            `Initial position repair failed for character ${snapshot.characterId}.`,
-            error instanceof Error ? error.stack : undefined,
-          );
-        });
-    }
-
-    return payload;
   }
 
   private async resolveSpawn(
@@ -243,18 +238,14 @@ export class SessionLifecycleService {
         throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid');
       }
     } catch (error) {
-      if (!(error instanceof GameError) || error.code !== GAME_ERROR_CODES.MAP_INVALID) {
-        throw error;
-      }
+      if (!(error instanceof GameError) || error.code !== GAME_ERROR_CODES.MAP_INVALID) throw error;
       map = await this.maps.getMap(realm.defaultMapId);
     }
 
     const position = this.maps.findNearestWalkable(
       map,
       map.id === character.mapId ? { x: character.x, y: character.y } : map.spawn,
-      (x, y) =>
-        map.zoneType !== 'SAFE' &&
-        this.worldState.isOccupied(map.id, x, y, character.id),
+      () => false,
     );
     return { map, x: position.x, y: position.y };
   }
@@ -262,20 +253,14 @@ export class SessionLifecycleService {
   private async replaceExistingSession(existing: PlayerSession): Promise<void> {
     const snapshot = await this.movement.quiesce(existing, () => {
       const activeSession = this.worldState.getByCharacterId(existing.characterId);
-      if (!activeSession || activeSession.connectionId !== existing.connectionId) {
-        return undefined;
-      }
-
+      if (!activeSession || activeSession.connectionId !== existing.connectionId) return undefined;
       const captured = this.persistence.capture(activeSession);
-      this.visibility.removeSession(activeSession);
+      if (activeSession.activeInWorld) this.visibility.removeSession(activeSession);
       this.worldState.removeSessionBySocket(activeSession.socketId);
       return captured;
     });
 
-    if (!snapshot) {
-      return;
-    }
-
+    if (!snapshot) return;
     try {
       await this.persistence.queueDetachedSnapshot(snapshot);
     } finally {

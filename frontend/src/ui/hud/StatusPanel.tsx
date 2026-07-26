@@ -7,6 +7,18 @@ interface StatusPanelProps {
   map: MapStatePayload;
 }
 
+const classLabelKey = {
+  MAGE: 'class.mage',
+  WARRIOR: 'class.warrior',
+  ARCHER: 'class.archer',
+} as const;
+
+const zoneLabelKey = {
+  SAFE: 'map.zone.safe',
+  OUTLAW: 'map.zone.outlaw',
+  PVP: 'map.zone.pvp',
+} as const;
+
 export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Element {
   const { t } = useI18n();
   const experienceTarget = Math.max(100, character.level * 250);
@@ -23,10 +35,10 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
             <div className="min-w-0">
               <h2 className="truncate font-display text-xl text-amber-100">{character.name}</h2>
               <p className="truncate text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                {character.characterClass} · {t('common.level')} {character.level}
+                {t(classLabelKey[character.characterClass])} · {t('common.level')} {character.level}
               </p>
             </div>
-            <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{map.zoneType}</span>
+            <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{t(zoneLabelKey[map.zoneType])}</span>
           </div>
           <Meter label={t('hud.health')} value={character.hp} max={character.maxHp} className="bg-rose-500" />
           <Meter label={t('hud.energy')} value={character.energy} max={character.maxEnergy} className="bg-sky-500" />

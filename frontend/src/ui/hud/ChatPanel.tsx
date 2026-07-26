@@ -76,11 +76,11 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
             {candidate === 'Global' ? t('chat.global') : candidate === 'Local' ? t('chat.local') : t('chat.system')}
           </button>
         ))}
-        <span className="ml-auto self-center pr-3 text-[9px] uppercase tracking-wider text-emerald-300/60">Live</span>
+        <span className="ml-auto self-center pr-3 text-[9px] uppercase tracking-wider text-emerald-300/60">{t('common.live')}</span>
       </nav>
       <div ref={scrollRef} className="scrollbar-thin flex-1 space-y-1.5 overflow-y-auto p-3 text-xs">
         {visibleMessages.length === 0 ? (
-          <p className="text-slate-500">No messages yet.</p>
+          <p className="text-slate-500">{t('chat.noMessages')}</p>
         ) : visibleMessages.map((message) => (
           <p key={message.id} className="leading-5 text-slate-300">
             <strong className={message.tone === 'warning' ? 'text-amber-300' : message.tone === 'local' ? 'text-emerald-300' : 'text-violet-300'}>
@@ -89,17 +89,17 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
           </p>
         ))}
       </div>
-      <form onSubmit={(event) => void submit(event)} className="flex border-t border-white/10 bg-black/20 p-2">
+      <form onSubmit={(event) => void submit(event)} className="flex border-t border-amber-400/20 bg-amber-950/10 p-2">
         <input
           value={input}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setInput(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent px-2 text-xs text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
-          placeholder={tab === 'System' ? 'System channel is read-only' : t('chat.placeholder')}
+          className="min-w-0 flex-1 bg-transparent px-2 text-xs text-amber-50 caret-amber-300 outline-none placeholder:text-amber-200/45 disabled:cursor-not-allowed"
+          placeholder={tab === 'System' ? t('chat.systemReadOnly') : t('chat.placeholder')}
           maxLength={160}
           disabled={tab === 'System' || sending}
         />
         <button type="submit" disabled={tab === 'System' || sending || input.trim().length === 0} className="rounded border border-amber-400/30 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200 hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-40">
-          {sending ? '...' : 'Send'}
+          {sending ? '...' : t('common.send')}
         </button>
       </form>
     </section>

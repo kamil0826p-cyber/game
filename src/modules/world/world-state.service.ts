@@ -64,6 +64,7 @@ export class WorldStateService {
       stateRevision: character.stateVersion + (positionChanged ? 1 : 0),
       persistedRevision: character.stateVersion,
       dirty: positionChanged,
+      activeInWorld: input.activeInWorld ?? true,
       visibleCharacterIds: new Set<string>(),
       watcherCharacterIds: new Set<string>(),
     };
@@ -71,27 +72,33 @@ export class WorldStateService {
 
   addSession(session: PlayerSession): PlayerSession | undefined {
     const existing = this.sessionsByCharacterId.get(session.characterId);
-    if (existing) {
-      return existing;
-    }
+    if (existing) return existing;
     this.sessionsByCharacterId.set(session.characterId, session);
     this.sessionsBySocketId.set(session.socketId, session);
-    this.spatialIndex.add(session.characterId, session.mapId, session.x, session.y);
+    if (session.activeInWorld) {
+      this.spatialIndex.add(session.characterId, session.mapId, session.x, session.y);
+    }
     return undefined;
+  }
+
+  activateSession(session: PlayerSession): void {
+    if (session.activeInWorld) return;
+    session.activeInWorld = true;
+    this.spatialIndex.add(session.characterId, session.mapId, session.x, session.y);
   }
 
   removeSessionBySocket(socketId: string): PlayerSession | undefined {
     const session = this.sessionsBySocketId.get(socketId);
-    if (!session) {
-      return undefined;
-    }
+    if (!session) return undefined;
     if (this.sessionsByCharacterId.get(session.characterId)?.connectionId !== session.connectionId) {
       this.sessionsBySocketId.delete(socketId);
       return undefined;
     }
     this.sessionsBySocketId.delete(socketId);
     this.sessionsByCharacterId.delete(session.characterId);
-    this.spatialIndex.remove(session.characterId, session.mapId, session.x, session.y);
+    if (session.activeInWorld) {
+      this.spatialIndex.remove(session.characterId, session.mapId, session.x, session.y);
+    }
     return session;
   }
 
@@ -117,15 +124,17 @@ export class WorldStateService {
       y: session.y,
       direction: session.direction,
     };
-    this.spatialIndex.move(
-      session.characterId,
-      previous.mapId,
-      previous.x,
-      previous.y,
-      next.mapId,
-      next.x,
-      next.y,
-    );
+    if (session.activeInWorld) {
+      this.spatialIndex.move(
+        session.characterId,
+        previous.mapId,
+        previous.x,
+        previous.y,
+        next.mapId,
+        next.x,
+        next.y,
+      );
+    }
     session.mapId = next.mapId;
     session.x = next.x;
     session.y = next.y;
@@ -144,25 +153,17 @@ export class WorldStateService {
 
   markPersisted(characterId: string, connectionId: string, revision: number): void {
     const session = this.sessionsByCharacterId.get(characterId);
-    if (!session || session.connectionId !== connectionId) {
-      return;
-    }
+    if (!session || session.connectionId !== connectionId) return;
     session.persistedRevision = Math.max(session.persistedRevision, revision);
-    if (session.stateRevision === revision) {
-      session.dirty = false;
-    }
+    if (session.stateRevision === revision) session.dirty = false;
   }
 
   isOccupied(mapId: string, x: number, y: number, excludingCharacterId?: string): boolean {
     const candidates = this.spatialIndex.queryRectangle(mapId, x, x, y, y);
     for (const characterId of candidates) {
-      if (characterId === excludingCharacterId) {
-        continue;
-      }
+      if (characterId === excludingCharacterId) continue;
       const session = this.sessionsByCharacterId.get(characterId);
-      if (session && session.mapId === mapId && session.x === x && session.y === y) {
-        return true;
-      }
+      if (session?.activeInWorld && session.mapId === mapId && session.x === x && session.y === y) return true;
     }
     return false;
   }
@@ -174,26 +175,18 @@ export class WorldStateService {
     minimumY: number,
     maximumY: number,
   ): PlayerSession[] {
-    const ids = this.spatialIndex.queryRectangle(
-      mapId,
-      minimumX,
-      maximumX,
-      minimumY,
-      maximumY,
-    );
+    const ids = this.spatialIndex.queryRectangle(mapId, minimumX, maximumX, minimumY, maximumY);
     const sessions: PlayerSession[] = [];
     for (const id of ids) {
       const session = this.sessionsByCharacterId.get(id);
       if (
-        session &&
+        session?.activeInWorld &&
         session.mapId === mapId &&
         session.x >= minimumX &&
         session.x <= maximumX &&
         session.y >= minimumY &&
         session.y <= maximumY
-      ) {
-        sessions.push(session);
-      }
+      ) sessions.push(session);
     }
     return sessions;
   }

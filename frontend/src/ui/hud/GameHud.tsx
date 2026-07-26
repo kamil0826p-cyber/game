@@ -51,7 +51,6 @@ export function GameHud(): React.JSX.Element | null {
   const actionBarRef = useRef<HTMLDivElement | null>(null);
   const windowButtonsRef = useRef<HTMLDivElement | null>(null);
   const utilityRef = useRef<HTMLDivElement | null>(null);
-  const helpRef = useRef<HTMLDivElement | null>(null);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -62,7 +61,6 @@ export function GameHud(): React.JSX.Element | null {
       actionBarRef,
       windowButtonsRef,
       utilityRef,
-      helpRef,
       notificationsRef,
     ];
 
@@ -115,18 +113,12 @@ export function GameHud(): React.JSX.Element | null {
       <HudAnchor elementRef={windowButtonsRef} className="absolute right-3 top-1/2 -translate-y-1/2">
         <HudButtons />
       </HudAnchor>
-      <HudAnchor elementRef={utilityRef} className="absolute right-3 top-[190px] hidden sm:block">
+      <HudAnchor elementRef={utilityRef} className="absolute bottom-3 right-3 hidden sm:block">
         <div className="hud-utility-bar pointer-events-auto flex items-center gap-2">
           <LocaleToggle />
           <button type="button" onClick={() => void signOut()} className="hud-utility-button">
             {t('hud.signOut')}
           </button>
-        </div>
-      </HudAnchor>
-      <HudAnchor elementRef={helpRef} className="absolute bottom-[82px] right-3 hidden lg:block">
-        <div className="hud-help-chip max-w-xs">
-          <p>{t('game.controls')}</p>
-          <p>{t('game.stopPath')}</p>
         </div>
       </HudAnchor>
       <Notifications containerRef={notificationsRef} notifications={state.notifications} />

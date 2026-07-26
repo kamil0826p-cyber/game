@@ -1,3 +1,4 @@
+import { MobileUnsupportedNotice } from '../components/common/MobileUnsupportedNotice';
 import { GameCanvas } from '../game/canvas/GameCanvas';
 import { GameHud } from '../ui/hud/GameHud';
 
@@ -6,6 +7,7 @@ export function GameScreen(): React.JSX.Element {
     <main className="relative h-dvh w-screen overflow-hidden bg-slate-950">
       <GameCanvas />
       <GameHud />
+      <MobileUnsupportedNotice />
     </main>
   );
 }

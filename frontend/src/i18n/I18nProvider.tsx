@@ -6,7 +6,6 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { runtimeConfig } from '../config/runtime';
 import { dictionaries, type Locale, type TranslationKey } from './dictionaries';
 
 interface I18nContextValue {
@@ -18,13 +17,28 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 const STORAGE_KEY = 'elderglen.locale';
+const supportedLocales = Object.keys(dictionaries) as Locale[];
+
+const isLocale = (value: string | null): value is Locale =>
+  value !== null && supportedLocales.includes(value as Locale);
+
+const localeFromBrowser = (): Locale => {
+  const candidates = navigator.languages.length > 0 ? navigator.languages : [navigator.language];
+  for (const candidate of candidates) {
+    const language = candidate.toLowerCase().split('-')[0];
+    if (isLocale(language)) {
+      return language;
+    }
+  }
+  return 'en';
+};
 
 const resolveInitialLocale = (): Locale => {
   const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored === 'en' || stored === 'en-simple') {
+  if (isLocale(stored)) {
     return stored;
   }
-  return runtimeConfig.defaultLocale === 'en-simple' ? 'en-simple' : 'en';
+  return localeFromBrowser();
 };
 
 export function I18nProvider({ children }: PropsWithChildren): React.JSX.Element {
@@ -36,7 +50,9 @@ export function I18nProvider({ children }: PropsWithChildren): React.JSX.Element
   }, []);
 
   const toggleLocale = useCallback(() => {
-    setLocale(locale === 'en' ? 'en-simple' : 'en');
+    const currentIndex = supportedLocales.indexOf(locale);
+    const nextLocale = supportedLocales[(currentIndex + 1) % supportedLocales.length] ?? 'en';
+    setLocale(nextLocale);
   }, [locale, setLocale]);
 
   const t = useCallback(
