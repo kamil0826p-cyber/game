@@ -18,7 +18,7 @@ export function HudButtons(): React.JSX.Element {
   const { t } = useI18n();
 
   return (
-    <nav className="hud-panel pointer-events-auto flex flex-col gap-1.5 p-2" aria-label="HUD windows">
+    <nav className="hud-panel hud-tooltip-container pointer-events-auto flex flex-col gap-1.5 p-2" aria-label="HUD windows">
       {buttons.map((button) => {
         const label = t(button.labelKey);
         return (
