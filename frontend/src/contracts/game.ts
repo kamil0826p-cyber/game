@@ -24,8 +24,8 @@ export interface CharacterStats {
 }
 
 export interface CurrencyBalance {
-  silver: number;
-  gold: number;
+  silver?: number;
+  gold?: number;
 }
 
 export interface PublicPlayerState {
