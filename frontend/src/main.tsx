@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { I18nProvider } from './i18n/I18nProvider';
 import './styles.css';
 import './ui-refresh.css';
+import './ui-redesign-components.css';
 
 const root = document.getElementById('root');
 if (!root) {
