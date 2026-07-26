@@ -31,6 +31,7 @@ export interface PlayerSession extends CharacterStats {
   stateRevision: number;
   persistedRevision: number;
   dirty: boolean;
+  activeInWorld: boolean;
   visibleCharacterIds: Set<string>;
   watcherCharacterIds: Set<string>;
 }
