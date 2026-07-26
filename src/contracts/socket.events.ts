@@ -17,122 +17,26 @@ import type {
   ViewportUpdatePayload,
 } from './socket.schemas.js';
 
-export interface SocketErrorPayload {
-  code: string;
-  message: string;
-  details?: Record<string, unknown>;
-}
-
-export type SocketAck<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: SocketErrorPayload };
-
-export interface PublicPlayerState {
-  characterId: string;
-  name: string;
-  characterClass: CharacterClass;
-  level: number;
-  outfitKey: string;
-  mapId: string;
-  x: number;
-  y: number;
-  direction: Direction;
-  combatState: CombatState;
-}
-
-export interface SelfCharacterState extends PublicPlayerState, CharacterStats {
-  experience: number;
-}
-
-export interface MapStatePayload {
-  id: string;
-  key: string;
-  name: string;
-  width: number;
-  height: number;
-  zoneType: ZoneType;
-  version: number;
-}
-
-export interface WorldSpawnPayload {
-  self: SelfCharacterState;
-  map: MapStatePayload;
-  nearbyPlayers: PublicPlayerState[];
-  unlockedOutfits: Array<{ key: string; unlockLevel: number }>;
-  movementStepMs: number;
-  serverTime: number;
-}
-
-export interface MovementCommittedPayload {
-  requestId?: string;
-  source: 'DIRECT' | 'PATH';
-  mapId: string;
-  x: number;
-  y: number;
-  direction: Direction;
-  serverTime: number;
-  portalTransition?: {
-    sourceMapId: string;
-    destinationMapId: string;
-    targetX: number;
-    targetY: number;
-  };
-}
-
-export interface MovementRejectedPayload extends SocketErrorPayload {
-  requestId?: string;
-  retryAfterMs?: number;
-  authoritative: {
-    mapId: string;
-    x: number;
-    y: number;
-    direction: Direction;
-  };
-}
-
-export interface SessionReadyPayload {
-  realm: { id: string; slug: string; name: string };
-  requiresCharacter: boolean;
-  serverTime: number;
-}
-
+export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
+export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
+export interface PublicPlayerState { characterId: string; name: string; characterClass: CharacterClass; level: number; outfitKey: string; mapId: string; x: number; y: number; direction: Direction; combatState: CombatState; }
+export interface SelfCharacterState extends PublicPlayerState, CharacterStats { experience: number; }
+export interface MapStatePayload { id: string; key: string; name: string; width: number; height: number; zoneType: ZoneType; version: number; }
+export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
+export interface MovementCommittedPayload { requestId?: string; source: 'DIRECT' | 'PATH'; mapId: string; x: number; y: number; direction: Direction; serverTime: number; portalTransition?: { sourceMapId: string; destinationMapId: string; targetX: number; targetY: number; }; }
+export interface MovementRejectedPayload extends SocketErrorPayload { requestId?: string; retryAfterMs?: number; authoritative: { mapId: string; x: number; y: number; direction: Direction; }; }
+export interface SessionReadyPayload { realm: { id: string; slug: string; name: string }; requiresCharacter: boolean; serverTime: number; }
 export type ChatChannel = 'GLOBAL' | 'LOCAL';
-
-export interface ChatMessagePayload {
-  id: string;
-  channel: ChatChannel;
-  characterId: string;
-  author: string;
-  text: string;
-  mapId: string;
-  sentAt: number;
-}
+export interface ChatMessagePayload { id: string; channel: ChatChannel; characterId: string; author: string; text: string; mapId: string; sentAt: number; }
 
 export interface ClientToServerEvents {
-  'character:create': (
-    payload: CreateCharacterPayload,
-    acknowledgement?: (response: SocketAck<WorldSpawnPayload>) => void,
-  ) => void;
-  'movement:step': (
-    payload: MoveStepPayload,
-    acknowledgement?: (response: SocketAck<MovementCommittedPayload>) => void,
-  ) => void;
-  'movement:target': (
-    payload: MoveTargetPayload,
-    acknowledgement?: (response: SocketAck<{ requestId: string; pathLength: number }>) => void,
-  ) => void;
-  'movement:stop': (
-    payload: MoveStopPayload,
-    acknowledgement?: (response: SocketAck<{ stopped: boolean }>) => void,
-  ) => void;
-  'visibility:viewport': (
-    payload: ViewportUpdatePayload,
-    acknowledgement?: (response: SocketAck<{ halfWidth: number; halfHeight: number }>) => void,
-  ) => void;
-  'chat:send': (
-    payload: ChatSendPayload,
-    acknowledgement?: (response: SocketAck<ChatMessagePayload>) => void,
-  ) => void;
+  'character:create': (payload: CreateCharacterPayload, acknowledgement?: (response: SocketAck<WorldSpawnPayload>) => void) => void;
+  'world:enter': (acknowledgement?: (response: SocketAck<WorldSpawnPayload>) => void) => void;
+  'movement:step': (payload: MoveStepPayload, acknowledgement?: (response: SocketAck<MovementCommittedPayload>) => void) => void;
+  'movement:target': (payload: MoveTargetPayload, acknowledgement?: (response: SocketAck<{ requestId: string; pathLength: number }>) => void) => void;
+  'movement:stop': (payload: MoveStopPayload, acknowledgement?: (response: SocketAck<{ stopped: boolean }>) => void) => void;
+  'visibility:viewport': (payload: ViewportUpdatePayload, acknowledgement?: (response: SocketAck<{ halfWidth: number; halfHeight: number }>) => void) => void;
+  'chat:send': (payload: ChatSendPayload, acknowledgement?: (response: SocketAck<ChatMessagePayload>) => void) => void;
 }
 
 export interface ServerToClientEvents {
@@ -142,12 +46,7 @@ export interface ServerToClientEvents {
   'world:playerEntered': (payload: PublicPlayerState) => void;
   'world:playerMoved': (payload: PublicPlayerState & { serverTime: number }) => void;
   'world:playerLeft': (payload: { characterId: string }) => void;
-  'world:mapChanged': (payload: {
-    map: MapStatePayload;
-    self: SelfCharacterState;
-    nearbyPlayers: PublicPlayerState[];
-    serverTime: number;
-  }) => void;
+  'world:mapChanged': (payload: { map: MapStatePayload; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[]; serverTime: number; }) => void;
   'movement:committed': (payload: MovementCommittedPayload) => void;
   'movement:rejected': (payload: MovementRejectedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
@@ -155,25 +54,6 @@ export interface ServerToClientEvents {
 }
 
 export interface InterServerEvents {}
-
-export interface GameSocketData {
-  auth?: AuthContext;
-  locale?: SupportedLocale;
-  userId?: string;
-  characterId?: string;
-  sessionState?: 'INITIALIZING' | 'CHARACTER_REQUIRED' | 'IN_WORLD' | 'DISCONNECTED';
-}
-
-export type GameSocket = Socket<
-  ClientToServerEvents,
-  ServerToClientEvents,
-  InterServerEvents,
-  GameSocketData
->;
-
-export type GameNamespace = Namespace<
-  ClientToServerEvents,
-  ServerToClientEvents,
-  InterServerEvents,
-  GameSocketData
->;
+export interface GameSocketData { auth?: AuthContext; locale?: SupportedLocale; userId?: string; characterId?: string; sessionState?: 'INITIALIZING' | 'CHARACTER_REQUIRED' | 'CHARACTER_SELECT' | 'IN_WORLD' | 'DISCONNECTED'; }
+export type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, GameSocketData>;
+export type GameNamespace = Namespace<ClientToServerEvents, ServerToClientEvents, InterServerEvents, GameSocketData>;
