@@ -125,16 +125,12 @@ class GameStore {
   }
 
   enterWorld(): void {
-    if (!this.state.self || !this.state.map) {
-      return;
-    }
+    if (!this.state.self || !this.state.map) return;
     this.patch({ desiredInWorld: true, phase: 'in-world' });
   }
 
   markDisconnected(reason?: string): void {
-    if (this.state.phase === 'idle') {
-      return;
-    }
+    if (this.state.phase === 'idle') return;
     this.patch({
       socketConnected: false,
       phase: this.state.desiredInWorld ? 'reconnecting' : 'connecting',
@@ -151,18 +147,15 @@ class GameStore {
 
   commitMovement(payload: MovementCommittedPayload): void {
     const self = this.state.self;
-    if (!self) {
-      return;
-    }
-    const nextSelf: SelfCharacterState = {
-      ...self,
-      mapId: payload.mapId,
-      x: payload.x,
-      y: payload.y,
-      direction: payload.direction,
-    };
+    if (!self) return;
     this.patch({
-      self: nextSelf,
+      self: {
+        ...self,
+        mapId: payload.mapId,
+        x: payload.x,
+        y: payload.y,
+        direction: payload.direction,
+      },
       plannedPath: this.consumePath(payload.x, payload.y),
       portalTransition: payload.portalTransition ? 'fade-out' : this.state.portalTransition,
     });
@@ -182,7 +175,15 @@ class GameStore {
         : self,
       plannedPath: [],
     });
-    if (payload.code !== 'MOVE_TOO_FAST') {
+
+    const silentMovementCodes = new Set([
+      'MOVE_TOO_FAST',
+      'MOVE_COLLISION',
+      'MOVE_BLOCKED',
+      'MOVE_OCCUPIED',
+      'MOVE_OUT_OF_BOUNDS',
+    ]);
+    if (!silentMovementCodes.has(payload.code)) {
       this.addNotification(payload);
     }
   }
@@ -212,24 +213,15 @@ class GameStore {
   }
 
   clearPlannedPath(): void {
-    if (this.state.plannedPath.length > 0) {
-      this.patch({ plannedPath: [] });
-    }
+    if (this.state.plannedPath.length > 0) this.patch({ plannedPath: [] });
   }
 
   upsertPlayer(player: PublicPlayerState): void {
-    this.patch({
-      players: {
-        ...this.state.players,
-        [player.characterId]: player,
-      },
-    });
+    this.patch({ players: { ...this.state.players, [player.characterId]: player } });
   }
 
   removePlayer(characterId: string): void {
-    if (!this.state.players[characterId]) {
-      return;
-    }
+    if (!this.state.players[characterId]) return;
     const players = { ...this.state.players };
     delete players[characterId];
     this.patch({ players });
@@ -247,30 +239,22 @@ class GameStore {
       previous.code === payload.code &&
       previous.message === payload.message &&
       createdAt - previous.createdAt < 500
-    ) {
-      return;
-    }
+    ) return;
     const notification: ClientNotification = {
       ...payload,
       id: `${createdAt}-${Math.random().toString(36).slice(2)}`,
       createdAt,
     };
-    this.patch({
-      notifications: [...this.state.notifications.slice(-5), notification],
-    });
+    this.patch({ notifications: [...this.state.notifications.slice(-5), notification] });
   }
 
   dismissNotification(id: string): void {
-    this.patch({
-      notifications: this.state.notifications.filter((item) => item.id !== id),
-    });
+    this.patch({ notifications: this.state.notifications.filter((item) => item.id !== id) });
   }
 
   private consumePath(x: number, y: number): readonly Coordinates[] {
-    const index = this.state.plannedPath.findIndex(
-      (coordinate) => coordinate.x === x && coordinate.y === y,
-    );
-    return index >= 0 ? this.state.plannedPath.slice(index + 1) : this.state.plannedPath;
+    const index = this.state.plannedPath.findIndex((point) => point.x === x && point.y === y);
+    return index >= 0 ? this.state.plannedPath.slice(index + 1) : [];
   }
 
   private patch(patch: Partial<GameState>): void {
@@ -279,13 +263,11 @@ class GameStore {
   }
 
   private emit(): void {
-    for (const listener of this.listeners) {
-      listener();
-    }
+    for (const listener of this.listeners) listener();
   }
 }
 
 export const gameStore = new GameStore();
-
-export const useGameState = (): GameState =>
-  useSyncExternalStore(gameStore.subscribe, gameStore.getSnapshot, gameStore.getSnapshot);
+export function useGameState(): GameState {
+  return useSyncExternalStore(gameStore.subscribe, gameStore.getSnapshot, gameStore.getSnapshot);
+}
