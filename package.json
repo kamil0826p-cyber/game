@@ -1,0 +1,63 @@
+{
+  "name": "margonem-grid-mmorpg-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Production-oriented full-stack grid MMORPG with a NestJS backend and React/PixiJS client.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "npm run prisma:generate && nest build",
+    "start": "node dist/main.js",
+    "start:dev": "npm run prisma:generate && nest start --watch",
+    "start:debug": "npm run prisma:generate && nest start --debug --watch",
+    "typecheck": "npm run prisma:generate && tsc --noEmit -p tsconfig.json",
+    "test": "npm run prisma:generate && vitest run",
+    "test:watch": "npm run prisma:generate && vitest",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed": "npm run prisma:generate && prisma db seed",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:typecheck": "npm --prefix frontend run typecheck",
+    "frontend:test": "npm --prefix frontend run test",
+    "check:all": "npm run typecheck && npm test && npm run frontend:typecheck && npm run frontend:test && npm run frontend:build"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-express": "11.1.28",
+    "@nestjs/platform-socket.io": "11.1.28",
+    "@nestjs/websockets": "11.1.28",
+    "@prisma/adapter-pg": "7.9.0",
+    "@prisma/client": "7.9.0",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "dotenv": "^17.2.1",
+    "firebase-admin": "14.2.0",
+    "helmet": "^8.1.0",
+    "pg": "^8.16.3",
+    "redis": "^5.8.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "11.0.10",
+    "@nestjs/testing": "11.1.28",
+    "@types/node": "^22.15.30",
+    "@types/pg": "^8.15.5",
+    "prettier": "^3.6.2",
+    "prisma": "7.9.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

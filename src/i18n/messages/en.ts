@@ -1,0 +1,23 @@
+export const englishMessages = {
+  'errors.auth.required': 'Authentication is required.',
+  'errors.auth.invalid': 'The authentication token is invalid or expired.',
+  'errors.realm.unavailable': 'The selected game realm is unavailable.',
+  'errors.character.required': 'Create a character before entering the world.',
+  'errors.character.exists': 'A character already exists in this realm.',
+  'errors.character.nameTaken': 'That character name is already in use.',
+  'errors.payload.invalid': 'The request payload is invalid.',
+  'errors.session.notReady': 'The game session is not ready.',
+  'errors.movement.tooFast': 'Movement was rejected because the step cooldown has not elapsed.',
+  'errors.movement.outOfBounds': 'Movement outside the map bounds is not allowed.',
+  'errors.movement.collision': 'The destination tile is blocked.',
+  'errors.movement.occupied': 'The destination tile is occupied by another player.',
+  'errors.movement.noPath': 'No valid path exists to the requested tile.',
+  'errors.movement.pathTooLong': 'The requested path exceeds the server path limit.',
+  'errors.movement.searchLimit': 'The path search exceeded the server computation limit.',
+  'errors.map.invalid': 'The map definition is invalid.',
+  'errors.portal.invalid': 'The portal destination is invalid.',
+  'errors.internal': 'An internal server error occurred.',
+  'notifications.sessionReplaced': 'This character connected from another session.',
+} as const;
+
+export type MessageKey = keyof typeof englishMessages;

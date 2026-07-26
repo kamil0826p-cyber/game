@@ -1,0 +1,54 @@
+import {
+  createContext,
+  type PropsWithChildren,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
+import type { User } from 'firebase/auth';
+import { useI18n } from '../../i18n/I18nProvider';
+import { GameSocketClient } from './GameSocketClient';
+
+const GameConnectionContext = createContext<GameSocketClient | undefined>(undefined);
+
+interface GameConnectionProviderProps extends PropsWithChildren {
+  user: User;
+}
+
+export function GameConnectionProvider({
+  user,
+  children,
+}: GameConnectionProviderProps): React.JSX.Element {
+  const { locale } = useI18n();
+  const clientRef = useRef<GameSocketClient | undefined>(undefined);
+
+  if (!clientRef.current) {
+    clientRef.current = new GameSocketClient(user, locale);
+  }
+
+  useEffect(() => {
+    const client = clientRef.current!;
+    client.connect();
+    return () => client.disconnect();
+  }, []);
+
+  useEffect(() => {
+    clientRef.current?.setLocale(locale);
+  }, [locale]);
+
+  const value = useMemo(() => clientRef.current!, []);
+  return (
+    <GameConnectionContext.Provider value={value}>
+      {children}
+    </GameConnectionContext.Provider>
+  );
+}
+
+export function useGameConnection(): GameSocketClient {
+  const context = useContext(GameConnectionContext);
+  if (!context) {
+    throw new Error('useGameConnection must be used inside GameConnectionProvider.');
+  }
+  return context;
+}
