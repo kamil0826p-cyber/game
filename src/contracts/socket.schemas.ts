@@ -33,8 +33,15 @@ export const viewportUpdateSchema = z.object({
   halfHeight: z.number().int().min(1).max(128),
 });
 
+export const chatSendSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  channel: z.enum(['GLOBAL', 'LOCAL']),
+  text: z.string().trim().min(1).max(160),
+});
+
 export type CreateCharacterPayload = z.infer<typeof createCharacterSchema>;
 export type MoveStepPayload = z.infer<typeof moveStepSchema>;
 export type MoveTargetPayload = z.infer<typeof moveTargetSchema>;
 export type MoveStopPayload = z.infer<typeof moveStopSchema>;
 export type ViewportUpdatePayload = z.infer<typeof viewportUpdateSchema>;
+export type ChatSendPayload = z.infer<typeof chatSendSchema>;

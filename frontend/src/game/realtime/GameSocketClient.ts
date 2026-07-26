@@ -4,6 +4,8 @@ import { runtimeConfig } from '../../config/runtime';
 import type { CharacterClass, Direction } from '../../contracts/game';
 import type {
   CharacterCreateResult,
+  ChatChannel,
+  ChatMessagePayload,
   ClientToServerEvents,
   MovementCommittedPayload,
   MovementStopPayload,
@@ -21,6 +23,7 @@ const ACK_TIMEOUT_MS = 8_000;
 const SERVER_RECONNECT_DELAY_MS = 1_200;
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+type ChatListener = (message: ChatMessagePayload) => void;
 
 export class GameSocketClient {
   private socket: GameSocket | undefined = undefined;
@@ -28,6 +31,7 @@ export class GameSocketClient {
   private forceTokenRefresh = false;
   private manualDisconnect = false;
   private serverReconnectTimer: number | undefined = undefined;
+  private readonly chatListeners = new Set<ChatListener>();
   private readonly pageHideHandler = () => this.socket?.disconnect();
   private readonly pageShowHandler = () => {
     if (!this.manualDisconnect && this.socket && !this.socket.connected) {
@@ -44,9 +48,7 @@ export class GameSocketClient {
   }
 
   connect(): void {
-    if (this.socket) {
-      return;
-    }
+    if (this.socket) return;
     this.manualDisconnect = false;
     gameStore.markConnecting();
 
@@ -90,11 +92,32 @@ export class GameSocketClient {
     this.socket?.removeAllListeners();
     this.socket?.disconnect();
     this.socket = undefined;
+    this.chatListeners.clear();
     gameStore.reset();
   }
 
   setLocale(locale: Locale): void {
     this.locale = locale;
+  }
+
+  subscribeChat(listener: ChatListener): () => void {
+    this.chatListeners.add(listener);
+    return () => this.chatListeners.delete(listener);
+  }
+
+  async sendChat(channel: ChatChannel, text: string): Promise<void> {
+    const socket = this.requireSocket();
+    const response = await this.withAck<ChatMessagePayload>((acknowledge) => {
+      socket.emit(
+        'chat:send',
+        { requestId: createRequestId('chat'), channel, text },
+        acknowledge,
+      );
+    });
+    if (!response.ok) {
+      gameStore.addNotification(response.error);
+      throw new Error(response.error.message);
+    }
   }
 
   async createCharacter(name: string, characterClass: CharacterClass): Promise<void> {
@@ -139,18 +162,14 @@ export class GameSocketClient {
       gameStore.addNotification(response.error);
       throw new Error(response.error.message);
     }
-    if (response.data.pathLength === 0) {
-      gameStore.clearPlannedPath();
-    }
+    if (response.data.pathLength === 0) gameStore.clearPlannedPath();
     return response.data.pathLength;
   }
 
   async stopMovement(): Promise<void> {
     gameStore.clearPlannedPath();
     const socket = this.socket;
-    if (!socket?.connected) {
-      return;
-    }
+    if (!socket?.connected) return;
     await this.withAck<MovementStopPayload>((acknowledge) => {
       socket.emit('movement:stop', { requestId: createRequestId('stop') }, acknowledge);
     }).catch(() => undefined);
@@ -158,9 +177,7 @@ export class GameSocketClient {
 
   async updateViewport(halfWidth: number, halfHeight: number): Promise<void> {
     const socket = this.socket;
-    if (!socket?.connected) {
-      return;
-    }
+    if (!socket?.connected) return;
     const response = await this.withAck<VisibilityViewportPayload>((acknowledge) => {
       socket.emit(
         'visibility:viewport',
@@ -172,9 +189,7 @@ export class GameSocketClient {
         acknowledge,
       );
     });
-    if (!response.ok) {
-      gameStore.addNotification(response.error);
-    }
+    if (!response.ok) gameStore.addNotification(response.error);
   }
 
   private bindEvents(socket: GameSocket): void {
@@ -186,9 +201,7 @@ export class GameSocketClient {
       gameStore.markConnected();
     });
     socket.on('disconnect', (reason) => {
-      if (this.manualDisconnect) {
-        return;
-      }
+      if (this.manualDisconnect) return;
       gameStore.markDisconnected(reason);
       if (reason === 'io server disconnect') {
         this.forceTokenRefresh = true;
@@ -212,19 +225,18 @@ export class GameSocketClient {
     socket.on('world:spawn', (payload) => gameStore.spawn(payload));
     socket.on('world:playerEntered', (player) => gameStore.upsertPlayer(player));
     socket.on('world:playerMoved', (player) => gameStore.upsertPlayer(player));
-    socket.on('world:playerLeft', ({ characterId }) =>
-      gameStore.removePlayer(characterId),
-    );
+    socket.on('world:playerLeft', ({ characterId }) => gameStore.removePlayer(characterId));
     socket.on('movement:committed', (payload) => gameStore.commitMovement(payload));
     socket.on('movement:rejected', (payload) => gameStore.rejectMovement(payload));
     socket.on('world:mapChanged', (payload) => gameStore.changeMap(payload));
+    socket.on('chat:message', (payload) => {
+      for (const listener of this.chatListeners) listener(payload);
+    });
     socket.on('notification', (payload) => gameStore.addNotification(payload));
   }
 
   private scheduleServerReconnect(socket: GameSocket): void {
-    if (this.serverReconnectTimer !== undefined || this.manualDisconnect) {
-      return;
-    }
+    if (this.serverReconnectTimer !== undefined || this.manualDisconnect) return;
     this.serverReconnectTimer = window.setTimeout(() => {
       this.serverReconnectTimer = undefined;
       if (!this.manualDisconnect && this.socket === socket && !socket.connected) {

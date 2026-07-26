@@ -44,6 +44,24 @@ export interface ViewportUpdatePayload {
   halfHeight: number;
 }
 
+export type ChatChannel = 'GLOBAL' | 'LOCAL';
+
+export interface ChatSendPayload {
+  requestId: string;
+  channel: ChatChannel;
+  text: string;
+}
+
+export interface ChatMessagePayload {
+  id: string;
+  channel: ChatChannel;
+  characterId: string;
+  author: string;
+  text: string;
+  mapId: string;
+  sentAt: number;
+}
+
 export interface WorldSpawnPayload {
   self: SelfCharacterState;
   map: MapStatePayload;
@@ -123,6 +141,10 @@ export interface ClientToServerEvents {
     payload: ViewportUpdatePayload,
     acknowledgement: (response: SocketAck<VisibilityViewportPayload>) => void,
   ) => void;
+  'chat:send': (
+    payload: ChatSendPayload,
+    acknowledgement: (response: SocketAck<ChatMessagePayload>) => void,
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -140,5 +162,6 @@ export interface ServerToClientEvents {
   }) => void;
   'movement:committed': (payload: MovementCommittedPayload) => void;
   'movement:rejected': (payload: MovementRejectedPayload) => void;
+  'chat:message': (payload: ChatMessagePayload) => void;
   notification: (payload: SocketErrorPayload) => void;
 }
