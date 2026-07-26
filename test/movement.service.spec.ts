@@ -44,6 +44,7 @@ const createSession = (): PlayerSession => ({
   stateRevision: 0,
   persistedRevision: 0,
   dirty: false,
+  activeInWorld: true,
   visibleCharacterIds: new Set<string>(),
   watcherCharacterIds: new Set<string>(),
 });
