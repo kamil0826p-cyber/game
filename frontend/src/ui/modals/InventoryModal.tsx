@@ -4,7 +4,7 @@ import { Modal } from './Modal';
 export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const slots = Array.from({ length: 40 }, (_, index) => MOCK_INVENTORY_ITEMS[index]);
   return (
-    <Modal title="Inventory & Equipment" subtitle="Visual mock data only" icon="▦" onClose={onClose} widthClass="max-w-4xl">
+    <Modal title="Inventory & Equipment" subtitle="Equipment and backpack overview" icon="▦" onClose={onClose} widthClass="max-w-4xl">
       <div className="grid gap-5 md:grid-cols-[240px_1fr]">
         <section>
           <h3 className="modal-section-title">Equipment</h3>
@@ -25,7 +25,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
           </div>
         </section>
       </div>
-      <p className="mock-banner mt-5">Drag-and-drop, item use, persistence, and equipment effects are future systems.</p>
+      <p className="mock-banner mt-5">Item interaction, persistence, and equipment effects will be added in a future gameplay update.</p>
     </Modal>
   );
 }
