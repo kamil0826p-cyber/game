@@ -2,11 +2,7 @@ CREATE TYPE "CurrencyType" AS ENUM ('SILVER', 'GOLD');
 CREATE TYPE "CurrencyDirection" AS ENUM ('CREDIT', 'DEBIT');
 
 ALTER TABLE "Character"
-ADD COLUMN "silver" INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN "gold" INTEGER NOT NULL DEFAULT 0,
-ADD CONSTRAINT "Character_silver_min" CHECK ("silver" >= 0),
 ADD CONSTRAINT "Character_silver_max" CHECK ("silver" <= 2147483647),
-ADD CONSTRAINT "Character_gold_min" CHECK ("gold" >= 0),
 ADD CONSTRAINT "Character_gold_max" CHECK ("gold" <= 2147483647);
 
 CREATE TABLE "CharacterCurrencyLedger" (
