@@ -182,6 +182,7 @@ export class SessionLifecycleService {
       mapId: resolved.map.id,
       x: resolved.x,
       y: resolved.y,
+      activeInWorld: false,
     });
     const collision = this.worldState.addSession(session);
     if (collision) {
