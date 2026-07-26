@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useAuth } from '../../auth/AuthProvider';
 import { LocaleToggle } from '../../components/common/LocaleToggle';
 import {
@@ -20,61 +25,111 @@ import { StatusPanel } from './StatusPanel';
 const PLAYER_HALF_WIDTH = 48;
 const PLAYER_TOP_OFFSET = 92;
 const PLAYER_BOTTOM_OFFSET = 18;
+const OCCLUSION_PADDING = 6;
+
+interface HudAnchorProps {
+  elementRef: RefObject<HTMLDivElement | null>;
+  className: string;
+  children: ReactNode;
+}
+
+function HudAnchor({ elementRef, className, children }: HudAnchorProps): React.JSX.Element {
+  return (
+    <div ref={elementRef} className={`hud-occludable ${className}`}>
+      {children}
+    </div>
+  );
+}
 
 export function GameHud(): React.JSX.Element | null {
   const state = useGameState();
   const { signOut } = useAuth();
   const { t } = useI18n();
   const statusPanelRef = useRef<HTMLDivElement | null>(null);
-  const [statusOccluded, setStatusOccluded] = useState(false);
+  const miniMapRef = useRef<HTMLDivElement | null>(null);
+  const chatRef = useRef<HTMLDivElement | null>(null);
+  const actionBarRef = useRef<HTMLDivElement | null>(null);
+  const windowButtonsRef = useRef<HTMLDivElement | null>(null);
+  const utilityRef = useRef<HTMLDivElement | null>(null);
+  const helpRef = useRef<HTMLDivElement | null>(null);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    const refs = [
+      statusPanelRef,
+      miniMapRef,
+      chatRef,
+      actionBarRef,
+      windowButtonsRef,
+      utilityRef,
+      helpRef,
+      notificationsRef,
+    ];
+
     const handlePlayerPosition = (event: Event) => {
       const position = (event as CustomEvent<LocalPlayerScreenPosition>).detail;
-      const panel = statusPanelRef.current;
-      if (!panel || !position) {
-        return;
-      }
-      const panelRect = panel.getBoundingClientRect();
+      if (!position) return;
+
       const playerLeft = position.x - PLAYER_HALF_WIDTH;
       const playerRight = position.x + PLAYER_HALF_WIDTH;
       const playerTop = position.y - PLAYER_TOP_OFFSET;
       const playerBottom = position.y + PLAYER_BOTTOM_OFFSET;
-      const overlaps =
-        playerRight >= panelRect.left &&
-        playerLeft <= panelRect.right &&
-        playerBottom >= panelRect.top &&
-        playerTop <= panelRect.bottom;
-      setStatusOccluded((current) => (current === overlaps ? current : overlaps));
+
+      for (const ref of refs) {
+        const element = ref.current;
+        if (!element) continue;
+        const rect = element.getBoundingClientRect();
+        const rendered = rect.width > 0 && rect.height > 0;
+        const overlaps =
+          rendered &&
+          playerRight >= rect.left - OCCLUSION_PADDING &&
+          playerLeft <= rect.right + OCCLUSION_PADDING &&
+          playerBottom >= rect.top - OCCLUSION_PADDING &&
+          playerTop <= rect.bottom + OCCLUSION_PADDING;
+        element.classList.toggle('hud-occluded', overlaps);
+      }
     };
 
     window.addEventListener(LOCAL_PLAYER_SCREEN_EVENT, handlePlayerPosition);
-    return () => window.removeEventListener(LOCAL_PLAYER_SCREEN_EVENT, handlePlayerPosition);
+    return () => {
+      window.removeEventListener(LOCAL_PLAYER_SCREEN_EVENT, handlePlayerPosition);
+      for (const ref of refs) ref.current?.classList.remove('hud-occluded');
+    };
   }, []);
 
   if (!state.self || !state.map) return null;
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 select-none text-slate-100">
-      <div
-        ref={statusPanelRef}
-        className={`absolute left-3 top-3 transition-opacity duration-150 ${statusOccluded ? 'opacity-20' : 'opacity-100'}`}
-      >
+    <div className="game-hud-root pointer-events-none absolute inset-0 z-10 select-none text-slate-100">
+      <HudAnchor elementRef={statusPanelRef} className="absolute left-3 top-3">
         <StatusPanel character={state.self} map={state.map} />
-      </div>
-      <div className="absolute right-3 top-3 hidden sm:block"><MiniMap map={state.map} character={state.self} players={state.players} /></div>
-      <div className="absolute bottom-3 left-3 hidden md:block"><ChatPanel notifications={state.notifications} /></div>
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2"><ActionBar /></div>
-      <div className="absolute right-3 top-1/2 -translate-y-1/2"><HudButtons /></div>
-      <div className="pointer-events-auto absolute right-3 top-[190px] hidden items-center gap-2 sm:flex">
-        <LocaleToggle />
-        <button type="button" onClick={() => void signOut()} className="rounded border border-slate-600/60 bg-slate-950/70 px-2 py-1 text-[10px] uppercase tracking-wider text-slate-400 hover:border-rose-400/50 hover:text-rose-200">
-          {t('hud.signOut')}
-        </button>
-      </div>
-      <div className="absolute bottom-[82px] right-3 hidden max-w-xs rounded border border-white/10 bg-slate-950/60 p-2 text-[10px] leading-4 text-slate-400 lg:block">
-        <p>{t('game.controls')}</p><p>{t('game.stopPath')}</p>
-      </div>
-      <Notifications notifications={state.notifications} />
+      </HudAnchor>
+      <HudAnchor elementRef={miniMapRef} className="absolute right-3 top-3 hidden sm:block">
+        <MiniMap map={state.map} character={state.self} players={state.players} />
+      </HudAnchor>
+      <HudAnchor elementRef={chatRef} className="absolute bottom-3 left-3 hidden md:block">
+        <ChatPanel notifications={state.notifications} />
+      </HudAnchor>
+      <HudAnchor elementRef={actionBarRef} className="absolute bottom-3 left-1/2 -translate-x-1/2">
+        <ActionBar />
+      </HudAnchor>
+      <HudAnchor elementRef={windowButtonsRef} className="absolute right-3 top-1/2 -translate-y-1/2">
+        <HudButtons />
+      </HudAnchor>
+      <HudAnchor elementRef={utilityRef} className="absolute right-3 top-[190px] hidden sm:block">
+        <div className="hud-utility-bar pointer-events-auto flex items-center gap-2">
+          <LocaleToggle />
+          <button type="button" onClick={() => void signOut()} className="hud-utility-button">
+            {t('hud.signOut')}
+          </button>
+        </div>
+      </HudAnchor>
+      <HudAnchor elementRef={helpRef} className="absolute bottom-[82px] right-3 hidden lg:block">
+        <div className="hud-help-chip max-w-xs">
+          <p>{t('game.controls')}</p>
+          <p>{t('game.stopPath')}</p>
+        </div>
+      </HudAnchor>
+      <Notifications containerRef={notificationsRef} notifications={state.notifications} />
       <PortalTransition state={state.portalTransition} />
       <ConnectionOverlay reconnecting={state.phase === 'reconnecting'} />
       <ModalHost />
