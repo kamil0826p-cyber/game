@@ -1,0 +1,23 @@
+import type { MessageKey } from './en.js';
+
+export const polishMessages = {
+  'errors.auth.required': 'Wymagane jest uwierzytelnienie.',
+  'errors.auth.invalid': 'Token uwierzytelniający jest nieprawidłowy lub wygasł.',
+  'errors.realm.unavailable': 'Wybrany świat gry jest niedostępny.',
+  'errors.character.required': 'Utwórz postać przed wejściem do świata.',
+  'errors.character.exists': 'W tym świecie istnieje już postać dla tego konta.',
+  'errors.character.nameTaken': 'Ta nazwa postaci jest już zajęta.',
+  'errors.payload.invalid': 'Wysłane dane są nieprawidłowe.',
+  'errors.session.notReady': 'Sesja gry nie jest jeszcze gotowa.',
+  'errors.movement.tooFast': 'Ruch został odrzucony, ponieważ nie upłynął jeszcze wymagany czas między krokami.',
+  'errors.movement.outOfBounds': 'Nie można wyjść poza granice mapy.',
+  'errors.movement.collision': 'Docelowy kafel jest zablokowany.',
+  'errors.movement.occupied': 'Docelowy kafel jest zajęty przez innego gracza.',
+  'errors.movement.noPath': 'Nie istnieje prawidłowa trasa do wskazanego kafla.',
+  'errors.movement.pathTooLong': 'Wyznaczona trasa przekracza limit długości serwera.',
+  'errors.movement.searchLimit': 'Wyszukiwanie trasy przekroczyło limit obliczeń serwera.',
+  'errors.map.invalid': 'Definicja mapy jest nieprawidłowa.',
+  'errors.portal.invalid': 'Cel portalu jest nieprawidłowy.',
+  'errors.internal': 'Wystąpił wewnętrzny błąd serwera.',
+  'notifications.sessionReplaced': 'Ta postać połączyła się z innej sesji.',
+} satisfies Record<MessageKey, string>;
