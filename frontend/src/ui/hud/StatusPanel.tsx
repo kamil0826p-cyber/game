@@ -13,7 +13,7 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
   const experiencePercent = Math.min(100, (character.experience / experienceTarget) * 100);
 
   return (
-    <section className="hud-panel pointer-events-auto w-[min(390px,calc(100vw-24px))] p-3" aria-label="Player status">
+    <section className="hud-panel pointer-events-none w-[min(390px,calc(100vw-24px))] p-3" aria-label="Player status">
       <div className="flex items-center gap-3">
         <div className="grid size-[74px] shrink-0 place-items-center overflow-hidden rounded-lg border border-amber-300/30 bg-slate-950/65">
           <OutfitPreview outfitKey={character.outfitKey} characterClass={character.characterClass} size="small" animated />
