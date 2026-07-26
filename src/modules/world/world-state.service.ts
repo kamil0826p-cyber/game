@@ -64,7 +64,7 @@ export class WorldStateService {
       stateRevision: character.stateVersion + (positionChanged ? 1 : 0),
       persistedRevision: character.stateVersion,
       dirty: positionChanged,
-      activeInWorld: false,
+      activeInWorld: input.activeInWorld ?? true,
       visibleCharacterIds: new Set<string>(),
       watcherCharacterIds: new Set<string>(),
     };
@@ -75,6 +75,9 @@ export class WorldStateService {
     if (existing) return existing;
     this.sessionsByCharacterId.set(session.characterId, session);
     this.sessionsBySocketId.set(session.socketId, session);
+    if (session.activeInWorld) {
+      this.spatialIndex.add(session.characterId, session.mapId, session.x, session.y);
+    }
     return undefined;
   }
 
@@ -160,9 +163,7 @@ export class WorldStateService {
     for (const characterId of candidates) {
       if (characterId === excludingCharacterId) continue;
       const session = this.sessionsByCharacterId.get(characterId);
-      if (session?.activeInWorld && session.mapId === mapId && session.x === x && session.y === y) {
-        return true;
-      }
+      if (session?.activeInWorld && session.mapId === mapId && session.x === x && session.y === y) return true;
     }
     return false;
   }
@@ -185,9 +186,7 @@ export class WorldStateService {
         session.x <= maximumX &&
         session.y >= minimumY &&
         session.y <= maximumY
-      ) {
-        sessions.push(session);
-      }
+      ) sessions.push(session);
     }
     return sessions;
   }
