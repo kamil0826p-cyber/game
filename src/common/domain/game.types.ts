@@ -14,8 +14,8 @@ export const CURRENCY_TYPES = ['SILVER', 'GOLD'] as const;
 export type CurrencyType = (typeof CURRENCY_TYPES)[number];
 
 export interface CurrencyBalance {
-  silver: number;
-  gold: number;
+  silver?: number;
+  gold?: number;
 }
 
 export interface Coordinates {
