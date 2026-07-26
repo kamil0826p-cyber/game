@@ -11,8 +11,7 @@ const slots = [
   { icon: '●', label: 'Rations' },
 ] as const;
 
-const isEditable = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+const isEditable = (target: EventTarget | null): boolean => target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 
 export function ActionBar(): React.JSX.Element {
   const [active, setActive] = useState<number | undefined>(undefined);
@@ -30,12 +29,16 @@ export function ActionBar(): React.JSX.Element {
   }, []);
 
   return (
-    <section className="hud-panel pointer-events-auto flex gap-1.5 p-2" aria-label="Quick actions">
-      {slots.map((slot, index) => (
-        <button key={slot.label} type="button" title={slot.label} onClick={() => { setActive(index); window.setTimeout(() => setActive(undefined), 180); }} className={`action-slot ${active === index ? 'action-slot-active' : ''}`}>
-          <span className="text-xl">{slot.icon}</span><kbd>{index + 1}</kbd>
-        </button>
-      ))}
+    <section className="royal-action-deck pointer-events-auto" aria-label="Quick actions">
+      <span className="royal-action-wing">❧</span>
+      <div className="royal-action-slots">
+        {slots.map((slot, index) => (
+          <button key={slot.label} type="button" title={slot.label} onClick={() => { setActive(index); window.setTimeout(() => setActive(undefined), 180); }} className={`action-slot ${active === index ? 'action-slot-active' : ''}`}>
+            <span>{slot.icon}</span><kbd>{index + 1}</kbd>
+          </button>
+        ))}
+      </div>
+      <span className="royal-action-wing">❧</span>
     </section>
   );
 }
