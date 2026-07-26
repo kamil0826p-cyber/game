@@ -41,15 +41,16 @@ export function ActionBar(): React.JSX.Element {
             key={slot.labelKey}
             type="button"
             aria-label={`${label} (${index + 1})`}
-            data-tooltip={label}
-            data-tooltip-hotkey={index + 1}
             onClick={() => {
               setActive(index);
               window.setTimeout(() => setActive(undefined), 180);
             }}
-            className={`action-slot hud-tooltip hud-tooltip-top ${active === index ? 'action-slot-active' : ''}`}
+            className={`action-slot hud-tooltip-anchor ${active === index ? 'action-slot-active' : ''}`}
           >
             <span className="text-xl">{slot.icon}</span><kbd>{index + 1}</kbd>
+            <span className="hud-tooltip-bubble hud-tooltip-bubble-top" role="tooltip">
+              <span>{label}</span><kbd>{index + 1}</kbd>
+            </span>
           </button>
         );
       })}
