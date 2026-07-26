@@ -54,23 +54,56 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
           </div>
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-3 border-t border-white/5 pt-2 text-[10px] text-slate-400">
-        <span className="truncate">{map.name}</span>
-        <div className="flex shrink-0 items-center gap-2 font-mono">
-          <CurrencyBadge label="Srebro" value={character.silver ?? 0} tone="text-slate-200" />
-          <CurrencyBadge label="Złoto" value={character.gold ?? 0} tone="text-amber-300" />
-          <span>X {character.x} · Y {character.y}</span>
+      <div className="mt-2 border-t border-white/5 pt-2">
+        <div className="flex items-center justify-between gap-3 text-[10px] text-slate-400">
+          <span className="truncate">{map.name}</span>
+          <span className="shrink-0 font-mono">X {character.x} · Y {character.y}</span>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <CurrencyBadge label="Srebro" value={character.silver ?? 0} variant="silver" />
+          <CurrencyBadge label="Złoto" value={character.gold ?? 0} variant="gold" />
         </div>
       </div>
     </section>
   );
 }
 
-function CurrencyBadge({ label, value, tone }: { label: string; value: number; tone: string }): React.JSX.Element {
+function CurrencyBadge({
+  label,
+  value,
+  variant,
+}: {
+  label: string;
+  value: number;
+  variant: 'silver' | 'gold';
+}): React.JSX.Element {
+  const isSilver = variant === 'silver';
+  const borderClass = isSilver ? 'border-slate-300/20' : 'border-amber-300/25';
+  const backgroundClass = isSilver ? 'bg-slate-300/5' : 'bg-amber-300/5';
+  const iconClass = isSilver
+    ? 'border-slate-100/70 bg-slate-300 text-slate-950 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.25)]'
+    : 'border-amber-100/70 bg-amber-400 text-amber-950 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.25)]';
+  const valueClass = isSilver ? 'text-slate-100' : 'text-amber-200';
+
   return (
-    <span className={`rounded border border-white/10 bg-black/25 px-1.5 py-0.5 ${tone}`} title={label}>
-      {label === 'Srebro' ? 'S' : 'G'} {numberFormatter.format(value)}
-    </span>
+    <div
+      className={`flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 ${borderClass} ${backgroundClass}`}
+      aria-label={`${label}: ${numberFormatter.format(value)}`}
+      title={`${label}: ${numberFormatter.format(value)}`}
+    >
+      <span
+        className={`grid size-6 shrink-0 place-items-center rounded-full border font-display text-[10px] font-bold ${iconClass}`}
+        aria-hidden="true"
+      >
+        {isSilver ? 'S' : 'Z'}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[8px] uppercase tracking-[0.14em] text-slate-500">{label}</span>
+        <span className={`block truncate font-mono text-xs font-semibold ${valueClass}`}>
+          {numberFormatter.format(value)}
+        </span>
+      </span>
+    </div>
   );
 }
 
