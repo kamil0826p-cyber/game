@@ -23,6 +23,11 @@ export interface CharacterStats {
   armor: number;
 }
 
+export interface CurrencyBalance {
+  silver?: number;
+  gold?: number;
+}
+
 export interface PublicPlayerState {
   characterId: string;
   name: string;
@@ -36,7 +41,7 @@ export interface PublicPlayerState {
   combatState: CombatState;
 }
 
-export interface SelfCharacterState extends PublicPlayerState, CharacterStats {
+export interface SelfCharacterState extends PublicPlayerState, CharacterStats, CurrencyBalance {
   experience: number;
 }
 

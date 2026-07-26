@@ -4,6 +4,7 @@ import type {
   CharacterClass,
   CharacterStats,
   CombatState,
+  CurrencyBalance,
   Direction,
   ZoneType,
 } from '../common/domain/game.types.js';
@@ -20,7 +21,7 @@ import type {
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
 export interface PublicPlayerState { characterId: string; name: string; characterClass: CharacterClass; level: number; outfitKey: string; mapId: string; x: number; y: number; direction: Direction; combatState: CombatState; }
-export interface SelfCharacterState extends PublicPlayerState, CharacterStats { experience: number; }
+export interface SelfCharacterState extends PublicPlayerState, CharacterStats, CurrencyBalance { experience: number; }
 export interface MapStatePayload { id: string; key: string; name: string; width: number; height: number; zoneType: ZoneType; version: number; }
 export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
 export interface MovementCommittedPayload { requestId?: string; source: 'DIRECT' | 'PATH'; mapId: string; x: number; y: number; direction: Direction; serverTime: number; portalTransition?: { sourceMapId: string; destinationMapId: string; targetX: number; targetY: number; }; }

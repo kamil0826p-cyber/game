@@ -10,6 +10,14 @@ export type ZoneType = (typeof ZONE_TYPES)[number];
 export const COMBAT_STATES = ['IDLE', 'IN_BATTLE'] as const;
 export type CombatState = (typeof COMBAT_STATES)[number];
 
+export const CURRENCY_TYPES = ['SILVER', 'GOLD'] as const;
+export type CurrencyType = (typeof CURRENCY_TYPES)[number];
+
+export interface CurrencyBalance {
+  silver?: number;
+  gold?: number;
+}
+
 export interface Coordinates {
   x: number;
   y: number;
@@ -31,7 +39,7 @@ export interface CharacterStats {
   armor: number;
 }
 
-export interface PersistedCharacterState extends CharacterStats {
+export interface PersistedCharacterState extends CharacterStats, CurrencyBalance {
   id: string;
   userId: string;
   realmId: string;
