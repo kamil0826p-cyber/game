@@ -19,6 +19,8 @@ const zoneLabelKey = {
   PVP: 'map.zone.pvp',
 } as const;
 
+const numberFormatter = new Intl.NumberFormat('pl-PL');
+
 export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Element {
   const { t } = useI18n();
   const experienceTarget = Math.max(100, character.level * 250);
@@ -52,11 +54,23 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
           </div>
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2 text-[10px] text-slate-400">
+      <div className="mt-2 flex items-center justify-between gap-3 border-t border-white/5 pt-2 text-[10px] text-slate-400">
         <span className="truncate">{map.name}</span>
-        <span className="font-mono">X {character.x} · Y {character.y}</span>
+        <div className="flex shrink-0 items-center gap-2 font-mono">
+          <CurrencyBadge label="Srebro" value={character.silver ?? 0} tone="text-slate-200" />
+          <CurrencyBadge label="Złoto" value={character.gold ?? 0} tone="text-amber-300" />
+          <span>X {character.x} · Y {character.y}</span>
+        </div>
       </div>
     </section>
+  );
+}
+
+function CurrencyBadge({ label, value, tone }: { label: string; value: number; tone: string }): React.JSX.Element {
+  return (
+    <span className={`rounded border border-white/10 bg-black/25 px-1.5 py-0.5 ${tone}`} title={label}>
+      {label === 'Srebro' ? 'S' : 'G'} {numberFormatter.format(value)}
+    </span>
   );
 }
 
