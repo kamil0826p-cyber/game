@@ -10,6 +10,18 @@ import { useGameState } from '../game/state/gameStore';
 import { useI18n } from '../i18n/I18nProvider';
 import { CLASS_PRESENTATION } from '../mock/outfitCatalog';
 
+const classLabelKey = {
+  MAGE: 'class.mage',
+  WARRIOR: 'class.warrior',
+  ARCHER: 'class.archer',
+} as const;
+
+const zoneLabelKey = {
+  SAFE: 'map.zone.safe',
+  OUTLAW: 'map.zone.outlaw',
+  PVP: 'map.zone.pvp',
+} as const;
+
 export function CharacterSelectScreen(): React.JSX.Element {
   const state = useGameState();
   const connection = useGameConnection();
@@ -57,20 +69,20 @@ export function CharacterSelectScreen(): React.JSX.Element {
           <div className="flex flex-col justify-center">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="font-display text-4xl text-slate-50">{character.name}</h2>
-              <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{map.zoneType}</span>
+              <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{t(zoneLabelKey[map.zoneType])}</span>
             </div>
             <p className={`mt-2 text-sm font-semibold uppercase tracking-[0.18em] ${classInfo.accent}`}>
-              Level {character.level} {classInfo.label}
+              {t('common.level')} {character.level} {t(classLabelKey[character.characterClass])}
             </p>
             <div className="mt-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
               <Info label={t('common.map')} value={map.name} />
               <Info label={t('common.position')} value={`${character.x}, ${character.y}`} />
-              <Info label="Outfit" value={character.outfitKey} />
-              <Info label="Realm" value={state.realm?.slug ?? 'world-1'} />
+              <Info label={t('common.outfit')} value={character.outfitKey} />
+              <Info label={t('common.realm')} value={state.realm?.slug ?? 'world-1'} />
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <Meter label="Health" value={character.hp} max={character.maxHp} tone="health" />
-              <Meter label="Energy" value={character.energy} max={character.maxEnergy} tone="energy" />
+              <Meter label={t('hud.health')} value={character.hp} max={character.maxHp} tone="health" />
+              <Meter label={t('hud.energy')} value={character.energy} max={character.maxEnergy} tone="energy" />
             </div>
             <Button className="mt-8 justify-center py-3 text-base" onClick={() => void enterWorld()} type="button" busy={entering}>
               {t('character.enterWorld')}
