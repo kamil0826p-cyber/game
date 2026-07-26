@@ -33,7 +33,7 @@ export function ActionBar(): React.JSX.Element {
   }, []);
 
   return (
-    <section className="hud-panel pointer-events-auto flex gap-1.5 p-2" aria-label="Quick actions">
+    <section className="hud-panel hud-tooltip-container pointer-events-auto flex gap-1.5 p-2" aria-label="Quick actions">
       {slots.map((slot, index) => {
         const label = t(slot.labelKey);
         return (
