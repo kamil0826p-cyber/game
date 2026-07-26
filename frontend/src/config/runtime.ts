@@ -1,7 +1,6 @@
 export interface RuntimeConfig {
   gameServerUrl: string;
   socketPath: string;
-  defaultLocale: string;
   enableAuthEmulator: boolean;
   authEmulatorUrl: string;
   firebase: {
@@ -40,7 +39,6 @@ const validationErrors = requiredFirebaseFields
 export const runtimeConfig: RuntimeConfig = {
   gameServerUrl: read('VITE_GAME_SERVER_URL') || window.location.origin,
   socketPath: read('VITE_SOCKET_PATH') || '/socket.io',
-  defaultLocale: read('VITE_DEFAULT_LOCALE') || 'en',
   enableAuthEmulator: read('VITE_ENABLE_AUTH_EMULATOR').toLowerCase() === 'true',
   authEmulatorUrl:
     read('VITE_FIREBASE_AUTH_EMULATOR_URL') || 'http://127.0.0.1:9099',
