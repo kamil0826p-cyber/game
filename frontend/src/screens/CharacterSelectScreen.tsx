@@ -21,7 +21,7 @@ export function CharacterSelectScreen(): React.JSX.Element {
   const classInfo = CLASS_PRESENTATION[character.characterClass];
 
   return (
-    <main className="auth-background flex h-dvh items-center justify-center overflow-y-auto p-5 text-slate-100">
+    <main className="auth-background flex h-dvh items-center justify-center overflow-hidden p-5 text-slate-100 md:overflow-y-auto">
       <MobileUnsupportedNotice />
       <Panel elevated className="w-full max-w-4xl overflow-hidden">
         <header className="flex items-start justify-between gap-4 border-b border-white/10 p-6 sm:p-8">
