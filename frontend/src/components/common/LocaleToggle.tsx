@@ -6,10 +6,11 @@ export function LocaleToggle(): React.JSX.Element {
     <button
       type="button"
       onClick={toggleLocale}
-      className="rounded border border-slate-600/70 bg-slate-950/70 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-300 transition hover:border-amber-400/60 hover:text-amber-100"
+      className="locale-toggle"
       title="Toggle English wording style"
     >
-      {locale === 'en' ? 'English' : 'Simple English'}
+      <span className="locale-toggle-dot" />
+      {locale === 'en' ? 'English' : 'Simple'}
     </button>
   );
 }
