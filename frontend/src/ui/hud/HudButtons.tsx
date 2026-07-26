@@ -25,13 +25,14 @@ export function HudButtons(): React.JSX.Element {
           <button
             key={button.key}
             type="button"
-            className="hud-window-button hud-tooltip hud-tooltip-left"
+            className="hud-window-button hud-tooltip-anchor"
             onClick={() => gameStore.setActiveModal(button.key)}
             aria-label={`${label} (${button.hotkey})`}
-            data-tooltip={label}
-            data-tooltip-hotkey={button.hotkey}
           >
             <span>{button.icon}</span><kbd>{button.hotkey}</kbd>
+            <span className="hud-tooltip-bubble hud-tooltip-bubble-left" role="tooltip">
+              <span>{label}</span><kbd>{button.hotkey}</kbd>
+            </span>
           </button>
         );
       })}
