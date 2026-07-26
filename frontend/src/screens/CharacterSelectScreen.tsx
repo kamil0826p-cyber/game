@@ -1,6 +1,7 @@
 import { useAuth } from '../auth/AuthProvider';
 import { Button } from '../components/common/Button';
 import { LocaleToggle } from '../components/common/LocaleToggle';
+import { MobileUnsupportedNotice } from '../components/common/MobileUnsupportedNotice';
 import { OutfitPreview } from '../components/common/OutfitPreview';
 import { Panel } from '../components/common/Panel';
 import { gameStore, useGameState } from '../game/state/gameStore';
@@ -21,6 +22,7 @@ export function CharacterSelectScreen(): React.JSX.Element {
 
   return (
     <main className="auth-background flex h-dvh items-center justify-center overflow-y-auto p-5 text-slate-100">
+      <MobileUnsupportedNotice />
       <Panel elevated className="w-full max-w-4xl overflow-hidden">
         <header className="flex items-start justify-between gap-4 border-b border-white/10 p-6 sm:p-8">
           <div>
