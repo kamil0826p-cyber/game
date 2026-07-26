@@ -39,7 +39,7 @@ export interface CharacterStats {
   armor: number;
 }
 
-export interface PersistedCharacterState extends CharacterStats, CurrencyBalance {
+export interface PersistedCharacterState extends CharacterStats {
   id: string;
   userId: string;
   realmId: string;
@@ -53,6 +53,8 @@ export interface PersistedCharacterState extends CharacterStats, CurrencyBalance
   y: number;
   direction: Direction;
   combatState: CombatState;
+  silver?: number;
+  gold?: number;
   stateVersion: number;
   lastSavedAt: Date;
 }
