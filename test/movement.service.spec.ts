@@ -21,6 +21,8 @@ const createSession = (): PlayerSession => ({
   characterClass: 'WARRIOR',
   level: 1,
   experience: 0,
+  silver: 0,
+  gold: 0,
   outfitKey: 'warrior-recruit',
   mapId: 'map-a',
   x: 1,
