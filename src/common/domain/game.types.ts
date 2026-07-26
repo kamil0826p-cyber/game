@@ -14,8 +14,8 @@ export const CURRENCY_TYPES = ['SILVER', 'GOLD'] as const;
 export type CurrencyType = (typeof CURRENCY_TYPES)[number];
 
 export interface CurrencyBalance {
-  silver?: number;
-  gold?: number;
+  silver: number;
+  gold: number;
 }
 
 export interface Coordinates {
@@ -39,7 +39,7 @@ export interface CharacterStats {
   armor: number;
 }
 
-export interface PersistedCharacterState extends CharacterStats, CurrencyBalance {
+export interface PersistedCharacterState extends CharacterStats {
   id: string;
   userId: string;
   realmId: string;
@@ -53,6 +53,8 @@ export interface PersistedCharacterState extends CharacterStats, CurrencyBalance
   y: number;
   direction: Direction;
   combatState: CombatState;
+  silver?: number;
+  gold?: number;
   stateVersion: number;
   lastSavedAt: Date;
 }

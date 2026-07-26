@@ -74,6 +74,16 @@ enum TradeStatus {
   EXPIRED
 }
 
+enum CurrencyType {
+  SILVER
+  GOLD
+}
+
+enum CurrencyDirection {
+  CREDIT
+  DEBIT
+}
+
 model Realm {
   id           String   @id @default(uuid()) @db.Uuid
   slug         String   @unique @db.VarChar(64)
@@ -83,9 +93,9 @@ model Realm {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  defaultMap Map?        @relation("RealmDefaultMap", fields: [defaultMapId], references: [id], onDelete: SetNull)
-  maps       Map[]       @relation("RealmMaps")
-  characters Character[]
+  defaultMap   Map?          @relation("RealmDefaultMap", fields: [defaultMapId], references: [id], onDelete: SetNull)
+  maps         Map[]         @relation("RealmMaps")
+  characters   Character[]
   chatMessages ChatMessage[]
 
   @@index([isActive])
@@ -112,10 +122,10 @@ model Character {
   experience  Int            @default(0)
   outfitKey   String         @db.VarChar(64)
 
-  mapId       String    @db.Uuid
+  mapId       String      @db.Uuid
   x           Int
   y           Int
-  direction   Direction @default(SOUTH)
+  direction   Direction   @default(SOUTH)
   combatState CombatState @default(IDLE)
 
   hp           Int
@@ -126,6 +136,8 @@ model Character {
   agility      Int
   intelligence Int
   armor        Int
+  silver       Int @default(0)
+  gold         Int @default(0)
 
   stateVersion Int      @default(0)
   lastSavedAt  DateTime @default(now())
@@ -136,19 +148,38 @@ model Character {
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Restrict)
   map   Map   @relation(fields: [mapId], references: [id], onDelete: Restrict)
 
-  skills          CharacterSkill[]
-  inventoryItems  InventoryItem[]
-  quests           CharacterQuest[]
-  sentChatMessages ChatMessage[] @relation("ChatSender")
-  receivedWhispers ChatMessage[] @relation("ChatTarget")
-  initiatedTrades  TradeSession[] @relation("TradeInitiator")
-  receivedTrades   TradeSession[] @relation("TradeRecipient")
-  tradeOffers      TradeOfferItem[]
+  skills             CharacterSkill[]
+  inventoryItems     InventoryItem[]
+  quests             CharacterQuest[]
+  currencyLedger     CharacterCurrencyLedger[]
+  sentChatMessages   ChatMessage[] @relation("ChatSender")
+  receivedWhispers   ChatMessage[] @relation("ChatTarget")
+  initiatedTrades    TradeSession[] @relation("TradeInitiator")
+  receivedTrades     TradeSession[] @relation("TradeRecipient")
+  tradeOffers         TradeOfferItem[]
 
   @@unique([userId, realmId])
   @@unique([realmId, name])
   @@index([realmId, mapId])
   @@index([mapId, x, y])
+}
+
+model CharacterCurrencyLedger {
+  id           String            @id @default(uuid()) @db.Uuid
+  characterId  String            @db.Uuid
+  operationId  String            @db.VarChar(128)
+  currency     CurrencyType
+  direction    CurrencyDirection
+  amount       Int
+  reason       String            @db.VarChar(96)
+  balanceAfter Int
+  metadata     Json              @default("{}") @db.JsonB
+  createdAt    DateTime          @default(now())
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, operationId])
+  @@index([characterId, createdAt])
 }
 
 model Map {
@@ -166,11 +197,11 @@ model Map {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  realm              Realm       @relation("RealmMaps", fields: [realmId], references: [id], onDelete: Cascade)
-  defaultForRealms   Realm[]     @relation("RealmDefaultMap")
+  realm              Realm           @relation("RealmMaps", fields: [realmId], references: [id], onDelete: Cascade)
+  defaultForRealms   Realm[]         @relation("RealmDefaultMap")
   characters         Character[]
-  sourcePortals      Portal[]    @relation("SourceMap")
-  destinationPortals Portal[]    @relation("DestinationMap")
+  sourcePortals      Portal[]        @relation("SourceMap")
+  destinationPortals Portal[]        @relation("DestinationMap")
   npcDefinitions     NpcDefinition[]
   mobDefinitions     MobDefinition[]
 
@@ -251,8 +282,8 @@ model InventoryItem {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  character    Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  itemDefinition ItemDefinition @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
+  character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  itemDefinition  ItemDefinition  @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
   tradeOfferItems TradeOfferItem[]
 
   @@unique([characterId, slotIndex])
@@ -260,15 +291,15 @@ model InventoryItem {
 }
 
 model QuestDefinition {
-  id          String   @id @default(uuid()) @db.Uuid
-  key         String   @unique @db.VarChar(96)
-  name        String   @db.VarChar(160)
-  description String   @db.Text
-  minimumLevel Int     @default(1)
-  steps       Json     @default("[]") @db.JsonB
-  rewards     Json     @default("{}") @db.JsonB
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid()) @db.Uuid
+  key          String   @unique @db.VarChar(96)
+  name         String   @db.VarChar(160)
+  description  String   @db.Text
+  minimumLevel Int      @default(1)
+  steps        Json     @default("[]") @db.JsonB
+  rewards      Json     @default("{}") @db.JsonB
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   characterQuests CharacterQuest[]
 }
@@ -309,19 +340,19 @@ model NpcDefinition {
 }
 
 model MobDefinition {
-  id         String   @id @default(uuid()) @db.Uuid
-  mapId      String   @db.Uuid
-  key        String   @db.VarChar(96)
-  name       String   @db.VarChar(120)
-  x          Int
-  y          Int
-  level      Int
-  outfitKey  String   @db.VarChar(64)
-  stats      Json     @default("{}") @db.JsonB
-  lootTable  Json     @default("[]") @db.JsonB
-  respawnMs  Int      @default(30000)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid()) @db.Uuid
+  mapId     String   @db.Uuid
+  key       String   @db.VarChar(96)
+  name      String   @db.VarChar(120)
+  x         Int
+  y         Int
+  level     Int
+  outfitKey String   @db.VarChar(64)
+  stats     Json     @default("{}") @db.JsonB
+  lootTable Json     @default("[]") @db.JsonB
+  respawnMs Int      @default(30000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
@@ -339,9 +370,9 @@ model ChatMessage {
   metadata          Json            @default("{}") @db.JsonB
   createdAt         DateTime        @default(now())
 
-  realm             Realm     @relation(fields: [realmId], references: [id], onDelete: Cascade)
-  senderCharacter   Character? @relation("ChatSender", fields: [senderCharacterId], references: [id], onDelete: SetNull)
-  targetCharacter   Character? @relation("ChatTarget", fields: [targetCharacterId], references: [id], onDelete: SetNull)
+  realm           Realm      @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  senderCharacter Character? @relation("ChatSender", fields: [senderCharacterId], references: [id], onDelete: SetNull)
+  targetCharacter Character? @relation("ChatTarget", fields: [targetCharacterId], references: [id], onDelete: SetNull)
 
   @@index([realmId, channel, createdAt])
   @@index([targetCharacterId, createdAt])
@@ -358,8 +389,8 @@ model TradeSession {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  initiator Character @relation("TradeInitiator", fields: [initiatorCharacterId], references: [id], onDelete: Cascade)
-  recipient Character @relation("TradeRecipient", fields: [recipientCharacterId], references: [id], onDelete: Cascade)
+  initiator Character        @relation("TradeInitiator", fields: [initiatorCharacterId], references: [id], onDelete: Cascade)
+  recipient Character        @relation("TradeRecipient", fields: [recipientCharacterId], references: [id], onDelete: Cascade)
   offers    TradeOfferItem[]
 
   @@index([initiatorCharacterId, status])
@@ -374,8 +405,8 @@ model TradeOfferItem {
   quantity             Int
   createdAt            DateTime @default(now())
 
-  tradeSession TradeSession  @relation(fields: [tradeSessionId], references: [id], onDelete: Cascade)
-  offeredBy    Character     @relation(fields: [offeredByCharacterId], references: [id], onDelete: Cascade)
+  tradeSession  TradeSession  @relation(fields: [tradeSessionId], references: [id], onDelete: Cascade)
+  offeredBy     Character     @relation(fields: [offeredByCharacterId], references: [id], onDelete: Cascade)
   inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
 
   @@unique([tradeSessionId, inventoryItemId])

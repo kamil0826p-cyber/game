@@ -40,6 +40,8 @@ export class WorldStateService {
       characterClass: character.characterClass,
       level: character.level,
       experience: character.experience,
+      silver: character.silver ?? 0,
+      gold: character.gold ?? 0,
       outfitKey: character.outfitKey,
       mapId: input.mapId,
       x: input.x,
@@ -210,6 +212,8 @@ export class WorldStateService {
     return {
       ...this.toPublicState(session),
       experience: session.experience,
+      silver: session.silver,
+      gold: session.gold,
       hp: session.hp,
       maxHp: session.maxHp,
       energy: session.energy,
