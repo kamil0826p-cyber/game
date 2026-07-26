@@ -221,6 +221,7 @@ export class GameEngine {
     );
     this.host.dispatchEvent(
       new CustomEvent<LocalPlayerScreenPosition>(LOCAL_PLAYER_SCREEN_EVENT, {
+        bubbles: true,
         detail: {
           x: localView.worldX + this.world.x,
           y: localView.worldY + this.world.y,
