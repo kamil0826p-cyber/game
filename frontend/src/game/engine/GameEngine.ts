@@ -21,6 +21,13 @@ import {
 import { CharacterView } from './CharacterView';
 import { MapRenderer } from './MapRenderer';
 
+export const LOCAL_PLAYER_SCREEN_EVENT = 'game:local-player-screen-position';
+
+export interface LocalPlayerScreenPosition {
+  x: number;
+  y: number;
+}
+
 export class GameEngine {
   private readonly app = new Application();
   private readonly world = new Container();
@@ -211,6 +218,15 @@ export class GameEngine {
     this.world.position.set(
       screenWidth / 2 - this.cameraX,
       screenHeight / 2 - this.cameraY,
+    );
+    this.host.dispatchEvent(
+      new CustomEvent<LocalPlayerScreenPosition>(LOCAL_PLAYER_SCREEN_EVENT, {
+        bubbles: true,
+        detail: {
+          x: localView.worldX + this.world.x,
+          y: localView.worldY + this.world.y,
+        },
+      }),
     );
   }
 
