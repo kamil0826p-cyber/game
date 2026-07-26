@@ -9,7 +9,6 @@ const classColors = {
   ARCHER: 0x4f9467,
 } as const;
 
-const smoothStep = (value: number): number => value * value * (3 - 2 * value);
 
 export class CharacterView {
   readonly container = new Container();
@@ -108,18 +107,21 @@ export class CharacterView {
       this.targetX = nextX;
       this.targetY = nextY;
       this.movementStartedAt = performance.now();
-      this.movementDuration = Math.max(80, stepMs * 0.9);
+      this.movementDuration = Math.max(80, stepMs * 1.05);
       this.moving = true;
     }
   }
 
   update(now: number): void {
     if (this.moving) {
-      const progress = Math.min(1, (now - this.movementStartedAt) / this.movementDuration);
-      const eased = smoothStep(progress);
+      const progress = Math.min(
+        1,
+        (now - this.movementStartedAt) / this.movementDuration,
+      );
+
       this.container.position.set(
-        this.startX + (this.targetX - this.startX) * eased,
-        this.startY + (this.targetY - this.startY) * eased,
+        this.startX + (this.targetX - this.startX) * progress,
+        this.startY + (this.targetY - this.startY) * progress,
       );
       if (progress >= 1) {
         this.moving = false;
