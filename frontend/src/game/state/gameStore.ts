@@ -240,6 +240,10 @@ class GameStore {
   }
 
   addNotification(payload: SocketErrorPayload): void {
+    if (payload.code === 'MOVE_COLLISION') {
+      return;
+    }
+
     const createdAt = Date.now();
     const previous = this.state.notifications.at(-1);
     if (

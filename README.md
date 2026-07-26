@@ -84,7 +84,6 @@ The client calculates local A* paths only for immediate route feedback. It sends
 The browser currently renders visual-only examples for:
 
 - HP, energy, XP, and derived attributes.
-- Chat channels and message input.
 - Quick action slots.
 - Inventory and equipment.
 - Quest log.
