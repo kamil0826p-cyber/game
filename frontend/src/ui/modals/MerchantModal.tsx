@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { CharacterClass, InventoryItemPayload, ItemStatBonuses, MerchantItemPayload, MerchantSnapshot } from '../../contracts/socket';
+import type { CharacterClass } from '../../contracts/game';
+import type { InventoryItemPayload, ItemStatBonuses, MerchantItemPayload, MerchantSnapshot } from '../../contracts/socket';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useI18n } from '../../i18n/I18nProvider';
 import { Modal } from './Modal';
