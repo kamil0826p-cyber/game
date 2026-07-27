@@ -3,7 +3,6 @@
   "name": "tree-trunk",
   "tilecount": 1,
   "tileheight": 32,
-  "tileoffset": { "x": -32, "y": 0 },
   "tilewidth": 32,
   "type": "tileset",
   "version": "1.10",
@@ -20,15 +19,15 @@
         "name": "Collision",
         "objects": [
           {
-            "height": 64,
+            "height": 32,
             "id": 1,
             "name": "Footprint",
             "rotation": 0,
             "type": "collision",
             "visible": true,
-            "width": 96,
+            "width": 32,
             "x": 0,
-            "y": 21
+            "y": 53
           }
         ],
         "opacity": 1,
