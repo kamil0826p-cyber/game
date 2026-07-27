@@ -2,8 +2,10 @@ import type { CharacterClass, Direction, MapStatePayload, PublicPlayerState, Rea
 
 export type EquipmentSlot = 'HEAD' | 'CHEST' | 'LEGS' | 'FEET' | 'MAIN_HAND' | 'OFF_HAND' | 'AMULET' | 'RING';
 export type ItemCategory = 'EQUIPMENT' | 'CONSUMABLE' | 'MATERIAL' | 'QUEST';
-export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; buyPriceSilver: number; sellPriceSilver: number; sellable: boolean; }
-export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
+export interface ItemStatBonuses { strength?: number; agility?: number; intelligence?: number; armor?: number; maxHp?: number; maxEnergy?: number; }
+export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; statBonuses: ItemStatBonuses; buyPriceSilver: number; sellPriceSilver: number; sellable: boolean; }
+export interface InventoryCharacterSnapshot { hp: number; maxHp: number; energy: number; maxEnergy: number; strength: number; agility: number; intelligence: number; armor: number; silver: number; }
+export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: InventoryCharacterSnapshot; }
 export interface MerchantItemPayload { definitionKey: string; name: string; description: string; icon: string; stackLimit: number; buyPriceSilver: number; sellPriceSilver: number; }
 export interface MerchantSnapshot { merchant: { id: string; key: string; name: string }; silver: number; items: MerchantItemPayload[]; inventory: InventorySnapshot; }
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
