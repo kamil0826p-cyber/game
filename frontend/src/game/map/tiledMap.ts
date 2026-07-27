@@ -94,7 +94,6 @@ const walkLayers = (map: TiledMapJson, visit: (layer: TiledLayer, context: Layer
   const walk = (layers: TiledLayer[], parent: LayerContext): void => {
     for (const layer of layers) {
       const context = childContext(map, layer, parent);
-      if (!context.visible) continue;
       if (isGroupLayer(layer)) walk(layer.layers, context); else visit(layer, context);
     }
   };
@@ -104,7 +103,7 @@ const walkLayers = (map: TiledMapJson, visit: (layer: TiledLayer, context: Layer
 const compileLayers = (map: TiledMapJson): CompiledTileLayer[] => {
   const result: CompiledTileLayer[] = [];
   walkLayers(map, (layer, context) => {
-    if (!isTileLayer(layer) || propertyValue(layer.properties, 'collision') === true || normalizedName(layer.name) === 'collision') return;
+    if (!isTileLayer(layer) || !context.visible || propertyValue(layer.properties, 'collision') === true || normalizedName(layer.name) === 'collision') return;
     result.push({ name: layer.name, band: context.band, opacity: context.opacity, width: layer.width, height: layer.height, offsetX: context.offsetX, offsetY: context.offsetY, data: layer.data });
   });
   return result;
