@@ -1,0 +1,31 @@
+name: Freeze Tiled maps once
+
+on:
+  push:
+    branches:
+      - agent/tiled-map-engine-refactor
+
+permissions:
+  contents: write
+
+jobs:
+  freeze-maps:
+    if: github.event.head_commit.message == 'Run one-time map freeze'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out map branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tiled-map-engine-refactor
+          fetch-depth: 0
+
+      - name: Generate final map files once
+        run: node scripts/generate-maps.mjs
+
+      - name: Commit frozen maps
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prisma/maps/greenfields.json prisma/maps/crystal-cave.json frontend/public/maps/greenfields.json frontend/public/maps/crystal-cave.json
+          git commit -m "Freeze large Tiled maps"
+          git push origin HEAD:agent/tiled-map-engine-refactor
