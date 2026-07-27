@@ -6,6 +6,7 @@ import { gameAssetLoader } from './GameAssetLoader';
 export class MapRenderer {
   readonly belowEntities = new Container();
   readonly aboveEntities = new Container();
+  readonly container = this.belowEntities;
   private readonly portalLayer = new Container();
   private readonly portalGraphics: Graphics[] = [];
   private map?: LoadedMapDefinition;
@@ -15,6 +16,7 @@ export class MapRenderer {
   constructor() {
     this.belowEntities.sortableChildren = true;
     this.aboveEntities.sortableChildren = true;
+    this.aboveEntities.zIndex = 3;
     this.portalLayer.zIndex = 10_000;
     this.belowEntities.addChild(this.portalLayer);
   }
@@ -23,6 +25,7 @@ export class MapRenderer {
     const sequence = ++this.loadSequence;
     const textures = await gameAssetLoader.getMapTileTextures(map.source, map.key);
     if (this.destroyed || sequence !== this.loadSequence) return false;
+    this.attachOverlayPlane();
     this.destroyChildren();
     this.map = map;
     map.renderLayers.forEach((layer, index) => this.renderLayer(map, layer, textures, index));
@@ -46,24 +49,22 @@ export class MapRenderer {
     this.destroyed = true;
     this.loadSequence += 1;
     this.destroyChildren();
+    this.aboveEntities.removeFromParent();
     this.belowEntities.destroy({ children: true });
     this.aboveEntities.destroy({ children: true });
   }
 
-  private renderLayer(
-    map: LoadedMapDefinition,
-    layer: CompiledTileLayer,
-    textures: ReadonlyMap<number, Texture>,
-    order: number,
-  ): void {
+  private attachOverlayPlane(): void {
+    const world = this.belowEntities.parent;
+    if (world && this.aboveEntities.parent !== world) world.addChild(this.aboveEntities);
+  }
+
+  private renderLayer(map: LoadedMapDefinition, layer: CompiledTileLayer, textures: ReadonlyMap<number, Texture>, order: number): void {
     const target = layer.plane === 'above-entities' ? this.aboveEntities : this.belowEntities;
     const container = new Container();
     container.label = layer.name;
     container.alpha = layer.opacity;
-    container.position.set(
-      (layer.offsetX / map.tileWidth) * WORLD_TILE_SIZE,
-      (layer.offsetY / map.tileHeight) * WORLD_TILE_SIZE,
-    );
+    container.position.set((layer.offsetX / map.tileWidth) * WORLD_TILE_SIZE, (layer.offsetY / map.tileHeight) * WORLD_TILE_SIZE);
     container.zIndex = order;
 
     for (let index = 0; index < layer.data.length; index += 1) {
@@ -80,10 +81,7 @@ export class MapRenderer {
         container.addChild(sprite);
       } else {
         const hue = (gid * 2654435761) & 0xffffff;
-        const fallback = new Graphics()
-          .rect(x * WORLD_TILE_SIZE, y * WORLD_TILE_SIZE, WORLD_TILE_SIZE, WORLD_TILE_SIZE)
-          .fill({ color: hue, alpha: 0.45 });
-        container.addChild(fallback);
+        container.addChild(new Graphics().rect(x * WORLD_TILE_SIZE, y * WORLD_TILE_SIZE, WORLD_TILE_SIZE, WORLD_TILE_SIZE).fill({ color: hue, alpha: 0.45 }));
       }
     }
     target.addChild(container);
@@ -93,10 +91,7 @@ export class MapRenderer {
     this.portalLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.portalGraphics.length = 0;
     for (const portal of map.portals) {
-      const ring = new Graphics()
-        .ellipse(0, 0, WORLD_TILE_SIZE * 0.36, WORLD_TILE_SIZE * 0.18)
-        .fill({ color: 0x7dd3fc, alpha: 0.18 })
-        .stroke({ color: 0xa78bfa, width: 4, alpha: 0.95 });
+      const ring = new Graphics().ellipse(0, 0, WORLD_TILE_SIZE * 0.36, WORLD_TILE_SIZE * 0.18).fill({ color: 0x7dd3fc, alpha: 0.18 }).stroke({ color: 0xa78bfa, width: 4, alpha: 0.95 });
       ring.position.set((portal.sourceX + 0.5) * WORLD_TILE_SIZE, (portal.sourceY + 0.7) * WORLD_TILE_SIZE);
       this.portalLayer.addChild(ring);
       this.portalGraphics.push(ring);
@@ -106,9 +101,7 @@ export class MapRenderer {
 
   private destroyChildren(): void {
     for (const root of [this.belowEntities, this.aboveEntities]) {
-      root.removeChildren().forEach((child) => {
-        if (child !== this.portalLayer) child.destroy({ children: true });
-      });
+      root.removeChildren().forEach((child) => { if (child !== this.portalLayer) child.destroy({ children: true }); });
     }
     this.portalLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.portalGraphics.length = 0;
