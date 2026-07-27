@@ -1,7 +1,12 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
-import type { LoadedMapDefinition } from '../../contracts/tiled';
+import type { LoadedMapDefinition, RenderedTileLayer } from '../../contracts/tiled';
 import { WORLD_TILE_SIZE } from './constants';
 import { gameAssetLoader } from './GameAssetLoader';
+
+const HORIZONTAL_FLIP = 0x80000000;
+const VERTICAL_FLIP = 0x40000000;
+const DIAGONAL_FLIP = 0x20000000;
+const GID_MASK = 0x0fffffff;
 
 const mapPalette: Readonly<
   Record<string, { ground: number; groundAccent: number; wall: number; wallAccent: number }>
@@ -20,6 +25,33 @@ const mapPalette: Readonly<
   },
 };
 
+const tileGid = (rawGid: number): number => (rawGid >>> 0) & GID_MASK;
+
+const applyTileTransform = (sprite: Sprite, rawGid: number): void => {
+  const unsignedGid = rawGid >>> 0;
+  const horizontal = (unsignedGid & HORIZONTAL_FLIP) !== 0;
+  const vertical = (unsignedGid & VERTICAL_FLIP) !== 0;
+  const diagonal = (unsignedGid & DIAGONAL_FLIP) !== 0;
+
+  if (!diagonal) {
+    if (horizontal) sprite.scale.x *= -1;
+    if (vertical) sprite.scale.y *= -1;
+    return;
+  }
+
+  if (horizontal && vertical) {
+    sprite.rotation = Math.PI / 2;
+    sprite.scale.x *= -1;
+  } else if (horizontal) {
+    sprite.rotation = Math.PI / 2;
+  } else if (vertical) {
+    sprite.rotation = -Math.PI / 2;
+  } else {
+    sprite.rotation = Math.PI / 2;
+    sprite.scale.y *= -1;
+  }
+};
+
 export class MapRenderer {
   readonly container = new Container();
   private readonly portalLayer = new Container();
@@ -34,14 +66,14 @@ export class MapRenderer {
 
   async load(map: LoadedMapDefinition): Promise<boolean> {
     const sequence = ++this.loadSequence;
-    const textures = await gameAssetLoader.getTileTextures(map.key);
+    const textures = await gameAssetLoader.getTileTextures(map);
     if (this.destroyed || sequence !== this.loadSequence) {
       return false;
     }
 
     this.destroyChildren();
     this.map = map;
-    if (textures) {
+    if (textures && textures.size > 0) {
       this.renderTexturedMap(map, textures);
     } else {
       this.renderPrimitiveMap(map);
@@ -80,33 +112,49 @@ export class MapRenderer {
     map: LoadedMapDefinition,
     textures: ReadonlyMap<number, Texture>,
   ): void {
-    const groundLayer = new Container();
-    const obstacleLayer = new Container();
-    for (let y = 0; y < map.height; y += 1) {
-      for (let x = 0; x < map.width; x += 1) {
-        const index = y * map.width + x;
-        const groundTexture = textures.get(map.ground[index] ?? 1);
-        if (groundTexture) {
-          const sprite = new Sprite(groundTexture);
-          sprite.position.set(x * WORLD_TILE_SIZE, y * WORLD_TILE_SIZE);
-          sprite.width = WORLD_TILE_SIZE;
-          sprite.height = WORLD_TILE_SIZE;
-          groundLayer.addChild(sprite);
+    for (const layer of map.renderLayers) {
+      this.container.addChildAt(
+        this.renderTileLayer(map, layer, textures),
+        this.container.children.length - 1,
+      );
+    }
+  }
+
+  private renderTileLayer(
+    map: LoadedMapDefinition,
+    layer: RenderedTileLayer,
+    textures: ReadonlyMap<number, Texture>,
+  ): Container {
+    const layerContainer = new Container();
+    layerContainer.alpha = layer.opacity;
+    const pixelScaleX = WORLD_TILE_SIZE / map.tileWidth;
+    const pixelScaleY = WORLD_TILE_SIZE / map.tileHeight;
+    const layerPixelOffsetX = layer.pixelOffsetX * pixelScaleX;
+    const layerPixelOffsetY = layer.pixelOffsetY * pixelScaleY;
+
+    for (let localY = 0; localY < layer.height; localY += 1) {
+      for (let localX = 0; localX < layer.width; localX += 1) {
+        const rawGid = layer.data[localY * layer.width + localX] ?? 0;
+        if (rawGid === 0) {
+          continue;
         }
-        if (map.collision[index] === 1) {
-          const obstacleTexture = textures.get(2);
-          if (obstacleTexture) {
-            const obstacle = new Sprite(obstacleTexture);
-            obstacle.position.set(x * WORLD_TILE_SIZE, y * WORLD_TILE_SIZE);
-            obstacle.width = WORLD_TILE_SIZE;
-            obstacle.height = WORLD_TILE_SIZE;
-            obstacleLayer.addChild(obstacle);
-          }
+        const texture = textures.get(tileGid(rawGid));
+        if (!texture) {
+          continue;
         }
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(
+          (layer.tileOffsetX + localX + 0.5) * WORLD_TILE_SIZE + layerPixelOffsetX,
+          (layer.tileOffsetY + localY + 0.5) * WORLD_TILE_SIZE + layerPixelOffsetY,
+        );
+        sprite.width = WORLD_TILE_SIZE;
+        sprite.height = WORLD_TILE_SIZE;
+        applyTileTransform(sprite, rawGid);
+        layerContainer.addChild(sprite);
       }
     }
-    this.container.addChildAt(groundLayer, 0);
-    this.container.addChildAt(obstacleLayer, 1);
+    return layerContainer;
   }
 
   private renderPrimitiveMap(map: LoadedMapDefinition): void {
