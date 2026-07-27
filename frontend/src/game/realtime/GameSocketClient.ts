@@ -153,6 +153,7 @@ export class GameSocketClient {
     socket.on('movement:committed', (payload) => gameStore.commitMovement(payload));
     socket.on('movement:rejected', (payload) => gameStore.rejectMovement(payload));
     socket.on('world:mapChanged', (payload) => gameStore.changeMap(payload));
+    socket.on('character:currencyUpdated', (payload) => gameStore.updateCurrency(payload));
     socket.on('chat:message', (payload) => { for (const listener of this.chatListeners) listener(payload); });
     socket.on('notification', (payload) => gameStore.addNotification(payload));
   }

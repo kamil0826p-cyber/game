@@ -8,6 +8,7 @@ export interface SocketErrorPayload { code: string; message: string; details?: R
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
 export interface PublicPlayerState { characterId: string; name: string; characterClass: CharacterClass; level: number; outfitKey: string; mapId: string; x: number; y: number; direction: Direction; combatState: CombatState; }
 export interface SelfCharacterState extends PublicPlayerState, CharacterStats, CurrencyBalance { experience: number; }
+export interface CharacterCurrencyUpdatedPayload { characterId: string; currency: 'SILVER' | 'GOLD'; amount: number; balance: number; }
 export interface MapStatePayload { id: string; key: string; name: string; width: number; height: number; zoneType: ZoneType; version: number; }
 export type NpcInteractionType = 'DIALOGUE' | 'MERCHANT' | 'QUEST';
 export interface NpcStatePayload { id: string; key: string; name: string; mapId: string; x: number; y: number; outfitKey: string; interactionType: NpcInteractionType; interactionRadius: number; }
@@ -54,6 +55,7 @@ export interface ServerToClientEvents {
   'world:mapChanged': (payload: { map: MapStatePayload; npcs: NpcStatePayload[]; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[]; serverTime: number; }) => void;
   'movement:committed': (payload: MovementCommittedPayload) => void;
   'movement:rejected': (payload: MovementRejectedPayload) => void;
+  'character:currencyUpdated': (payload: CharacterCurrencyUpdatedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
   notification: (payload: SocketErrorPayload) => void;
 }

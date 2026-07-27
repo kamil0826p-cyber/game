@@ -41,8 +41,12 @@ export class AdminCommandService {
     if (!result.targetCharacterId || !result.currencyUpdate) return;
     const session = this.worldState.getByCharacterId(result.targetCharacterId);
     if (!session) return;
-    if (result.currencyUpdate.currency === 'SILVER') session.silver = Math.max(session.silver, result.currencyUpdate.balance);
-    else session.gold = Math.max(session.gold, result.currencyUpdate.balance);
+    if (result.currencyUpdate.currency === 'SILVER') session.silver = result.currencyUpdate.balance;
+    else session.gold = result.currencyUpdate.balance;
+    this.publisher.emit(session.socketId, 'character:currencyUpdated', {
+      characterId: session.characterId,
+      ...result.currencyUpdate,
+    });
     this.publisher.emit(session.socketId, 'notification', {
       code: 'ADMIN_CURRENCY_RECEIVED',
       message: `Otrzymano ${result.currencyUpdate.amount} ${result.currencyUpdate.currency === 'SILVER' ? 'srebra' : 'złota'}. Nowe saldo: ${result.currencyUpdate.balance}.`,
