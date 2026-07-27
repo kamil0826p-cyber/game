@@ -1,15 +1,24 @@
 {
-  "columns": 4,
-  "image": "../../assets/tiles/crystal-cave.svg",
-  "imageheight": 128,
-  "imagewidth": 128,
-  "margin": 0,
-  "name": "crystal-cave",
-  "spacing": 0,
-  "tilecount": 16,
-  "tileheight": 32,
-  "tilewidth": 32,
-  "tiledversion": "1.10.2",
   "type": "tileset",
-  "version": "1.10"
+  "version": "1.10",
+  "tiledversion": "1.10.2",
+  "name": "crystal-cave",
+  "tilewidth": 32,
+  "tileheight": 32,
+  "tilecount": 12,
+  "columns": 0,
+  "tiles": [
+    {"id":0,"image":"../../assets/tiles/cave/00-floor.svg","imagewidth":32,"imageheight":32},
+    {"id":1,"image":"../../assets/tiles/cave/01-floor-cracked.svg","imagewidth":32,"imageheight":32},
+    {"id":2,"image":"../../assets/tiles/cave/02-wall.svg","imagewidth":32,"imageheight":32},
+    {"id":3,"image":"../../assets/tiles/cave/03-wall-crystal.svg","imagewidth":32,"imageheight":32},
+    {"id":4,"image":"../../assets/tiles/cave/04-abyss.svg","imagewidth":32,"imageheight":32},
+    {"id":5,"image":"../../assets/tiles/cave/05-bridge.svg","imagewidth":32,"imageheight":32},
+    {"id":6,"image":"../../assets/tiles/cave/06-crystal-blue.svg","imagewidth":32,"imageheight":32},
+    {"id":7,"image":"../../assets/tiles/cave/07-crystal-purple.svg","imagewidth":32,"imageheight":32},
+    {"id":8,"image":"../../assets/tiles/cave/08-stalagmite.svg","imagewidth":32,"imageheight":32},
+    {"id":9,"image":"../../assets/tiles/cave/09-bones.svg","imagewidth":32,"imageheight":32},
+    {"id":10,"image":"../../assets/tiles/cave/10-mushrooms.svg","imagewidth":32,"imageheight":32},
+    {"id":11,"image":"../../assets/tiles/cave/11-rubble.svg","imagewidth":32,"imageheight":32}
+  ]
 }
