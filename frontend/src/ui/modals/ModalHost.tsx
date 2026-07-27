@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { gameStore, useGameState, type ModalKey } from '../../game/state/gameStore';
 import { CharacterModal } from './CharacterModal';
 import { InventoryModal } from './InventoryModal';
@@ -37,7 +37,7 @@ export function ModalHost(): React.JSX.Element | null {
     return () => window.removeEventListener('keydown', listener);
   }, [state.activeModal]);
 
-  const close = () => gameStore.setActiveModal(null);
+  const close = useCallback(() => gameStore.setActiveModal(null), []);
   if (!state.self || !state.activeModal) return null;
   if (state.activeModal === 'character') return <CharacterModal character={state.self} onClose={close} />;
   if (state.activeModal === 'inventory') return <InventoryModal onClose={close} />;
