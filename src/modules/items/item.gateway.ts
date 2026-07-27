@@ -36,55 +36,48 @@ export class ItemGateway {
 
   @SubscribeMessage('inventory:get')
   getInventory(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryRequestSchema, raw, (session) => this.items.getInventory(session.userId, session.characterId));
+    return this.handle(client, inventoryRequestSchema, raw, async (session) => this.syncSession(session, await this.items.getInventory(session.userId, session.characterId)));
   }
 
   @SubscribeMessage('inventory:move')
   move(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryMoveSchema, raw, (session, payload) => this.items.move(session.userId, session.characterId, payload.itemId, payload.targetSlotIndex));
+    return this.handle(client, inventoryMoveSchema, raw, async (session, payload) => this.syncSession(session, await this.items.move(session.userId, session.characterId, payload.itemId, payload.targetSlotIndex)));
   }
 
   @SubscribeMessage('inventory:equip')
   equip(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryItemSchema, raw, (session, payload) => this.items.equip(session.userId, session.characterId, payload.itemId));
+    return this.handle(client, inventoryItemSchema, raw, async (session, payload) => this.syncSession(session, await this.items.equip(session.userId, session.characterId, payload.itemId)));
   }
 
   @SubscribeMessage('inventory:unequip')
   unequip(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryItemSchema, raw, (session, payload) => this.items.unequip(session.userId, session.characterId, payload.itemId));
+    return this.handle(client, inventoryItemSchema, raw, async (session, payload) => this.syncSession(session, await this.items.unequip(session.userId, session.characterId, payload.itemId)));
   }
 
   @SubscribeMessage('inventory:use')
   use(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryItemSchema, raw, async (session, payload) => {
-      const snapshot = await this.items.use(session.userId, session.characterId, payload.itemId);
-      if (snapshot.character) {
-        session.hp = snapshot.character.hp;
-        session.energy = snapshot.character.energy;
-        session.stateRevision += 1;
-        session.dirty = true;
-      }
-      return snapshot;
-    });
+    return this.handle(client, inventoryItemSchema, raw, async (session, payload) => this.syncSession(session, await this.items.use(session.userId, session.characterId, payload.itemId)));
   }
 
   @SubscribeMessage('inventory:discard')
   discard(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryDiscardSchema, raw, (session, payload) => this.items.discard(session.userId, session.characterId, payload.itemId, payload.quantity));
+    return this.handle(client, inventoryDiscardSchema, raw, async (session, payload) => this.syncSession(session, await this.items.discard(session.userId, session.characterId, payload.itemId, payload.quantity)));
   }
 
   @SubscribeMessage('merchant:get')
   getMerchant(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<MerchantSnapshot>> {
-    return this.handle(client, inventoryRequestSchema, raw, (session) => this.items.getMerchant(session.userId, session.characterId));
+    return this.handle(client, inventoryRequestSchema, raw, async (session) => {
+      const snapshot = await this.items.getMerchant(session.userId, session.characterId);
+      this.syncSession(session, snapshot.inventory);
+      return snapshot;
+    });
   }
 
   @SubscribeMessage('merchant:buy')
   buy(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<MerchantSnapshot>> {
     return this.handle(client, merchantBuySchema, raw, async (session, payload) => {
       const snapshot = await this.items.buy(session.userId, session.characterId, payload.itemKey, payload.quantity, payload.requestId);
-      session.silver = snapshot.silver;
-      session.stateRevision += 1;
-      session.dirty = true;
+      this.syncSession(session, snapshot.inventory);
       return snapshot;
     });
   }
@@ -93,11 +86,26 @@ export class ItemGateway {
   sell(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<MerchantSnapshot>> {
     return this.handle(client, merchantSellSchema, raw, async (session, payload) => {
       const snapshot = await this.items.sell(session.userId, session.characterId, payload.itemId, payload.quantity, payload.requestId);
-      session.silver = snapshot.silver;
-      session.stateRevision += 1;
-      session.dirty = true;
+      this.syncSession(session, snapshot.inventory);
       return snapshot;
     });
+  }
+
+  private syncSession(session: PlayerSession, snapshot: InventorySnapshot): InventorySnapshot {
+    const character = snapshot.character;
+    if (!character) return snapshot;
+    session.hp = character.hp;
+    session.maxHp = character.maxHp;
+    session.energy = character.energy;
+    session.maxEnergy = character.maxEnergy;
+    session.strength = character.strength;
+    session.agility = character.agility;
+    session.intelligence = character.intelligence;
+    session.armor = character.armor;
+    session.silver = character.silver;
+    session.stateRevision += 1;
+    session.dirty = true;
+    return snapshot;
   }
 
   private async handle<TPayload, TResult>(
