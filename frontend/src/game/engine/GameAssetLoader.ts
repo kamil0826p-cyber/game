@@ -1,13 +1,10 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
 import type { CharacterClass, Direction } from '../../contracts/game';
-
-export interface TileSetAssetDefinition {
-  image: string;
-  tileWidth: number;
-  tileHeight: number;
-  columns: number;
-  gidToFrame: Record<string, number>;
-}
+import type {
+  LoadedMapDefinition,
+  TiledTilesetJson,
+  TiledTilesetReference,
+} from '../../contracts/tiled';
 
 export interface OutfitAssetDefinition {
   image: string;
@@ -24,7 +21,6 @@ export interface OutfitAssetDefinition {
 
 export interface AssetManifest {
   version: number;
-  tilesets: Record<string, TileSetAssetDefinition>;
   outfits: Record<string, OutfitAssetDefinition>;
 }
 
@@ -33,9 +29,37 @@ export interface OutfitFrames {
   frames: Record<Direction, Texture[]>;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const parseTileset = (input: unknown, label: string): TiledTilesetJson => {
+  if (
+    !isRecord(input) ||
+    typeof input.image !== 'string' ||
+    input.image.trim().length === 0 ||
+    !Number.isInteger(input.tilewidth) ||
+    Number(input.tilewidth) <= 0 ||
+    !Number.isInteger(input.tileheight) ||
+    Number(input.tileheight) <= 0 ||
+    !Number.isInteger(input.tilecount) ||
+    Number(input.tilecount) <= 0 ||
+    !Number.isInteger(input.columns) ||
+    Number(input.columns) <= 0
+  ) {
+    throw new Error(`Tiled tileset ${label} is malformed.`);
+  }
+  return input as unknown as TiledTilesetJson;
+};
+
+const inlineTileset = (reference: TiledTilesetReference): TiledTilesetJson =>
+  parseTileset(reference, 'inline tileset');
+
 class GameAssetLoader {
   private manifestPromise?: Promise<AssetManifest>;
-  private readonly tileTextureCache = new Map<string, Promise<Map<number, Texture> | undefined>>();
+  private readonly tileTextureCache = new Map<
+    string,
+    Promise<Map<number, Texture> | undefined>
+  >();
   private readonly outfitTextureCache = new Map<string, Promise<OutfitFrames | undefined>>();
 
   loadManifest(): Promise<AssetManifest> {
@@ -52,40 +76,66 @@ class GameAssetLoader {
     return this.manifestPromise;
   }
 
-  getTileTextures(mapKey: string): Promise<Map<number, Texture> | undefined> {
-    const cached = this.tileTextureCache.get(mapKey);
+  getTileTextures(map: LoadedMapDefinition): Promise<Map<number, Texture> | undefined> {
+    const cacheKey = map.sourceUrl;
+    const cached = this.tileTextureCache.get(cacheKey);
     if (cached) {
       return cached;
     }
-    const loading = this.loadManifest()
-      .then(async (manifest) => {
-        const definition = manifest.tilesets[mapKey];
-        if (!definition) {
-          return undefined;
+
+    const loading = Promise.all(
+      map.source.tilesets.map(async (reference) => {
+        if (reference.source) {
+          const tilesetUrl = new URL(reference.source, map.sourceUrl).toString();
+          const response = await fetch(tilesetUrl, { cache: 'force-cache' });
+          if (!response.ok) {
+            throw new Error(`Tiled tileset ${reference.source} failed to load (${response.status}).`);
+          }
+          return {
+            firstGid: reference.firstgid,
+            definition: parseTileset(await response.json(), reference.source),
+            baseUrl: tilesetUrl,
+          };
         }
-        const baseTexture = await Assets.load<Texture>(definition.image);
-        baseTexture.source.scaleMode = 'nearest';
+        return {
+          firstGid: reference.firstgid,
+          definition: inlineTileset(reference),
+          baseUrl: map.sourceUrl,
+        };
+      }),
+    )
+      .then(async (tilesets) => {
         const textures = new Map<number, Texture>();
-        for (const [gidText, frameIndex] of Object.entries(definition.gidToFrame)) {
-          const column = frameIndex % definition.columns;
-          const row = Math.floor(frameIndex / definition.columns);
-          textures.set(
-            Number(gidText),
-            new Texture({
-              source: baseTexture.source,
-              frame: new Rectangle(
-                column * definition.tileWidth,
-                row * definition.tileHeight,
-                definition.tileWidth,
-                definition.tileHeight,
-              ),
-            }),
-          );
-        }
+        await Promise.all(
+          tilesets.map(async ({ firstGid, definition, baseUrl }) => {
+            const imageUrl = new URL(definition.image, baseUrl).toString();
+            const baseTexture = await Assets.load<Texture>(imageUrl);
+            baseTexture.source.scaleMode = 'nearest';
+            const margin = definition.margin ?? 0;
+            const spacing = definition.spacing ?? 0;
+            for (let localId = 0; localId < definition.tilecount; localId += 1) {
+              const column = localId % definition.columns;
+              const row = Math.floor(localId / definition.columns);
+              textures.set(
+                firstGid + localId,
+                new Texture({
+                  source: baseTexture.source,
+                  frame: new Rectangle(
+                    margin + column * (definition.tilewidth + spacing),
+                    margin + row * (definition.tileheight + spacing),
+                    definition.tilewidth,
+                    definition.tileheight,
+                  ),
+                }),
+              );
+            }
+          }),
+        );
         return textures;
       })
       .catch(() => undefined);
-    this.tileTextureCache.set(mapKey, loading);
+
+    this.tileTextureCache.set(cacheKey, loading);
     return loading;
   }
 
