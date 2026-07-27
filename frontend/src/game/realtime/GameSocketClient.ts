@@ -15,6 +15,7 @@ const ACK_TIMEOUT_MS = 8_000;
 const SERVER_RECONNECT_DELAY_MS = 1_200;
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type ChatListener = (message: ChatMessagePayload) => void;
+type AdminCommandAck = SocketAck<{ message: string }>;
 
 export class GameSocketClient {
   private socket: GameSocket | undefined;
@@ -74,37 +75,28 @@ export class GameSocketClient {
   subscribeChat(listener: ChatListener): () => void { this.chatListeners.add(listener); return () => this.chatListeners.delete(listener); }
 
   async sendChat(channel: ChatChannel, text: string): Promise<void> {
+    if (text.trimStart().startsWith('/')) {
+      const response = await this.withAck<{ message: string }>((ack) => {
+        const socket = this.requireSocket() as unknown as { emit(event: 'admin:command', payload: { requestId: string; text: string }, acknowledgement: (response: AdminCommandAck) => void): void };
+        socket.emit('admin:command', { requestId: createRequestId('admin-command'), text }, ack);
+      });
+      this.assertOk(response);
+      gameStore.addNotification({ code: 'ADMIN_COMMAND_OK', message: response.data.message });
+      return;
+    }
     const response = await this.withAck<ChatMessagePayload>((ack) => this.requireSocket().emit('chat:send', { requestId: createRequestId('chat'), channel, text }, ack));
     this.assertOk(response);
   }
 
-  async getInventory(): Promise<InventorySnapshot> {
-    return this.inventoryCommand((socket, ack) => socket.emit('inventory:get', { requestId: createRequestId('inventory') }, ack));
-  }
-  async moveInventoryItem(itemId: string, targetSlotIndex: number): Promise<InventorySnapshot> {
-    return this.inventoryCommand((socket, ack) => socket.emit('inventory:move', { requestId: createRequestId('inventory-move'), itemId, targetSlotIndex }, ack));
-  }
-  async equipInventoryItem(itemId: string): Promise<InventorySnapshot> {
-    return this.inventoryCommand((socket, ack) => socket.emit('inventory:equip', { requestId: createRequestId('inventory-equip'), itemId }, ack));
-  }
-  async unequipInventoryItem(itemId: string): Promise<InventorySnapshot> {
-    return this.inventoryCommand((socket, ack) => socket.emit('inventory:unequip', { requestId: createRequestId('inventory-unequip'), itemId }, ack));
-  }
-  async useInventoryItem(itemId: string): Promise<InventorySnapshot> {
-    return this.inventoryCommand((socket, ack) => socket.emit('inventory:use', { requestId: createRequestId('inventory-use'), itemId }, ack));
-  }
-  async discardInventoryItem(itemId: string, quantity = 1): Promise<InventorySnapshot> {
-    return this.inventoryCommand((socket, ack) => socket.emit('inventory:discard', { requestId: createRequestId('inventory-discard'), itemId, quantity }, ack));
-  }
-  async getMerchant(): Promise<MerchantSnapshot> {
-    return this.merchantCommand((socket, ack) => socket.emit('merchant:get', { requestId: createRequestId('merchant') }, ack));
-  }
-  async buyFromMerchant(itemKey: string, quantity = 1): Promise<MerchantSnapshot> {
-    return this.merchantCommand((socket, ack) => socket.emit('merchant:buy', { requestId: createRequestId('merchant-buy'), itemKey, quantity }, ack));
-  }
-  async sellToMerchant(itemId: string, quantity = 1): Promise<MerchantSnapshot> {
-    return this.merchantCommand((socket, ack) => socket.emit('merchant:sell', { requestId: createRequestId('merchant-sell'), itemId, quantity }, ack));
-  }
+  async getInventory(): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:get', { requestId: createRequestId('inventory') }, ack)); }
+  async moveInventoryItem(itemId: string, targetSlotIndex: number): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:move', { requestId: createRequestId('inventory-move'), itemId, targetSlotIndex }, ack)); }
+  async equipInventoryItem(itemId: string): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:equip', { requestId: createRequestId('inventory-equip'), itemId }, ack)); }
+  async unequipInventoryItem(itemId: string): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:unequip', { requestId: createRequestId('inventory-unequip'), itemId }, ack)); }
+  async useInventoryItem(itemId: string): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:use', { requestId: createRequestId('inventory-use'), itemId }, ack)); }
+  async discardInventoryItem(itemId: string, quantity = 1): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:discard', { requestId: createRequestId('inventory-discard'), itemId, quantity }, ack)); }
+  async getMerchant(): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:get', { requestId: createRequestId('merchant') }, ack)); }
+  async buyFromMerchant(itemKey: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:buy', { requestId: createRequestId('merchant-buy'), itemKey, quantity }, ack)); }
+  async sellToMerchant(itemId: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:sell', { requestId: createRequestId('merchant-sell'), itemId, quantity }, ack)); }
 
   async createCharacter(name: string, characterClass: CharacterClass): Promise<void> {
     const response = await this.withAck<CharacterCreateResult>((ack) => this.requireSocket().emit('character:create', { requestId: createRequestId('character'), name, characterClass }, ack));
@@ -137,15 +129,11 @@ export class GameSocketClient {
 
   private async inventoryCommand(emit: (socket: GameSocket, ack: (response: SocketAck<InventorySnapshot>) => void) => void): Promise<InventorySnapshot> {
     const response = await this.withAck<InventorySnapshot>((ack) => emit(this.requireSocket(), ack));
-    this.assertOk(response);
-    gameStore.updateInventoryState(response.data);
-    return response.data;
+    this.assertOk(response); gameStore.updateInventoryState(response.data); return response.data;
   }
   private async merchantCommand(emit: (socket: GameSocket, ack: (response: SocketAck<MerchantSnapshot>) => void) => void): Promise<MerchantSnapshot> {
     const response = await this.withAck<MerchantSnapshot>((ack) => emit(this.requireSocket(), ack));
-    this.assertOk(response);
-    gameStore.updateInventoryState(response.data.inventory);
-    return response.data;
+    this.assertOk(response); gameStore.updateInventoryState(response.data.inventory); return response.data;
   }
   private assertOk<T>(response: SocketAck<T>): asserts response is { ok: true; data: T } {
     if (!response.ok) { gameStore.addNotification(response.error); throw new Error(response.error.message); }

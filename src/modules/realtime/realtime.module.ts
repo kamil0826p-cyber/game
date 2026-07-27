@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../../auth/auth.module.js';
+import { AdminModule } from '../admin/admin.module.js';
 import { CharacterModule } from '../characters/character.module.js';
 import { MapModule } from '../maps/map.module.js';
 import { MovementModule } from '../movement/movement.module.js';
@@ -14,6 +15,7 @@ import { SessionLifecycleService } from './session-lifecycle.service.js';
 @Module({
   imports: [
     AuthModule,
+    AdminModule,
     CharacterModule,
     RealmModule,
     MapModule,
