@@ -1,0 +1,42 @@
+{
+  "columns": 0,
+  "name": "tree-trunk",
+  "tilecount": 1,
+  "tileheight": 32,
+  "tileoffset": { "x": -32, "y": 0 },
+  "tilewidth": 32,
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.11.0",
+  "tiles": [
+    {
+      "id": 0,
+      "image": "../../assets/tiles/tree-trunk.svg",
+      "imageheight": 85,
+      "imagewidth": 96,
+      "objectgroup": {
+        "draworder": "index",
+        "id": 1,
+        "name": "Collision",
+        "objects": [
+          {
+            "height": 64,
+            "id": 1,
+            "name": "Footprint",
+            "rotation": 0,
+            "type": "collision",
+            "visible": true,
+            "width": 96,
+            "x": 0,
+            "y": 21
+          }
+        ],
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}
