@@ -31,6 +31,8 @@ export interface OutfitFrames {
   frames: Record<Direction, Texture[]>;
 }
 
+const assetCacheMode: RequestCache = import.meta.env.DEV ? 'no-store' : 'force-cache';
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -92,6 +94,12 @@ const parseTileset = (input: unknown, label: string): TiledTilesetJson => {
 const inlineTileset = (reference: TiledTilesetReference): TiledTilesetJson =>
   parseTileset(reference, 'inline tileset');
 
+const canonicalTilesetSource = (source: string): string => {
+  if (!source.toLowerCase().endsWith('.tsx')) return source;
+  const filename = source.split('/').at(-1)?.replace(/\.tsx$/i, '.tsj') ?? source;
+  return `tilesets/${filename}`;
+};
+
 const loadAtlasTextures = async (
   textures: Map<number, Texture>,
   firstGid: number,
@@ -151,7 +159,7 @@ class GameAssetLoader {
     if (!this.manifestPromise) {
       const manifestUrl = publicAssetUrl('assets/manifest.json');
       this.manifestPromise = fetchJsonResource(manifestUrl, 'Asset manifest', {
-        cache: 'force-cache',
+        cache: assetCacheMode,
       }).then((value) => value as AssetManifest);
     }
     return this.manifestPromise;
@@ -164,12 +172,13 @@ class GameAssetLoader {
     const loading = Promise.all(
       map.source.tilesets.map(async (reference) => {
         if (reference.source) {
-          const tilesetUrl = new URL(reference.source, map.sourceUrl).toString();
+          const source = canonicalTilesetSource(reference.source);
+          const tilesetUrl = new URL(source, map.sourceUrl).toString();
           const definition = parseTileset(
-            await fetchJsonResource(tilesetUrl, `Tiled tileset ${reference.source}`, {
-              cache: 'force-cache',
+            await fetchJsonResource(tilesetUrl, `Tiled tileset ${source}`, {
+              cache: assetCacheMode,
             }),
-            reference.source,
+            source,
           );
           return { firstGid: reference.firstgid, definition, baseUrl: tilesetUrl };
         }
