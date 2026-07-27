@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Rectangle, Text } from 'pixi.js';
 import type { NpcDefinition } from '../npc/npcCatalog';
 import { WORLD_TILE_SIZE } from './constants';
 
@@ -13,7 +13,7 @@ export class NpcView {
     this.container.zIndex = npc.y;
     this.container.eventMode = 'static';
     this.container.cursor = 'pointer';
-    this.container.hitArea = { contains: (x: number, y: number) => x >= -18 && x <= 18 && y >= -30 && y <= 20 };
+    this.container.hitArea = new Rectangle(-18, -30, 36, 50);
 
     const shadow = new Graphics().ellipse(0, 13, 14, 6).fill({ color: 0x000000, alpha: 0.35 });
     const body = new Graphics()
