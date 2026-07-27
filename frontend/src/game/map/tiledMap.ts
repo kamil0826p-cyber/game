@@ -6,6 +6,32 @@ const propertyValue = (properties: TiledProperty[] | undefined, name: string): u
 const isTileLayer = (layer: TiledLayer): layer is TiledTileLayer => layer.type === 'tilelayer';
 const isObjectLayer = (layer: TiledLayer): layer is TiledObjectLayer => layer.type === 'objectgroup';
 
+const decodeBase64 = (value: string): Uint8Array => {
+  const binary = atob(value.replace(/\s+/g, ''));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+};
+
+const decompress = async (bytes: Uint8Array, compression: string | undefined): Promise<Uint8Array> => {
+  if (!compression) return bytes;
+  if (compression !== 'zlib' && compression !== 'gzip') throw new Error(`Unsupported Tiled compression: ${compression}.`);
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(compression === 'zlib' ? 'deflate' : 'gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+};
+
+export const decodeTiledMapPayload = async (input: unknown): Promise<unknown> => {
+  if (!isRecord(input) || !Array.isArray(input.layers)) return input;
+  const layers = await Promise.all(input.layers.map(async (layer) => {
+    if (!isRecord(layer) || layer.type !== 'tilelayer' || typeof layer.data !== 'string') return layer;
+    if (layer.encoding !== 'base64') throw new Error(`Tile layer ${String(layer.name ?? '')} uses an unsupported encoding.`);
+    const bytes = await decompress(decodeBase64(layer.data), typeof layer.compression === 'string' ? layer.compression : undefined);
+    if (bytes.byteLength % 4 !== 0) throw new Error(`Tile layer ${String(layer.name ?? '')} has invalid binary data.`);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const data = Array.from({ length: bytes.byteLength / 4 }, (_, index) => view.getUint32(index * 4, true));
+    return { ...layer, data };
+  }));
+  return { ...input, layers };
+};
+
 export const parseTiledMap = (input: unknown): TiledMapJson => {
   if (!isRecord(input)) throw new Error('The Tiled map root must be an object.');
   const { type, orientation, infinite, width, height, tilewidth, tileheight, layers, tilesets } = input;
@@ -21,29 +47,15 @@ export const parseTiledMap = (input: unknown): TiledMapJson => {
 
 const normalizeVisualLayerData = (map: TiledMapJson, layer: TiledTileLayer): number[] => {
   const expectedLength = map.width * map.height;
-  if (layer.width === map.width && layer.height === map.height && layer.data.length === expectedLength) {
-    return layer.data;
-  }
-
+  if (layer.width === map.width && layer.height === map.height && layer.data.length === expectedLength) return layer.data;
   const normalized = new Array<number>(expectedLength).fill(0);
   const copiedWidth = Math.min(map.width, layer.width);
   const copiedHeight = Math.min(map.height, layer.height);
-  for (let y = 0; y < copiedHeight; y += 1) {
-    for (let x = 0; x < copiedWidth; x += 1) {
-      const sourceIndex = y * layer.width + x;
-      const targetIndex = y * map.width + x;
-      normalized[targetIndex] = layer.data[sourceIndex] ?? 0;
-    }
-  }
+  for (let y = 0; y < copiedHeight; y += 1) for (let x = 0; x < copiedWidth; x += 1) normalized[y * map.width + x] = layer.data[y * layer.width + x] ?? 0;
   return normalized;
 };
 
-const compileLayers = (map: TiledMapJson): CompiledTileLayer[] => map.layers.filter(isTileLayer).filter((layer) => layer.visible !== false && propertyValue(layer.properties, 'collision') !== true).map((layer) => ({
-  name: layer.name,
-  band: propertyValue(layer.properties, 'renderBand') === 'above' ? 'above' : 'below',
-  opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
-  data: normalizeVisualLayerData(map, layer),
-}));
+const compileLayers = (map: TiledMapJson): CompiledTileLayer[] => map.layers.filter(isTileLayer).filter((layer) => layer.visible !== false && propertyValue(layer.properties, 'collision') !== true).map((layer) => ({ name: layer.name, band: propertyValue(layer.properties, 'renderBand') === 'above' ? 'above' : 'below', opacity: typeof layer.opacity === 'number' ? layer.opacity : 1, data: normalizeVisualLayerData(map, layer) }));
 
 const markRectangle = (grid: Uint8Array, map: TiledMapJson, object: TiledObject): void => {
   const left = Math.floor((object.x ?? 0) / map.tilewidth);
@@ -62,7 +74,7 @@ const compileCollision = (map: TiledMapJson): Uint8Array => {
     }
     if (isObjectLayer(layer) && (layer.name.toLowerCase() === 'collisions' || propertyValue(layer.properties, 'collision') === true)) layer.objects.forEach((object) => markRectangle(grid, map, object));
   }
-  for (const tileset of map.tilesets) for (const tile of tileset.tiles ?? []) if (propertyValue(tile.properties, 'collides') === true) for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if (gid === tileset.firstgid + tile.id && index < grid.length) grid[index] = 1; });
+  for (const tileset of map.tilesets) for (const tile of tileset.tiles ?? []) if (propertyValue(tile.properties, 'collides') === true) for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if ((gid & 0x1fffffff) === tileset.firstgid + tile.id && index < grid.length) grid[index] = 1; });
   for (const layer of map.layers.filter(isObjectLayer).filter((item) => item.name.toLowerCase() === 'portals' || propertyValue(item.properties, 'portals') === true)) for (const object of layer.objects) {
     const x = Math.floor((object.x ?? 0) / map.tilewidth);
     const y = Math.floor((object.y ?? 0) / map.tileheight);
