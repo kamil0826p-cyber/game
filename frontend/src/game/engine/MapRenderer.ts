@@ -119,20 +119,24 @@ export class MapRenderer {
     const pixelScaleY = WORLD_TILE_SIZE / map.tileHeight;
     const layerPixelOffsetX = layer.pixelOffsetX * pixelScaleX;
     const layerPixelOffsetY = layer.pixelOffsetY * pixelScaleY;
+
     for (let localY = 0; localY < layer.height; localY += 1) {
       for (let localX = 0; localX < layer.width; localX += 1) {
         const rawGid = layer.data[localY * layer.width + localX] ?? 0;
         if (rawGid === 0) continue;
         const texture = textures.get(tileGid(rawGid));
         if (!texture) continue;
+
         const sprite = new Sprite(texture);
-        sprite.anchor.set(0.5);
+        // Tiled aligns collection-of-images tiles by their bottom edge. Keeping the
+        // source image dimensions allows tall scenery such as trees and buildings
+        // to extend above the single collision tile at their base.
+        sprite.anchor.set(0.5, 1);
         sprite.position.set(
           (layer.tileOffsetX + localX + 0.5) * WORLD_TILE_SIZE + layerPixelOffsetX,
-          (layer.tileOffsetY + localY + 0.5) * WORLD_TILE_SIZE + layerPixelOffsetY,
+          (layer.tileOffsetY + localY + 1) * WORLD_TILE_SIZE + layerPixelOffsetY,
         );
-        sprite.width = WORLD_TILE_SIZE;
-        sprite.height = WORLD_TILE_SIZE;
+        sprite.scale.set(pixelScaleX, pixelScaleY);
         applyTileTransform(sprite, rawGid);
         layerContainer.addChild(sprite);
       }
