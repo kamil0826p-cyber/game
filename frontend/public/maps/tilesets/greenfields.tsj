@@ -1,15 +1,1 @@
-{
-  "columns": 4,
-  "image": "../../assets/tiles/greenfields.svg",
-  "imageheight": 128,
-  "imagewidth": 128,
-  "margin": 0,
-  "name": "greenfields",
-  "spacing": 0,
-  "tilecount": 16,
-  "tileheight": 32,
-  "tilewidth": 32,
-  "tiledversion": "1.10.2",
-  "type": "tileset",
-  "version": "1.10"
-}
+{"columns":8,"image":"../../assets/tiles/greenfields.svg","imageheight":128,"imagewidth":256,"margin":0,"name":"greenfields","spacing":0,"tilecount":32,"tileheight":32,"tilewidth":32,"tiles":[{"id":0,"properties":[{"name":"role","type":"string","value":"grass"}]},{"id":1,"properties":[{"name":"role","type":"string","value":"grass-flowers"}]},{"id":2,"properties":[{"name":"role","type":"string","value":"road-horizontal"}]},{"id":3,"properties":[{"name":"role","type":"string","value":"road-vertical"}]},{"id":4,"properties":[{"name":"role","type":"string","value":"road-corner"}]},{"id":5,"properties":[{"name":"role","type":"string","value":"road-cross"}]},{"id":6,"properties":[{"name":"role","type":"string","value":"water"}]},{"id":7,"properties":[{"name":"role","type":"string","value":"shore"}]},{"id":8,"properties":[{"name":"role","type":"string","value":"bridge"}]},{"id":9,"properties":[{"name":"role","type":"string","value":"tree"}]},{"id":10,"properties":[{"name":"role","type":"string","value":"bush"}]},{"id":11,"properties":[{"name":"role","type":"string","value":"rocks"}]},{"id":12,"properties":[{"name":"role","type":"string","value":"house"}]},{"id":13,"properties":[{"name":"role","type":"string","value":"hut"}]},{"id":14,"properties":[{"name":"role","type":"string","value":"cave-entrance"}]},{"id":15,"properties":[{"name":"role","type":"string","value":"fence"}]},{"id":16,"properties":[{"name":"role","type":"string","value":"flowers"}]},{"id":17,"properties":[{"name":"role","type":"string","value":"pond"}]},{"id":18,"properties":[{"name":"role","type":"string","value":"lamp"}]},{"id":19,"properties":[{"name":"role","type":"string","value":"crate"}]},{"id":20,"properties":[{"name":"role","type":"string","value":"well"}]},{"id":21,"properties":[{"name":"role","type":"string","value":"sign"}]},{"id":22,"properties":[{"name":"role","type":"string","value":"bench"}]},{"id":23,"properties":[{"name":"role","type":"string","value":"reeds"}]},{"id":24,"properties":[{"name":"role","type":"string","value":"decoration-24"}]},{"id":25,"properties":[{"name":"role","type":"string","value":"decoration-25"}]},{"id":26,"properties":[{"name":"role","type":"string","value":"decoration-26"}]},{"id":27,"properties":[{"name":"role","type":"string","value":"decoration-27"}]},{"id":28,"properties":[{"name":"role","type":"string","value":"decoration-28"}]},{"id":29,"properties":[{"name":"role","type":"string","value":"decoration-29"}]},{"id":30,"properties":[{"name":"role","type":"string","value":"decoration-30"}]},{"id":31,"properties":[{"name":"role","type":"string","value":"decoration-31"}]}],"tiledversion":"1.10.2","type":"tileset","version":"1.10"}
