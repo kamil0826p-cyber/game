@@ -31,8 +31,8 @@
 
 ## Validation performed
 
-- Parsed both generated map JSON files and both external tilesets.
-- Checked map metadata, spawn walkability, portal source/target walkability, reciprocal destinations, layer data lengths, and GID ranges.
-- Regenerated committed tileset SVGs through `frontend/scripts/generate-assets.mjs`.
-- Ran strict TypeScript checks against the changed parser, repository, asset-loader, and renderer modules with local dependency declarations.
-- Added backend parser tests, frontend map compiler tests, and updated pathfinding fixtures for the new map contract.
+- Parsed both generated map JSON files and both external tilesets with a local validation script.
+- Checked map metadata, spawn walkability, portal source/target walkability, reciprocal destinations, layer data lengths, image dimensions, and GID ranges.
+- Generated and inspected the committed tileset SVGs locally.
+- Ran syntax checks for the asset generator and reviewed the changed TypeScript modules for contract consistency.
+- Updated frontend map compiler and pathfinding fixtures for the new map contract; full package test execution still depends on installing the repository dependencies.
