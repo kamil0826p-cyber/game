@@ -49,7 +49,7 @@ export function ItemTooltip({ item, children }: PropsWithChildren<{ item: Toolti
     <div className="contents" onMouseEnter={move} onMouseMove={move} onMouseLeave={() => setPosition(undefined)}>
       {children}
       {position ? (
-        <div role="tooltip" className={`pointer-events-none fixed z-[80] w-72 rounded-md border ${style.border} bg-slate-950/98 p-3 text-left shadow-2xl backdrop-blur-sm`} style={{ left: position.x, top: position.y }}>
+        <div role="tooltip" className={`pointer-events-none fixed z-[80] w-72 rounded-md border ${style.border} bg-slate-950/[0.98] p-3 text-left shadow-2xl backdrop-blur-sm`} style={{ left: position.x, top: position.y }}>
           <div className="flex items-start gap-3"><span className="text-3xl">{item.icon}</span><div className="min-w-0"><strong className={`block truncate text-sm ${style.name}`}>{item.name}</strong><span className={`mt-0.5 block text-[10px] uppercase tracking-[0.18em] ${style.name}`}>{style.label[locale]}</span></div></div>
           <p className="mt-3 text-xs leading-relaxed text-slate-300">{item.description}</p>
           <div className="mt-3 space-y-1 border-t border-white/10 pt-2 text-xs">
