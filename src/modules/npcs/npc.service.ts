@@ -19,7 +19,7 @@ export class NpcService {
     });
 
     return records.map((npc) => {
-      const dialogue = npc.dialogue as NpcDialogue | null;
+      const dialogue = npc.dialogue as unknown as NpcDialogue | null;
       const interactionType = dialogue?.type === 'MERCHANT' || dialogue?.type === 'QUEST'
         ? dialogue.type
         : 'DIALOGUE';
