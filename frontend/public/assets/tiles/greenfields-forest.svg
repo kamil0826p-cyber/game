@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="32" viewBox="0 0 160 32" shape-rendering="crispEdges">
+<defs>
+ <pattern id="grass" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#315f2a"/><rect x="1" y="2" width="1" height="3" fill="#4b7a36"/><rect x="5" y="5" width="2" height="1" fill="#244d24"/><rect x="7" y="1" width="1" height="2" fill="#6d8e3b"/></pattern>
+ <pattern id="dirt" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#8c7545"/><rect x="1" y="1" width="2" height="1" fill="#a28a57"/><rect x="5" y="4" width="1" height="2" fill="#6f5b38"/><rect x="2" y="6" width="3" height="1" fill="#79643d"/></pattern>
+</defs>
+<rect width="32" height="32" fill="url(#grass)"/><rect x="4" y="25" width="2" height="3" fill="#809c45"/><rect x="22" y="7" width="2" height="2" fill="#244d24"/>
+<rect x="32" width="32" height="32" fill="url(#dirt)"/><rect x="33" y="0" width="2" height="32" fill="#55723a"/><rect x="62" y="0" width="2" height="32" fill="#55723a"/><rect x="42" y="12" width="3" height="2" fill="#b39a67"/>
+<rect x="64" width="32" height="32" fill="none"/><rect x="78" y="20" width="5" height="12" fill="#5b3925"/><rect x="76" y="23" width="9" height="4" fill="#74462a"/><rect x="69" y="10" width="20" height="15" fill="#173f25"/><rect x="72" y="6" width="15" height="15" fill="#24572b"/><rect x="76" y="3" width="9" height="12" fill="#2f6c32"/><rect x="70" y="13" width="6" height="5" fill="#3b7d38"/><rect x="82" y="9" width="5" height="4" fill="#4f8b3c"/><rect x="77" y="5" width="4" height="3" fill="#659747"/>
+<rect x="96" width="32" height="32" fill="none"/><rect x="100" y="17" width="25" height="13" fill="#254b2d"/><rect x="103" y="12" width="19" height="15" fill="#376b36"/><rect x="108" y="9" width="10" height="9" fill="#4f8240"/><rect x="99" y="25" width="7" height="5" fill="#68684e"/><rect x="104" y="22" width="8" height="7" fill="#858064"/>
+<rect x="128" width="32" height="32" fill="url(#dirt)"/><rect x="128" y="0" width="2" height="32" fill="#52703a"/><rect x="158" y="0" width="2" height="32" fill="#52703a"/><rect x="133" y="6" width="2" height="2" fill="#6b5635"/><rect x="148" y="21" width="4" height="2" fill="#b29a66"/><rect x="139" y="15" width="1" height="1" fill="#d0b77d"/>
+</svg>
