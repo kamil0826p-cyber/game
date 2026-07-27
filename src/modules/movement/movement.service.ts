@@ -10,6 +10,7 @@ import type {
 import { LocalizationService } from '../../i18n/localization.service.js';
 import { MapService } from '../maps/map.service.js';
 import type { RuntimeMap } from '../maps/runtime-map.types.js';
+import { NpcService } from '../npcs/npc.service.js';
 import { PlayerPersistenceService } from '../persistence/player-persistence.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { VisibilityService } from '../world/visibility.service.js';
@@ -24,6 +25,7 @@ export class MovementService {
   constructor(
     private readonly config: GameConfigService,
     private readonly maps: MapService,
+    private readonly npcs: NpcService,
     private readonly worldState: WorldStateService,
     private readonly visibility: VisibilityService,
     private readonly publisher: WorldEventsPublisher,
@@ -168,6 +170,7 @@ export class MovementService {
     if (portal) {
       this.publisher.emit(session.socketId, 'world:mapChanged', {
         map: this.toMapState(destinationMap),
+        npcs: await this.npcs.getMapNpcs(destinationMap.id),
         self: this.worldState.toSelfState(session),
         nearbyPlayers,
         serverTime: committedAt,
