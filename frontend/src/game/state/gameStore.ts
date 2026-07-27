@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { CharacterClass, Coordinates, MapStatePayload, PublicPlayerState, RealmState, SelfCharacterState } from '../../contracts/game';
-import type { InventorySnapshot, MovementCommittedPayload, MovementRejectedPayload, NpcStatePayload, SessionReadyPayload, SocketErrorPayload, WorldSpawnPayload } from '../../contracts/socket';
+import type { CharacterCurrencyUpdatedPayload, InventorySnapshot, MovementCommittedPayload, MovementRejectedPayload, NpcStatePayload, SessionReadyPayload, SocketErrorPayload, WorldSpawnPayload } from '../../contracts/socket';
 
 export type GamePhase = 'idle' | 'connecting' | 'character-required' | 'character-select' | 'in-world' | 'reconnecting' | 'fatal';
 export type PortalTransitionState = 'idle' | 'fade-out' | 'loading' | 'fade-in';
@@ -38,6 +38,11 @@ class GameStore {
   upsertPlayer(player: PublicPlayerState): void { this.patch({ players: { ...this.state.players, [player.characterId]: player } }); }
   removePlayer(characterId: string): void { if (!this.state.players[characterId]) return; const players = { ...this.state.players }; delete players[characterId]; this.patch({ players }); }
   setActiveModal(activeModal: ModalKey): void { this.patch({ activeModal }); }
+  updateCurrency(payload: CharacterCurrencyUpdatedPayload): void {
+    const self = this.state.self;
+    if (!self || self.characterId !== payload.characterId) return;
+    this.patch({ self: payload.currency === 'SILVER' ? { ...self, silver: payload.balance } : { ...self, gold: payload.balance } });
+  }
   updateInventoryState(snapshot: InventorySnapshot): void {
     const self = this.state.self; if (!self) return;
     const character = snapshot.character;
