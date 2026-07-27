@@ -16,6 +16,11 @@ export const englishMessages = {
   'errors.movement.searchLimit': 'The path search exceeded the server computation limit.',
   'errors.map.invalid': 'The map definition is invalid.',
   'errors.portal.invalid': 'The portal destination is invalid.',
+  'errors.items.inventoryFull': 'There is not enough room in the inventory.',
+  'errors.items.insufficientSilver': 'You do not have enough silver.',
+  'errors.items.notSellable': 'This item cannot be sold.',
+  'errors.items.equipped': 'Unequip this item before selling it.',
+  'errors.items.merchantUnavailable': 'Move closer to a merchant to trade.',
   'errors.internal': 'An internal server error occurred.',
   'notifications.sessionReplaced': 'This character connected from another session.',
 } as const;
