@@ -1,129 +1,45 @@
 {
-  "version": 1,
+  "version": 2,
   "tilesets": {
     "greenfields": {
-      "image": "/assets/tiles/greenfields.png",
+      "image": "/assets/tiles/tiled-world.svg",
       "tileWidth": 32,
       "tileHeight": 32,
-      "columns": 2,
-      "gidToFrame": {
-        "1": 0,
-        "2": 1
-      }
+      "columns": 6,
+      "gidToFrame": { "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5 }
     },
     "crystal-cave": {
-      "image": "/assets/tiles/crystal-cave.png",
+      "image": "/assets/tiles/tiled-world.svg",
       "tileWidth": 32,
       "tileHeight": 32,
-      "columns": 2,
-      "gidToFrame": {
-        "1": 0,
-        "2": 1
-      }
+      "columns": 6,
+      "gidToFrame": { "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5 }
     }
   },
   "outfits": {
     "mage-apprentice": {
-      "image": "/assets/sprites/mage-apprentice.png",
-      "frameWidth": 32,
-      "frameHeight": 48,
-      "columns": 4,
-      "rows": 4,
-      "framesPerDirection": 4,
-      "frameDurationMs": 120,
-      "directionRows": {
-        "SOUTH": 0,
-        "WEST": 1,
-        "EAST": 2,
-        "NORTH": 3
-      },
-      "characterClass": "MAGE",
-      "unlockLevel": 1
+      "image": "/assets/sprites/mage-apprentice.png", "frameWidth": 32, "frameHeight": 48, "columns": 4, "rows": 4, "framesPerDirection": 4, "frameDurationMs": 120,
+      "directionRows": { "SOUTH": 0, "WEST": 1, "EAST": 2, "NORTH": 3 }, "characterClass": "MAGE", "unlockLevel": 1
     },
     "mage-archmage": {
-      "image": "/assets/sprites/mage-archmage.png",
-      "frameWidth": 32,
-      "frameHeight": 48,
-      "columns": 4,
-      "rows": 4,
-      "framesPerDirection": 4,
-      "frameDurationMs": 120,
-      "directionRows": {
-        "SOUTH": 0,
-        "WEST": 1,
-        "EAST": 2,
-        "NORTH": 3
-      },
-      "characterClass": "MAGE",
-      "unlockLevel": 10
+      "image": "/assets/sprites/mage-archmage.png", "frameWidth": 32, "frameHeight": 48, "columns": 4, "rows": 4, "framesPerDirection": 4, "frameDurationMs": 120,
+      "directionRows": { "SOUTH": 0, "WEST": 1, "EAST": 2, "NORTH": 3 }, "characterClass": "MAGE", "unlockLevel": 10
     },
     "warrior-recruit": {
-      "image": "/assets/sprites/warrior-recruit.png",
-      "frameWidth": 32,
-      "frameHeight": 48,
-      "columns": 4,
-      "rows": 4,
-      "framesPerDirection": 4,
-      "frameDurationMs": 120,
-      "directionRows": {
-        "SOUTH": 0,
-        "WEST": 1,
-        "EAST": 2,
-        "NORTH": 3
-      },
-      "characterClass": "WARRIOR",
-      "unlockLevel": 1
+      "image": "/assets/sprites/warrior-recruit.png", "frameWidth": 32, "frameHeight": 48, "columns": 4, "rows": 4, "framesPerDirection": 4, "frameDurationMs": 120,
+      "directionRows": { "SOUTH": 0, "WEST": 1, "EAST": 2, "NORTH": 3 }, "characterClass": "WARRIOR", "unlockLevel": 1
     },
     "warrior-champion": {
-      "image": "/assets/sprites/warrior-champion.png",
-      "frameWidth": 32,
-      "frameHeight": 48,
-      "columns": 4,
-      "rows": 4,
-      "framesPerDirection": 4,
-      "frameDurationMs": 120,
-      "directionRows": {
-        "SOUTH": 0,
-        "WEST": 1,
-        "EAST": 2,
-        "NORTH": 3
-      },
-      "characterClass": "WARRIOR",
-      "unlockLevel": 10
+      "image": "/assets/sprites/warrior-champion.png", "frameWidth": 32, "frameHeight": 48, "columns": 4, "rows": 4, "framesPerDirection": 4, "frameDurationMs": 120,
+      "directionRows": { "SOUTH": 0, "WEST": 1, "EAST": 2, "NORTH": 3 }, "characterClass": "WARRIOR", "unlockLevel": 10
     },
     "archer-scout": {
-      "image": "/assets/sprites/archer-scout.png",
-      "frameWidth": 32,
-      "frameHeight": 48,
-      "columns": 4,
-      "rows": 4,
-      "framesPerDirection": 4,
-      "frameDurationMs": 120,
-      "directionRows": {
-        "SOUTH": 0,
-        "WEST": 1,
-        "EAST": 2,
-        "NORTH": 3
-      },
-      "characterClass": "ARCHER",
-      "unlockLevel": 1
+      "image": "/assets/sprites/archer-scout.png", "frameWidth": 32, "frameHeight": 48, "columns": 4, "rows": 4, "framesPerDirection": 4, "frameDurationMs": 120,
+      "directionRows": { "SOUTH": 0, "WEST": 1, "EAST": 2, "NORTH": 3 }, "characterClass": "ARCHER", "unlockLevel": 1
     },
     "archer-ranger": {
-      "image": "/assets/sprites/archer-ranger.png",
-      "frameWidth": 32,
-      "frameHeight": 48,
-      "columns": 4,
-      "rows": 4,
-      "framesPerDirection": 4,
-      "frameDurationMs": 120,
-      "directionRows": {
-        "SOUTH": 0,
-        "WEST": 1,
-        "EAST": 2,
-        "NORTH": 3
-      },
-      "characterClass": "ARCHER",
-      "unlockLevel": 10
+      "image": "/assets/sprites/archer-ranger.png", "frameWidth": 32, "frameHeight": 48, "columns": 4, "rows": 4, "framesPerDirection": 4, "frameDurationMs": 120,
+      "directionRows": { "SOUTH": 0, "WEST": 1, "EAST": 2, "NORTH": 3 }, "characterClass": "ARCHER", "unlockLevel": 10
     }
   }
 }
