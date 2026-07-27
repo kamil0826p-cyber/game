@@ -2,6 +2,7 @@ import { Assets, Rectangle, Texture } from 'pixi.js';
 import type { CharacterClass, Direction } from '../../contracts/game';
 import type {
   LoadedMapDefinition,
+  TiledTileDefinition,
   TiledTilesetJson,
   TiledTilesetReference,
 } from '../../contracts/tiled';
@@ -32,43 +33,124 @@ export interface OutfitFrames {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isPositiveInteger = (value: unknown): boolean =>
+  Number.isInteger(value) && Number(value) > 0;
+
+const parseTileDefinition = (
+  input: unknown,
+  label: string,
+  requireImage: boolean,
+): TiledTileDefinition => {
+  if (!isRecord(input) || !Number.isInteger(input.id) || Number(input.id) < 0) {
+    throw new Error(`Tiled tile ${label} is malformed.`);
+  }
+  if (requireImage && (typeof input.image !== 'string' || input.image.trim().length === 0)) {
+    throw new Error(`Tiled collection tile ${label} does not define an image.`);
+  }
+  return input as unknown as TiledTileDefinition;
+};
+
 const parseTileset = (input: unknown, label: string): TiledTilesetJson => {
   if (
     !isRecord(input) ||
-    typeof input.image !== 'string' ||
-    input.image.trim().length === 0 ||
-    !Number.isInteger(input.tilewidth) ||
-    Number(input.tilewidth) <= 0 ||
-    !Number.isInteger(input.tileheight) ||
-    Number(input.tileheight) <= 0 ||
-    !Number.isInteger(input.tilecount) ||
-    Number(input.tilecount) <= 0 ||
+    !isPositiveInteger(input.tilewidth) ||
+    !isPositiveInteger(input.tileheight) ||
+    !isPositiveInteger(input.tilecount) ||
     !Number.isInteger(input.columns) ||
-    Number(input.columns) <= 0
+    Number(input.columns) < 0
   ) {
     throw new Error(`Tiled tileset ${label} is malformed.`);
   }
+
+  const hasAtlasImage = typeof input.image === 'string' && input.image.trim().length > 0;
+  if (hasAtlasImage && Number(input.columns) <= 0) {
+    throw new Error(`Tiled atlas tileset ${label} must define at least one column.`);
+  }
+  if (input.tiles !== undefined && !Array.isArray(input.tiles)) {
+    throw new Error(`Tiled tileset ${label} has a malformed tiles array.`);
+  }
+
+  const tiles = (input.tiles ?? []).map((tile, index) =>
+    parseTileDefinition(tile, `${label}#${index}`, !hasAtlasImage),
+  );
+  if (!hasAtlasImage && tiles.length === 0) {
+    throw new Error(`Tiled tileset ${label} defines neither an atlas nor tile images.`);
+  }
+
+  const ids = new Set<number>();
+  for (const tile of tiles) {
+    if (ids.has(tile.id)) {
+      throw new Error(`Tiled tileset ${label} contains duplicate tile id ${tile.id}.`);
+    }
+    ids.add(tile.id);
+  }
+
   return input as unknown as TiledTilesetJson;
 };
 
 const inlineTileset = (reference: TiledTilesetReference): TiledTilesetJson =>
   parseTileset(reference, 'inline tileset');
 
+const loadAtlasTextures = async (
+  textures: Map<number, Texture>,
+  firstGid: number,
+  definition: TiledTilesetJson,
+  baseUrl: string,
+): Promise<void> => {
+  if (!definition.image) return;
+  const imageUrl = new URL(definition.image, baseUrl).toString();
+  const baseTexture = await Assets.load<Texture>(imageUrl);
+  baseTexture.source.scaleMode = 'nearest';
+  const margin = definition.margin ?? 0;
+  const spacing = definition.spacing ?? 0;
+  for (let localId = 0; localId < definition.tilecount; localId += 1) {
+    const column = localId % definition.columns;
+    const row = Math.floor(localId / definition.columns);
+    textures.set(
+      firstGid + localId,
+      new Texture({
+        source: baseTexture.source,
+        frame: new Rectangle(
+          margin + column * (definition.tilewidth + spacing),
+          margin + row * (definition.tileheight + spacing),
+          definition.tilewidth,
+          definition.tileheight,
+        ),
+      }),
+    );
+  }
+};
+
+const loadCollectionTextures = async (
+  textures: Map<number, Texture>,
+  firstGid: number,
+  definition: TiledTilesetJson,
+  baseUrl: string,
+): Promise<void> => {
+  if (definition.image) return;
+  await Promise.all(
+    (definition.tiles ?? []).map(async (tile) => {
+      if (!tile.image) {
+        throw new Error(`Tiled collection tile ${tile.id} does not define an image.`);
+      }
+      const imageUrl = new URL(tile.image, baseUrl).toString();
+      const texture = await Assets.load<Texture>(imageUrl);
+      texture.source.scaleMode = 'nearest';
+      textures.set(firstGid + tile.id, texture);
+    }),
+  );
+};
+
 class GameAssetLoader {
   private manifestPromise?: Promise<AssetManifest>;
-  private readonly tileTextureCache = new Map<
-    string,
-    Promise<Map<number, Texture> | undefined>
-  >();
+  private readonly tileTextureCache = new Map<string, Promise<Map<number, Texture>>>();
   private readonly outfitTextureCache = new Map<string, Promise<OutfitFrames | undefined>>();
 
   loadManifest(): Promise<AssetManifest> {
     if (!this.manifestPromise) {
       this.manifestPromise = fetch('/assets/manifest.json', { cache: 'force-cache' }).then(
         async (response) => {
-          if (!response.ok) {
-            throw new Error(`Asset manifest failed to load (${response.status}).`);
-          }
+          if (!response.ok) throw new Error(`Asset manifest failed to load (${response.status}).`);
           return response.json() as Promise<AssetManifest>;
         },
       );
@@ -76,12 +158,9 @@ class GameAssetLoader {
     return this.manifestPromise;
   }
 
-  getTileTextures(map: LoadedMapDefinition): Promise<Map<number, Texture> | undefined> {
-    const cacheKey = map.sourceUrl;
-    const cached = this.tileTextureCache.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
+  getTileTextures(map: LoadedMapDefinition): Promise<Map<number, Texture>> {
+    const cached = this.tileTextureCache.get(map.sourceUrl);
+    if (cached) return cached;
 
     const loading = Promise.all(
       map.source.tilesets.map(async (reference) => {
@@ -103,53 +182,29 @@ class GameAssetLoader {
           baseUrl: map.sourceUrl,
         };
       }),
-    )
-      .then(async (tilesets) => {
-        const textures = new Map<number, Texture>();
-        await Promise.all(
-          tilesets.map(async ({ firstGid, definition, baseUrl }) => {
-            const imageUrl = new URL(definition.image, baseUrl).toString();
-            const baseTexture = await Assets.load<Texture>(imageUrl);
-            baseTexture.source.scaleMode = 'nearest';
-            const margin = definition.margin ?? 0;
-            const spacing = definition.spacing ?? 0;
-            for (let localId = 0; localId < definition.tilecount; localId += 1) {
-              const column = localId % definition.columns;
-              const row = Math.floor(localId / definition.columns);
-              textures.set(
-                firstGid + localId,
-                new Texture({
-                  source: baseTexture.source,
-                  frame: new Rectangle(
-                    margin + column * (definition.tilewidth + spacing),
-                    margin + row * (definition.tileheight + spacing),
-                    definition.tilewidth,
-                    definition.tileheight,
-                  ),
-                }),
-              );
-            }
-          }),
-        );
-        return textures;
-      })
-      .catch(() => undefined);
+    ).then(async (tilesets) => {
+      const textures = new Map<number, Texture>();
+      await Promise.all(
+        tilesets.map(async ({ firstGid, definition, baseUrl }) => {
+          await loadAtlasTextures(textures, firstGid, definition, baseUrl);
+          await loadCollectionTextures(textures, firstGid, definition, baseUrl);
+        }),
+      );
+      if (textures.size === 0) throw new Error(`Map ${map.key} did not load any tile textures.`);
+      return textures;
+    });
 
-    this.tileTextureCache.set(cacheKey, loading);
+    this.tileTextureCache.set(map.sourceUrl, loading);
     return loading;
   }
 
   getOutfitFrames(outfitKey: string): Promise<OutfitFrames | undefined> {
     const cached = this.outfitTextureCache.get(outfitKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
     const loading = this.loadManifest()
       .then(async (manifest) => {
         const definition = manifest.outfits[outfitKey];
-        if (!definition) {
-          return undefined;
-        }
+        if (!definition) return undefined;
         const baseTexture = await Assets.load<Texture>(definition.image);
         baseTexture.source.scaleMode = 'nearest';
         const directions = Object.keys(definition.directionRows) as Direction[];
