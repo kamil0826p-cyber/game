@@ -11,6 +11,8 @@ export interface TiledTileLayer {
   width: number;
   height: number;
   data: number[];
+  visible?: boolean;
+  opacity?: number;
   properties?: TiledProperty[];
 }
 
@@ -30,18 +32,37 @@ export interface TiledObjectLayer {
   name: string;
   type: 'objectgroup';
   objects: TiledObject[];
+  visible?: boolean;
+  opacity?: number;
   properties?: TiledProperty[];
 }
 
 export type TiledLayer = TiledTileLayer | TiledObjectLayer | Record<string, unknown>;
 
+export interface TiledTilesetReference {
+  firstgid: number;
+  source?: string;
+  name?: string;
+  image?: string;
+  imagewidth?: number;
+  imageheight?: number;
+  tilewidth?: number;
+  tileheight?: number;
+  columns?: number;
+  tilecount?: number;
+  tiles?: Array<{ id: number; properties?: TiledProperty[] }>;
+}
+
 export interface TiledMapJson {
   type: 'map';
+  orientation?: string;
+  infinite?: boolean;
   width: number;
   height: number;
   tilewidth: number;
   tileheight: number;
   layers: TiledLayer[];
+  tilesets?: TiledTilesetReference[];
   properties?: TiledProperty[];
 }
 
