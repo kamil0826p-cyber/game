@@ -12,6 +12,7 @@ import { MapService } from '../maps/map.service.js';
 import type { RuntimeMap } from '../maps/runtime-map.types.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import { MovementService } from '../movement/movement.service.js';
+import { NpcService } from '../npcs/npc.service.js';
 import { PlayerPersistenceService } from '../persistence/player-persistence.service.js';
 import { RealmService } from '../realm/realm.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
@@ -29,6 +30,7 @@ export class SessionLifecycleService {
     private readonly characters: CharacterService,
     private readonly realms: RealmService,
     private readonly maps: MapService,
+    private readonly npcs: NpcService,
     private readonly movement: MovementCoordinatorService,
     private readonly movementService: MovementService,
     private readonly persistence: PlayerPersistenceService,
@@ -123,7 +125,7 @@ export class SessionLifecycleService {
 
     this.worldState.activateSession(session);
     client.data.sessionState = 'IN_WORLD';
-    const payload = this.buildPayload(session, map, this.visibility.addSession(session));
+    const payload = await this.buildPayload(session, map, this.visibility.addSession(session));
     client.emit('world:spawn', payload);
     return payload;
   }
@@ -191,7 +193,7 @@ export class SessionLifecycleService {
 
     client.data.characterId = session.characterId;
     client.data.sessionState = 'CHARACTER_SELECT';
-    const payload = this.buildPayload(session, resolved.map, []);
+    const payload = await this.buildPayload(session, resolved.map, []);
     client.emit('world:spawn', payload);
 
     if (session.dirty) {
@@ -209,14 +211,15 @@ export class SessionLifecycleService {
     return payload;
   }
 
-  private buildPayload(
+  private async buildPayload(
     session: PlayerSession,
     map: RuntimeMap,
     nearbyPlayers: ReturnType<VisibilityService['addSession']>,
-  ): WorldSpawnPayload {
+  ): Promise<WorldSpawnPayload> {
     return {
       self: this.worldState.toSelfState(session),
       map: this.movementService.toMapState(map),
+      npcs: await this.npcs.getMapNpcs(map.id),
       nearbyPlayers,
       unlockedOutfits: getUnlockedOutfits(session.characterClass, session.level).map((outfit) => ({
         key: outfit.key,
