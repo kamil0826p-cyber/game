@@ -95,7 +95,7 @@ describe('Tiled frontend map compiler', () => {
       type: 'map', orientation: 'orthogonal', infinite: false, width: 3, height: 3, tilewidth: 32, tileheight: 32,
       tilesets: [{
         firstgid: 1, name: 'canopy-sized-object', tilewidth: 32, tileheight: 32, tileoffset: { x: -42, y: -26 },
-        tiles: [{ id: 0, imagewidth: 116, imageheight: 109, objectgroup: { name: 'Collision', type: 'objectgroup', objects: [{ x: 74, y: 103, width: 32, height: 32 }] } }],
+        tiles: [{ id: 0, imagewidth: 116, imageheight: 109, objectgroup: { name: 'Collision', type: 'objectgroup', objects: [{ x: 42, y: 103, width: 32, height: 32 }] } }],
       }],
       layers: [
         { name: 'Props', type: 'tilelayer', width: 3, height: 3, data: [0, 0, 0, 0, 1, 0, 0, 0, 0] },
