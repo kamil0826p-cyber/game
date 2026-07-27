@@ -15,8 +15,10 @@ export interface MovementRejectedPayload extends SocketErrorPayload { requestId?
 export interface SessionReadyPayload { realm: { id: string; slug: string; name: string }; requiresCharacter: boolean; serverTime: number; }
 export type ChatChannel = 'GLOBAL' | 'LOCAL';
 export interface ChatMessagePayload { id: string; channel: ChatChannel; characterId: string; author: string; text: string; mapId: string; sentAt: number; }
-export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; buyPriceSilver: number; sellPriceSilver: number; sellable: boolean; }
-export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
+export interface ItemStatBonuses { strength?: number; agility?: number; intelligence?: number; armor?: number; maxHp?: number; maxEnergy?: number; }
+export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; statBonuses: ItemStatBonuses; buyPriceSilver: number; sellPriceSilver: number; sellable: boolean; }
+export interface InventoryCharacterSnapshot extends CharacterStats { silver: number; }
+export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: InventoryCharacterSnapshot; }
 export interface MerchantItemPayload { definitionKey: string; name: string; description: string; icon: string; stackLimit: number; buyPriceSilver: number; sellPriceSilver: number; }
 export interface MerchantSnapshot { merchant: { id: string; key: string; name: string }; silver: number; items: MerchantItemPayload[]; inventory: InventorySnapshot; }
 
