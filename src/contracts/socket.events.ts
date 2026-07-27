@@ -1,22 +1,8 @@
 import type { Socket, Namespace } from 'socket.io';
 import type { AuthContext } from '../auth/auth-context.interface.js';
-import type {
-  CharacterClass,
-  CharacterStats,
-  CombatState,
-  CurrencyBalance,
-  Direction,
-  ZoneType,
-} from '../common/domain/game.types.js';
+import type { CharacterClass, CharacterStats, CombatState, CurrencyBalance, Direction, EquipmentSlot, ItemCategory, ZoneType } from '../common/domain/game.types.js';
 import type { SupportedLocale } from '../i18n/localization.service.js';
-import type {
-  ChatSendPayload,
-  CreateCharacterPayload,
-  MoveStepPayload,
-  MoveStopPayload,
-  MoveTargetPayload,
-  ViewportUpdatePayload,
-} from './socket.schemas.js';
+import type { ChatSendPayload, CreateCharacterPayload, InventoryDiscardPayload, InventoryItemPayload as InventoryItemCommandPayload, InventoryMovePayload, InventoryRequestPayload, MoveStepPayload, MoveStopPayload, MoveTargetPayload, ViewportUpdatePayload } from './socket.schemas.js';
 
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
@@ -29,6 +15,8 @@ export interface MovementRejectedPayload extends SocketErrorPayload { requestId?
 export interface SessionReadyPayload { realm: { id: string; slug: string; name: string }; requiresCharacter: boolean; serverTime: number; }
 export type ChatChannel = 'GLOBAL' | 'LOCAL';
 export interface ChatMessagePayload { id: string; channel: ChatChannel; characterId: string; author: string; text: string; mapId: string; sentAt: number; }
+export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; }
+export interface InventorySnapshot { capacity: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
 
 export interface ClientToServerEvents {
   'character:create': (payload: CreateCharacterPayload, acknowledgement?: (response: SocketAck<WorldSpawnPayload>) => void) => void;
@@ -38,6 +26,12 @@ export interface ClientToServerEvents {
   'movement:stop': (payload: MoveStopPayload, acknowledgement?: (response: SocketAck<{ stopped: boolean }>) => void) => void;
   'visibility:viewport': (payload: ViewportUpdatePayload, acknowledgement?: (response: SocketAck<{ halfWidth: number; halfHeight: number }>) => void) => void;
   'chat:send': (payload: ChatSendPayload, acknowledgement?: (response: SocketAck<ChatMessagePayload>) => void) => void;
+  'inventory:get': (payload: InventoryRequestPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:move': (payload: InventoryMovePayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:equip': (payload: InventoryItemCommandPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:unequip': (payload: InventoryItemCommandPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:use': (payload: InventoryItemCommandPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:discard': (payload: InventoryDiscardPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
 }
 
 export interface ServerToClientEvents {
