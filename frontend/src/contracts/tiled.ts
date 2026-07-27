@@ -4,40 +4,51 @@ export interface TiledProperty {
   value: unknown;
 }
 
-export interface TiledTileLayer {
+export interface TiledLayerBase {
   id?: number;
   name: string;
+  type: string;
+  class?: string;
+  visible?: boolean;
+  opacity?: number;
+  x?: number;
+  y?: number;
+  offsetx?: number;
+  offsety?: number;
+  properties?: TiledProperty[];
+}
+
+export interface TiledTileLayer extends TiledLayerBase {
   type: 'tilelayer';
   width: number;
   height: number;
   data: number[];
-  visible?: boolean;
-  opacity?: number;
-  properties?: TiledProperty[];
 }
 
 export interface TiledObject {
   id?: number;
   name?: string;
   type?: string;
+  class?: string;
   x?: number;
   y?: number;
   width?: number;
   height?: number;
+  point?: boolean;
   properties?: TiledProperty[];
 }
 
-export interface TiledObjectLayer {
-  id?: number;
-  name: string;
+export interface TiledObjectLayer extends TiledLayerBase {
   type: 'objectgroup';
   objects: TiledObject[];
-  visible?: boolean;
-  opacity?: number;
-  properties?: TiledProperty[];
 }
 
-export type TiledLayer = TiledTileLayer | TiledObjectLayer;
+export interface TiledGroupLayer extends TiledLayerBase {
+  type: 'group';
+  layers: TiledLayer[];
+}
+
+export type TiledLayer = TiledTileLayer | TiledObjectLayer | TiledGroupLayer;
 
 export interface TiledTilesetReference {
   firstgid: number;
@@ -47,8 +58,24 @@ export interface TiledTilesetReference {
   imageheight?: number;
   tilewidth?: number;
   tileheight?: number;
-  columns?: number;
   tilecount?: number;
+  columns?: number;
+  margin?: number;
+  spacing?: number;
+}
+
+export interface TiledTilesetJson {
+  type?: 'tileset';
+  name?: string;
+  image: string;
+  imagewidth?: number;
+  imageheight?: number;
+  tilewidth: number;
+  tileheight: number;
+  tilecount: number;
+  columns: number;
+  margin?: number;
+  spacing?: number;
 }
 
 export interface TiledMapJson {
@@ -60,7 +87,7 @@ export interface TiledMapJson {
   tilewidth: number;
   tileheight: number;
   layers: TiledLayer[];
-  tilesets?: TiledTilesetReference[];
+  tilesets: TiledTilesetReference[];
   properties?: TiledProperty[];
 }
 
@@ -72,14 +99,27 @@ export interface ClientPortal {
   targetY: number;
 }
 
+export interface RenderedTileLayer {
+  name: string;
+  width: number;
+  height: number;
+  data: readonly number[];
+  tileOffsetX: number;
+  tileOffsetY: number;
+  pixelOffsetX: number;
+  pixelOffsetY: number;
+  opacity: number;
+}
+
 export interface LoadedMapDefinition {
   key: string;
+  sourceUrl: string;
   source: TiledMapJson;
   width: number;
   height: number;
   tileWidth: number;
   tileHeight: number;
-  ground: readonly number[];
+  renderLayers: readonly RenderedTileLayer[];
   collision: Uint8Array;
   portals: readonly ClientPortal[];
 }
