@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { gameStore, useGameState, type ModalKey } from '../../game/state/gameStore';
 import { CharacterModal } from './CharacterModal';
 import { InventoryModal } from './InventoryModal';
+import { MerchantModal } from './MerchantModal';
 import { QuestModal } from './QuestModal';
 import { SkillModal } from './SkillModal';
 
@@ -40,6 +41,7 @@ export function ModalHost(): React.JSX.Element | null {
   if (!state.self || !state.activeModal) return null;
   if (state.activeModal === 'character') return <CharacterModal character={state.self} onClose={close} />;
   if (state.activeModal === 'inventory') return <InventoryModal onClose={close} />;
+  if (state.activeModal === 'merchant') return <MerchantModal onClose={close} />;
   if (state.activeModal === 'quests') return <QuestModal onClose={close} />;
   return <SkillModal onClose={close} />;
 }
