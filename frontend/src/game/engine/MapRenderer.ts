@@ -6,6 +6,15 @@ import { gameAssetLoader } from './GameAssetLoader';
 const TILED_GID_MASK = 0x1fffffff;
 const TREE_TRUNK_GID = 3;
 const TREE_CANOPY_GID = 4;
+const TREE_TRUNK_LAYER_NAME = 'tree trunks';
+const TREE_CANOPY_LAYER_NAME = 'tree canopies';
+const TREE_TRUNK_WIDTH_TILES = 0.78;
+const TREE_TRUNK_HEIGHT_TILES = 2.65;
+const TREE_CANOPY_WIDTH_TILES = 3.6;
+const TREE_CANOPY_HEIGHT_TILES = 3.4;
+const TREE_CANOPY_BOTTOM_ABOVE_BASE_TILES = 0.82;
+
+const normalizedLayerName = (layer: CompiledTileLayer): string => layer.name.trim().toLowerCase();
 
 export class MapRenderer {
   readonly belowContainer = new Container();
@@ -58,10 +67,81 @@ export class MapRenderer {
   }
 
   private renderLayers(map: LoadedMapDefinition, textures?: ReadonlyMap<number, Texture>): void {
+    const trunkLayer = map.layers.find((layer) => normalizedLayerName(layer) === TREE_TRUNK_LAYER_NAME);
+    const canopyLayer = map.layers.find((layer) => normalizedLayerName(layer) === TREE_CANOPY_LAYER_NAME);
+
     for (const layer of map.layers) {
+      if (layer === trunkLayer || layer === canopyLayer) continue;
       const container = this.renderTileLayer(map, layer, textures);
       (layer.band === 'above' ? this.aboveContainer : this.belowContainer).addChild(container);
     }
+
+    if (trunkLayer) {
+      this.renderTrees(map, trunkLayer, canopyLayer, textures);
+    } else if (canopyLayer) {
+      this.aboveContainer.addChild(this.renderTileLayer(map, canopyLayer, textures));
+    }
+  }
+
+  private renderTrees(
+    map: LoadedMapDefinition,
+    trunkLayer: CompiledTileLayer,
+    canopyLayer: CompiledTileLayer | undefined,
+    textures?: ReadonlyMap<number, Texture>,
+  ): void {
+    const trunks = new Container();
+    const canopies = new Container();
+    const generatedTrunks = new Graphics();
+    const generatedCanopies = new Graphics();
+    const trunkTexture = textures?.get(TREE_TRUNK_GID);
+    const canopyTexture = textures?.get(TREE_CANOPY_GID);
+
+    trunks.label = trunkLayer.name;
+    trunks.alpha = trunkLayer.opacity;
+    canopies.label = canopyLayer?.name ?? 'Tree Canopies';
+    canopies.alpha = canopyLayer?.opacity ?? 1;
+    trunks.addChild(generatedTrunks);
+    canopies.addChild(generatedCanopies);
+
+    for (let index = 0; index < trunkLayer.data.length; index += 1) {
+      const gid = (trunkLayer.data[index] ?? 0) & TILED_GID_MASK;
+      if (gid === 0) continue;
+      const x = (index % map.width) * WORLD_TILE_SIZE;
+      const y = Math.floor(index / map.width) * WORLD_TILE_SIZE;
+      const centerX = x + WORLD_TILE_SIZE * 0.5;
+      const baseY = y + WORLD_TILE_SIZE;
+
+      generatedTrunks
+        .ellipse(centerX, baseY - 2, WORLD_TILE_SIZE * 0.66, WORLD_TILE_SIZE * 0.18)
+        .fill({ color: 0x11170f, alpha: 0.42 });
+
+      if (trunkTexture) trunks.addChild(this.createTreeTrunkSprite(trunkTexture, centerX, baseY));
+      else this.drawGeneratedTreeTrunk(generatedTrunks, centerX, baseY);
+
+      if (canopyTexture) canopies.addChild(this.createTreeCanopySprite(canopyTexture, centerX, baseY));
+      else this.drawGeneratedTreeCanopy(generatedCanopies, centerX, baseY);
+    }
+
+    this.belowContainer.addChild(trunks);
+    this.aboveContainer.addChild(canopies);
+  }
+
+  private createTreeTrunkSprite(texture: Texture, centerX: number, baseY: number): Sprite {
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5, 1);
+    sprite.position.set(centerX, baseY);
+    sprite.width = WORLD_TILE_SIZE * TREE_TRUNK_WIDTH_TILES;
+    sprite.height = WORLD_TILE_SIZE * TREE_TRUNK_HEIGHT_TILES;
+    return sprite;
+  }
+
+  private createTreeCanopySprite(texture: Texture, centerX: number, baseY: number): Sprite {
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5, 1);
+    sprite.position.set(centerX, baseY - WORLD_TILE_SIZE * TREE_CANOPY_BOTTOM_ABOVE_BASE_TILES);
+    sprite.width = WORLD_TILE_SIZE * TREE_CANOPY_WIDTH_TILES;
+    sprite.height = WORLD_TILE_SIZE * TREE_CANOPY_HEIGHT_TILES;
+    return sprite;
   }
 
   private renderTileLayer(map: LoadedMapDefinition, layer: CompiledTileLayer, textures?: ReadonlyMap<number, Texture>): Container {
@@ -81,34 +161,36 @@ export class MapRenderer {
         this.drawGeneratedTile(generated, gid, x, y, index);
         continue;
       }
-      container.addChild(this.createTileSprite(texture, gid, x, y));
+      const sprite = new Sprite(texture);
+      sprite.position.set(x, y);
+      sprite.width = WORLD_TILE_SIZE;
+      sprite.height = WORLD_TILE_SIZE;
+      container.addChild(sprite);
     }
     return container;
   }
 
-  private createTileSprite(texture: Texture, gid: number, x: number, y: number): Sprite {
-    const sprite = new Sprite(texture);
+  private drawGeneratedTreeTrunk(graphics: Graphics, centerX: number, baseY: number): void {
+    const size = WORLD_TILE_SIZE;
+    graphics
+      .roundRect(centerX - size * 0.26, baseY - size * 2.6, size * 0.52, size * 2.58, 7)
+      .fill({ color: 0x6b4326 })
+      .rect(centerX - size * 0.08, baseY - size * 2.55, size * 0.1, size * 2.42)
+      .fill({ color: 0x93603a, alpha: 0.82 });
+  }
 
-    if (gid === TREE_TRUNK_GID) {
-      sprite.anchor.set(0.5, 1);
-      sprite.position.set(x + WORLD_TILE_SIZE * 0.5, y + WORLD_TILE_SIZE);
-      sprite.width = WORLD_TILE_SIZE * 1.15;
-      sprite.height = WORLD_TILE_SIZE * 1.35;
-      return sprite;
-    }
-
-    if (gid === TREE_CANOPY_GID) {
-      sprite.anchor.set(0.5, 1);
-      sprite.position.set(x + WORLD_TILE_SIZE * 0.5, y + WORLD_TILE_SIZE * 1.35);
-      sprite.width = WORLD_TILE_SIZE * 1.75;
-      sprite.height = WORLD_TILE_SIZE * 1.6;
-      return sprite;
-    }
-
-    sprite.position.set(x, y);
-    sprite.width = WORLD_TILE_SIZE;
-    sprite.height = WORLD_TILE_SIZE;
-    return sprite;
+  private drawGeneratedTreeCanopy(graphics: Graphics, centerX: number, baseY: number): void {
+    const size = WORLD_TILE_SIZE;
+    const centerY = baseY - size * 2.38;
+    graphics
+      .ellipse(centerX, centerY, size * 1.48, size * 1.35)
+      .fill({ color: 0x1f512c })
+      .ellipse(centerX - size * 1.02, centerY + size * 0.08, size * 0.88, size * 0.92)
+      .fill({ color: 0x347842 })
+      .ellipse(centerX + size * 1.02, centerY - size * 0.12, size * 0.94, size * 0.98)
+      .fill({ color: 0x2b6a39 })
+      .ellipse(centerX + size * 0.22, centerY + size * 0.86, size * 1.08, size * 0.92)
+      .fill({ color: 0x285f34 });
   }
 
   private drawGeneratedTile(graphics: Graphics, gid: number, x: number, y: number, index: number): void {
@@ -124,20 +206,6 @@ export class MapRenderer {
       graphics.rect(x, y, size, size).fill({ color: 0x9a7648 });
       graphics.rect(x, y + size * 0.18, size, size * 0.64).fill({ color: 0xb48d57 });
       graphics.rect(x, y, size, size).stroke({ color: 0xd0ad72, width: 1, alpha: 0.28 });
-      return;
-    }
-    if (gid === TREE_TRUNK_GID) {
-      graphics.ellipse(x + size * 0.5, y + size * 0.94, size * 0.28, size * 0.1).fill({ color: 0x11170f, alpha: 0.35 });
-      graphics.roundRect(x + size * 0.36, y - size * 0.35, size * 0.28, size * 1.3, 4).fill({ color: 0x6b4326 });
-      graphics.rect(x + size * 0.45, y - size * 0.31, size * 0.06, size * 1.2).fill({ color: 0x93603a, alpha: 0.8 });
-      return;
-    }
-    if (gid === TREE_CANOPY_GID) {
-      graphics.circle(x + size * 0.5, y + size * 0.48, size * 0.58).fill({ color: 0x1f512c });
-      graphics.circle(x + size * 0.2, y + size * 0.42, size * 0.38).fill({ color: 0x347842 });
-      graphics.circle(x + size * 0.8, y + size * 0.36, size * 0.4).fill({ color: 0x2b6a39 });
-      graphics.circle(x + size * 0.56, y + size * 0.75, size * 0.42).fill({ color: 0x285f34 });
-      graphics.rect(x + size * 0.42, y + size * 0.72, size * 0.16, size * 0.28).fill({ color: 0x6b4326 });
       return;
     }
     if (gid === 5) {
