@@ -40,6 +40,13 @@ interface LoadedTextureSource {
   coordinateScale: number;
 }
 
+interface SvgViewBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 const MAX_SVG_RASTER_SCALE = 12;
 const MAX_SVG_RASTER_PIXELS = 16_777_216;
 
@@ -74,20 +81,26 @@ const loadImage = (url: string): Promise<HTMLImageElement> => new Promise((resol
   image.src = url;
 });
 
-const rasterizeSvg = async (url: string, logicalWidth: number, logicalHeight: number, scale: number): Promise<Texture> => {
-  const response = await fetch(url, { cache: 'force-cache' });
-  if (!response.ok) throw new Error(`SVG ${url} could not be loaded (${response.status}).`);
-  const svgDocument = new DOMParser().parseFromString(await response.text(), 'image/svg+xml');
-  const root = svgDocument.documentElement;
-  if (root.nodeName.toLowerCase() !== 'svg' || svgDocument.querySelector('parsererror')) throw new Error(`SVG ${url} is malformed.`);
+const parseViewBox = (value: string | null, fallback: SvgViewBox): SvgViewBox => {
+  if (!value) return fallback;
+  const parts = value.trim().split(/[\s,]+/).map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) return fallback;
+  const [x = fallback.x, y = fallback.y, width = fallback.width, height = fallback.height] = parts;
+  if (width <= 0 || height <= 0) return fallback;
+  return { x, y, width, height };
+};
 
-  const pixelWidth = Math.max(1, Math.round(logicalWidth * scale));
-  const pixelHeight = Math.max(1, Math.round(logicalHeight * scale));
-  if (!root.hasAttribute('viewBox')) root.setAttribute('viewBox', `0 0 ${logicalWidth} ${logicalHeight}`);
-  root.setAttribute('width', String(pixelWidth));
-  root.setAttribute('height', String(pixelHeight));
+const textureFromSvgElement = async (element: Element, viewBox: SvgViewBox, scale: number): Promise<Texture> => {
+  const pixelWidth = Math.max(1, Math.ceil(viewBox.width * scale));
+  const pixelHeight = Math.max(1, Math.ceil(viewBox.height * scale));
+  const svg = window.document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+  svg.setAttribute('width', String(pixelWidth));
+  svg.setAttribute('height', String(pixelHeight));
+  svg.appendChild(window.document.importNode(element, true));
 
-  const objectUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
+  const objectUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' }));
   try {
     const image = await loadImage(objectUrl);
     const canvas = window.document.createElement('canvas');
@@ -104,6 +117,52 @@ const rasterizeSvg = async (url: string, logicalWidth: number, logicalHeight: nu
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+};
+
+const rasterizeSvg = async (url: string, logicalWidth: number, logicalHeight: number, scale: number): Promise<Texture> => {
+  const response = await fetch(url, { cache: 'force-cache' });
+  if (!response.ok) throw new Error(`SVG ${url} could not be loaded (${response.status}).`);
+  const svgDocument = new DOMParser().parseFromString(await response.text(), 'image/svg+xml');
+  const root = svgDocument.documentElement;
+  if (root.nodeName.toLowerCase() !== 'svg' || svgDocument.querySelector('parsererror')) throw new Error(`SVG ${url} is malformed.`);
+  return textureFromSvgElement(root, parseViewBox(root.getAttribute('viewBox'), { x: 0, y: 0, width: logicalWidth, height: logicalHeight }), scale);
+};
+
+const loadSvgAtlasTiles = async (
+  url: string,
+  firstGid: number,
+  tileWidth: number,
+  tileHeight: number,
+  columns: number,
+  tileCount: number,
+  margin: number,
+  spacing: number,
+  scale: number,
+): Promise<Map<number, Texture> | undefined> => {
+  const response = await fetch(url, { cache: 'force-cache' });
+  if (!response.ok) throw new Error(`SVG ${url} could not be loaded (${response.status}).`);
+  const svgDocument = new DOMParser().parseFromString(await response.text(), 'image/svg+xml');
+  const root = svgDocument.documentElement;
+  if (root.nodeName.toLowerCase() !== 'svg' || svgDocument.querySelector('parsererror')) throw new Error(`SVG ${url} is malformed.`);
+  const groups = Array.from(root.querySelectorAll('[data-tile-id]'));
+  if (groups.length === 0) return undefined;
+
+  const textures = new Map<number, Texture>();
+  await Promise.all(groups.map(async (group) => {
+    const localId = Number(group.getAttribute('data-tile-id'));
+    if (!Number.isInteger(localId) || localId < 0 || localId >= tileCount) return;
+    const column = localId % columns;
+    const row = Math.floor(localId / columns);
+    const fallback = {
+      x: margin + column * (tileWidth + spacing),
+      y: margin + row * (tileHeight + spacing),
+      width: tileWidth,
+      height: tileHeight,
+    };
+    const viewBox = parseViewBox(group.getAttribute('data-viewbox'), fallback);
+    textures.set(firstGid + localId, await textureFromSvgElement(group, viewBox, scale));
+  }));
+  return textures;
 };
 
 class GameAssetLoader {
@@ -183,17 +242,27 @@ class GameAssetLoader {
         maxRenderSize.heightTiles,
         Math.min(window.devicePixelRatio || 1, MAX_RENDER_RESOLUTION),
       ) : 1;
+      const columns = tileset.columns ?? Math.max(1, Math.floor(((tileset.imagewidth ?? tileWidth) - margin * 2 + spacing) / (tileWidth + spacing)));
+
+      if (isSvgUrl(imageUrl)) {
+        const svgTiles = await loadSvgAtlasTiles(imageUrl, tileset.firstgid, tileWidth, tileHeight, columns, tileCount, margin, spacing, rasterScale);
+        if (svgTiles) for (const [gid, texture] of svgTiles) textures.set(gid, texture);
+        if (svgTiles?.size === tileCount) return;
+      }
+
       const loaded = await this.loadTextureSource(imageUrl, tileset.imagewidth, tileset.imageheight, rasterScale);
       const imageWidth = tileset.imagewidth ?? loaded.texture.source.width;
       const imageHeight = tileset.imageheight ?? loaded.texture.source.height;
-      const columns = tileset.columns ?? Math.max(1, Math.floor((imageWidth - margin * 2 + spacing) / (tileWidth + spacing)));
+      const resolvedColumns = tileset.columns ?? Math.max(1, Math.floor((imageWidth - margin * 2 + spacing) / (tileWidth + spacing)));
       const rows = Math.max(1, Math.floor((imageHeight - margin * 2 + spacing) / (tileHeight + spacing)));
-      const resolvedTileCount = tileset.tilecount ?? columns * rows;
+      const resolvedTileCount = tileset.tilecount ?? resolvedColumns * rows;
       for (let localId = 0; localId < resolvedTileCount; localId += 1) {
-        const column = localId % columns;
-        const row = Math.floor(localId / columns);
+        const gid = tileset.firstgid + localId;
+        if (textures.has(gid)) continue;
+        const column = localId % resolvedColumns;
+        const row = Math.floor(localId / resolvedColumns);
         if (row >= rows) break;
-        textures.set(tileset.firstgid + localId, new Texture({
+        textures.set(gid, new Texture({
           source: loaded.texture.source,
           frame: new Rectangle(
             (margin + column * (tileWidth + spacing)) * loaded.coordinateScale,
