@@ -19,7 +19,9 @@ export interface ViewportUpdatePayload { requestId: string; halfWidth: number; h
 export type ChatChannel = 'GLOBAL' | 'LOCAL';
 export interface ChatSendPayload { requestId: string; channel: ChatChannel; text: string; }
 export interface ChatMessagePayload { id: string; channel: ChatChannel; characterId: string; author: string; text: string; mapId: string; sentAt: number; }
-export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
+export type NpcInteractionType = 'DIALOGUE' | 'MERCHANT' | 'QUEST';
+export interface NpcStatePayload { id: string; key: string; name: string; mapId: string; x: number; y: number; outfitKey: string; interactionType: NpcInteractionType; interactionRadius: number; }
+export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; npcs: NpcStatePayload[]; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
 export type CharacterCreateResult = WorldSpawnPayload;
 export interface PathAcceptedPayload { requestId: string; pathLength: number; }
 export interface MovementStopPayload { stopped: boolean; }
@@ -54,7 +56,7 @@ export interface ServerToClientEvents {
   'world:playerEntered': (payload: PublicPlayerState) => void;
   'world:playerMoved': (payload: PublicPlayerState & { serverTime: number }) => void;
   'world:playerLeft': (payload: { characterId: string }) => void;
-  'world:mapChanged': (payload: { map: MapStatePayload; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[]; serverTime: number; }) => void;
+  'world:mapChanged': (payload: { map: MapStatePayload; npcs: NpcStatePayload[]; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[]; serverTime: number; }) => void;
   'movement:committed': (payload: MovementCommittedPayload) => void;
   'movement:rejected': (payload: MovementRejectedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
