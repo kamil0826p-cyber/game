@@ -1,10 +1,15 @@
 import type { LoadedMapDefinition } from '../../contracts/tiled';
 import { compileMapDefinition, parseTiledMap } from './tiledMap';
 
+const MAP_CACHE_VERSION = 'forest-path-v2';
+
 const mapUrls: Readonly<Record<string, string>> = {
   greenfields: '/maps/greenfields.json',
   'crystal-cave': '/maps/crystal-cave.json',
 };
+
+const versionedUrl = (url: string): string =>
+  `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(MAP_CACHE_VERSION)}`;
 
 class MapRepository {
   private readonly cache = new Map<string, Promise<LoadedMapDefinition>>();
@@ -16,7 +21,7 @@ class MapRepository {
     }
 
     const url = mapUrls[key] ?? `/maps/${encodeURIComponent(key)}.json`;
-    const loading = fetch(url, { cache: 'force-cache' })
+    const loading = fetch(versionedUrl(url), { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`Map ${key} could not be loaded (${response.status}).`);
