@@ -11,8 +11,8 @@
   "scripts": {
     "build": "npm run prisma:generate && nest build",
     "start": "node dist/main.js",
-    "start:dev": "npm run prisma:generate && nest start --watch",
-    "start:debug": "npm run prisma:generate && nest start --debug --watch",
+    "start:dev": "npm run prisma:seed && nest start --watch",
+    "start:debug": "npm run prisma:seed && nest start --debug --watch",
     "typecheck": "npm run prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "npm run prisma:generate && vitest run",
     "test:watch": "npm run prisma:generate && vitest",
@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.10",
-    "@nestjs/testing": "11.1.28",
+    "@nestjs/testing": "11.0.10",
     "@types/node": "^22.15.30",
     "@types/pg": "^8.15.5",
     "prettier": "^3.6.2",
