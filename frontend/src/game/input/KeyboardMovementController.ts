@@ -1,4 +1,6 @@
 import type { Direction } from '../../contracts/game';
+import type { LoadedMapDefinition } from '../../contracts/tiled';
+import { isCollisionTile } from '../map/tiledMap';
 import { GameSocketClient } from '../realtime/GameSocketClient';
 import { gameStore } from '../state/gameStore';
 
@@ -17,16 +19,16 @@ const directionByKey: Readonly<Record<string, Direction | undefined>> = {
   ArrowLeft: 'WEST',
 };
 
+const directionDelta: Readonly<Record<Direction, { x: number; y: number }>> = {
+  NORTH: { x: 0, y: -1 },
+  EAST: { x: 1, y: 0 },
+  SOUTH: { x: 0, y: 1 },
+  WEST: { x: -1, y: 0 },
+};
+
 const isEditableTarget = (target: EventTarget | null): boolean => {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  return (
-    target.isContentEditable ||
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT'
-  );
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
 };
 
 export class KeyboardMovementController {
@@ -34,7 +36,10 @@ export class KeyboardMovementController {
   private nextAllowedAt = 0;
   private requestInFlight = false;
 
-  constructor(private readonly client: GameSocketClient) {
+  constructor(
+    private readonly client: GameSocketClient,
+    private readonly getCurrentMap: () => LoadedMapDefinition | undefined,
+  ) {
     window.addEventListener('keydown', this.onKeyDown, { passive: false });
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
@@ -46,19 +51,27 @@ export class KeyboardMovementController {
       state.phase !== 'in-world' ||
       !state.socketConnected ||
       state.portalTransition !== 'idle' ||
+      state.activeModal ||
       this.requestInFlight ||
       now < this.nextAllowedAt
-    ) {
-      return;
-    }
+    ) return;
+
     const direction = this.activeDirection();
-    if (!direction) {
-      return;
-    }
+    const self = state.self;
+    const map = this.getCurrentMap();
+    if (!direction || !self || !map || state.map?.key !== map.key) return;
+
+    const delta = directionDelta[direction];
+    const targetX = self.x + delta.x;
+    const targetY = self.y + delta.y;
+    const occupiedByNpc = state.npcs.some((npc) => npc.x === targetX && npc.y === targetY);
+    const occupiedByPlayer = state.map.zoneType !== 'SAFE' && Object.values(state.players).some((player) => player.characterId !== self.characterId && player.mapId === self.mapId && player.x === targetX && player.y === targetY);
+
+    gameStore.clearPlannedPath();
+    this.nextAllowedAt = now + state.movementStepMs;
+    if (isCollisionTile(map, targetX, targetY) || occupiedByNpc || occupiedByPlayer) return;
 
     this.requestInFlight = true;
-    this.nextAllowedAt = now + state.movementStepMs;
-    gameStore.clearPlannedPath();
     void this.client.requestStep(direction).finally(() => {
       this.requestInFlight = false;
     });
@@ -71,18 +84,15 @@ export class KeyboardMovementController {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (isEditableTarget(event.target)) {
-      return;
-    }
+    if (isEditableTarget(event.target)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
+      this.pressed.clear();
       void this.client.stopMovement();
       return;
     }
     const direction = directionByKey[event.key];
-    if (!direction) {
-      return;
-    }
+    if (!direction) return;
     event.preventDefault();
     if (!this.pressed.has(event.key)) {
       this.pressed.set(event.key, performance.now());
@@ -102,9 +112,7 @@ export class KeyboardMovementController {
     let latest: { direction: Direction; time: number } | undefined;
     for (const [key, time] of this.pressed) {
       const direction = directionByKey[key];
-      if (direction && (!latest || time > latest.time)) {
-        latest = { direction, time };
-      }
+      if (direction && (!latest || time > latest.time)) latest = { direction, time };
     }
     return latest?.direction;
   }
