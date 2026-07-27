@@ -44,7 +44,6 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
 
   return (
     <Modal title={t('modal.inventory.title')} subtitle={locale === 'pl' ? 'Ekwipunek zarządzany przez serwer' : 'Server-authoritative inventory'} icon="▦" onClose={onClose} widthClass="max-w-5xl">
-      <div className="mb-4 flex justify-end"><strong className="text-amber-200">{inventory?.silver ?? 0} {locale === 'pl' ? 'srebra' : 'silver'}</strong></div>
       <div className="grid gap-5 md:grid-cols-[240px_1fr_280px]">
         <section>
           <h3 className="modal-section-title">{t('modal.inventory.equipment')}</h3>
