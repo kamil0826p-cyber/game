@@ -77,9 +77,9 @@ const loadImage = (url: string): Promise<HTMLImageElement> => new Promise((resol
 const rasterizeSvg = async (url: string, logicalWidth: number, logicalHeight: number, scale: number): Promise<Texture> => {
   const response = await fetch(url, { cache: 'force-cache' });
   if (!response.ok) throw new Error(`SVG ${url} could not be loaded (${response.status}).`);
-  const document = new DOMParser().parseFromString(await response.text(), 'image/svg+xml');
-  const root = document.documentElement;
-  if (root.nodeName.toLowerCase() !== 'svg' || document.querySelector('parsererror')) throw new Error(`SVG ${url} is malformed.`);
+  const svgDocument = new DOMParser().parseFromString(await response.text(), 'image/svg+xml');
+  const root = svgDocument.documentElement;
+  if (root.nodeName.toLowerCase() !== 'svg' || svgDocument.querySelector('parsererror')) throw new Error(`SVG ${url} is malformed.`);
 
   const pixelWidth = Math.max(1, Math.round(logicalWidth * scale));
   const pixelHeight = Math.max(1, Math.round(logicalHeight * scale));
@@ -90,7 +90,7 @@ const rasterizeSvg = async (url: string, logicalWidth: number, logicalHeight: nu
   const objectUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
   try {
     const image = await loadImage(objectUrl);
-    const canvas = document.ownerDocument.createElement('canvas');
+    const canvas = window.document.createElement('canvas');
     canvas.width = pixelWidth;
     canvas.height = pixelHeight;
     const context = canvas.getContext('2d');
