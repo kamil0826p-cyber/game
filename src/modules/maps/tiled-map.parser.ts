@@ -9,10 +9,16 @@ import type {
   TiledTileLayer,
 } from './tiled-map.types.js';
 
+const FLIP_MASK = 0x1fffffff;
+
+const invalid = (reason: string): never => {
+  throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason });
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const hasValidProperties = (value: unknown): value is TiledProperty[] | undefined =>
+const propertiesValid = (value: unknown): value is TiledProperty[] | undefined =>
   value === undefined ||
   (Array.isArray(value) &&
     value.every(
@@ -25,43 +31,44 @@ const hasValidProperties = (value: unknown): value is TiledProperty[] | undefine
 const propertyValue = (properties: TiledProperty[] | undefined, name: string): unknown =>
   properties?.find((property) => property.name === name)?.value;
 
-const integerProperty = (
-  object: TiledObject,
-  name: string,
-  fallback?: number,
-): number => {
-  const value = propertyValue(object.properties, name) ?? fallback;
-  if (!Number.isInteger(value)) {
-    throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-      reason: `Portal property ${name} must be an integer.`,
-    });
+const boolProperty = (properties: TiledProperty[] | undefined, name: string): boolean =>
+  propertyValue(properties, name) === true;
+
+const flattenLayers = (
+  layers: readonly TiledLayer[],
+  offsetX = 0,
+  offsetY = 0,
+): Array<{ layer: TiledTileLayer | TiledObjectLayer; offsetX: number; offsetY: number }> => {
+  const flattened: Array<{ layer: TiledTileLayer | TiledObjectLayer; offsetX: number; offsetY: number }> = [];
+  for (const layer of layers) {
+    const nextX = offsetX + (layer.offsetx ?? 0);
+    const nextY = offsetY + (layer.offsety ?? 0);
+    if (layer.type === 'group') flattened.push(...flattenLayers(layer.layers, nextX, nextY));
+    else flattened.push({ layer, offsetX: nextX, offsetY: nextY });
   }
-  return Number(value);
+  return flattened;
 };
 
-const stringProperty = (object: TiledObject, name: string): string => {
-  const value = propertyValue(object.properties, name);
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-      reason: `Portal property ${name} must be a non-empty string.`,
-    });
+const validateLayers = (layers: unknown[]): void => {
+  for (const rawLayer of layers) {
+    if (!isRecord(rawLayer) || typeof rawLayer.name !== 'string' || typeof rawLayer.type !== 'string' || !propertiesValid(rawLayer.properties)) {
+      invalid('Every Tiled layer must include valid name, type, and properties fields.');
+    }
+    if (rawLayer.type === 'group') {
+      if (!Array.isArray(rawLayer.layers)) invalid(`Group layer ${rawLayer.name} must contain layers.`);
+      validateLayers(rawLayer.layers as unknown[]);
+    } else if (rawLayer.type === 'tilelayer') {
+      const hasData = Array.isArray(rawLayer.data);
+      const hasChunks = Array.isArray(rawLayer.chunks);
+      if (!hasData && !hasChunks) invalid(`Tile layer ${rawLayer.name} must contain data or chunks.`);
+    } else if (rawLayer.type === 'objectgroup') {
+      if (!Array.isArray(rawLayer.objects)) invalid(`Object layer ${rawLayer.name} must contain objects.`);
+    } else invalid(`Unsupported Tiled layer type: ${rawLayer.type}.`);
   }
-  return value;
 };
-
-const isTileLayer = (layer: TiledLayer): layer is TiledTileLayer =>
-  isRecord(layer) && layer.type === 'tilelayer';
-
-const isObjectLayer = (layer: TiledLayer): layer is TiledObjectLayer =>
-  isRecord(layer) && layer.type === 'objectgroup';
 
 export const parseTiledMap = (input: unknown): TiledMapJson => {
-  if (!isRecord(input)) {
-    throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-      reason: 'The Tiled map root must be an object.',
-    });
-  }
-
+  if (!isRecord(input)) invalid('The Tiled map root must be an object.');
   const { width, height, tilewidth, tileheight, layers, type } = input;
   if (
     type !== 'map' ||
@@ -69,135 +76,116 @@ export const parseTiledMap = (input: unknown): TiledMapJson => {
     !Number.isInteger(height) ||
     !Number.isInteger(tilewidth) ||
     !Number.isInteger(tileheight) ||
-    !Array.isArray(layers) ||
     Number(width) <= 0 ||
     Number(height) <= 0 ||
     Number(tilewidth) <= 0 ||
     Number(tileheight) <= 0 ||
-    !hasValidProperties(input.properties)
-  ) {
-    throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-      reason: 'The Tiled map dimensions or layer collection are invalid.',
-    });
-  }
-
-  for (const layer of layers) {
-    if (
-      !isRecord(layer) ||
-      typeof layer.name !== 'string' ||
-      typeof layer.type !== 'string' ||
-      !hasValidProperties(layer.properties)
-    ) {
-      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-        reason: 'Every Tiled layer must include string name and type fields.',
-      });
-    }
-    if (layer.type === 'tilelayer') {
-      if (
-        !Number.isInteger(layer.width) ||
-        !Number.isInteger(layer.height) ||
-        !Array.isArray(layer.data) ||
-        !layer.data.every((tile) => Number.isInteger(tile) && Number(tile) >= 0)
-      ) {
-        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-          reason: `Tile layer ${layer.name} is malformed.`,
-        });
-      }
-    }
-    if (layer.type === 'objectgroup') {
-      if (!Array.isArray(layer.objects)) {
-        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-          reason: `Object layer ${layer.name} must include an objects array.`,
-        });
-      }
-      for (const object of layer.objects) {
-        if (
-          !isRecord(object) ||
-          (object.type !== undefined && typeof object.type !== 'string') ||
-          (object.x !== undefined && typeof object.x !== 'number') ||
-          (object.y !== undefined && typeof object.y !== 'number') ||
-          !hasValidProperties(object.properties)
-        ) {
-          throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-            reason: `Object layer ${layer.name} contains a malformed object.`,
-          });
-        }
-      }
-    }
-  }
-
+    !Array.isArray(layers) ||
+    !propertiesValid(input.properties)
+  ) invalid('The Tiled map dimensions or layer collection are invalid.');
+  validateLayers(layers);
   return input as unknown as TiledMapJson;
 };
 
-export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
-  const collisionLayers = map.layers.filter((layer): layer is TiledTileLayer => {
-    if (!isTileLayer(layer)) {
-      return false;
+const layerData = (map: TiledMapJson, layer: TiledTileLayer): number[] => {
+  const tileCount = map.width * map.height;
+  if (layer.data) {
+    if (layer.width !== map.width || layer.height !== map.height || layer.data.length !== tileCount) {
+      invalid(`Collision layer ${layer.name} dimensions do not match the map.`);
     }
-    const name = layer.name.toLowerCase();
-    return (
-      name === 'collision' ||
-      name === 'obstacles' ||
-      propertyValue(layer.properties, 'collision') === true
-    );
-  });
-
-  if (collisionLayers.length === 0) {
-    throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-      reason: 'At least one collision tile layer is required.',
+    return layer.data.map((gid) => gid & FLIP_MASK);
+  }
+  const data = new Array<number>(tileCount).fill(0);
+  for (const chunk of layer.chunks ?? []) {
+    if (chunk.data.length !== chunk.width * chunk.height) invalid(`Chunk in ${layer.name} is malformed.`);
+    chunk.data.forEach((gid, index) => {
+      const x = chunk.x + (index % chunk.width);
+      const y = chunk.y + Math.floor(index / chunk.width);
+      if (x >= 0 && y >= 0 && x < map.width && y < map.height) data[y * map.width + x] = gid & FLIP_MASK;
     });
   }
+  return data;
+};
 
-  const tileCount = map.width * map.height;
-  const grid = new Uint8Array(tileCount);
-  for (const layer of collisionLayers) {
-    if (layer.width !== map.width || layer.height !== map.height || layer.data.length !== tileCount) {
-      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-        reason: `Collision layer ${layer.name} dimensions do not match the map.`,
-      });
-    }
-
-    for (let index = 0; index < tileCount; index += 1) {
-      if ((layer.data[index] ?? 0) !== 0) {
-        grid[index] = 1;
+const markRectangle = (
+  grid: Uint8Array,
+  map: TiledMapJson,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): void => {
+  const left = Math.floor(x / map.tilewidth);
+  const top = Math.floor(y / map.tileheight);
+  const right = Math.ceil((x + Math.max(width, 1)) / map.tilewidth);
+  const bottom = Math.ceil((y + Math.max(height, 1)) / map.tileheight);
+  for (let tileY = top; tileY < bottom; tileY += 1) {
+    for (let tileX = left; tileX < right; tileX += 1) {
+      if (tileX >= 0 && tileY >= 0 && tileX < map.width && tileY < map.height) {
+        grid[tileY * map.width + tileX] = 1;
       }
     }
   }
+};
+
+export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
+  const grid = new Uint8Array(map.width * map.height);
+  let collisionSources = 0;
+  for (const { layer, offsetX, offsetY } of flattenLayers(map.layers)) {
+    const normalized = layer.name.toLowerCase();
+    const collision = normalized === 'collision' || normalized === 'obstacles' || boolProperty(layer.properties, 'collision');
+    if (!collision) continue;
+    collisionSources += 1;
+    if (layer.type === 'tilelayer') {
+      layerData(map, layer).forEach((gid, index) => {
+        if (gid !== 0) grid[index] = 1;
+      });
+    } else {
+      for (const object of layer.objects) {
+        markRectangle(
+          grid,
+          map,
+          (object.x ?? 0) + offsetX,
+          (object.y ?? 0) + offsetY,
+          object.width ?? 1,
+          object.height ?? 1,
+        );
+      }
+    }
+  }
+  if (collisionSources === 0) invalid('At least one collision tile or object layer is required.');
   return grid;
 };
 
-export const extractEmbeddedPortals = (map: TiledMapJson): EmbeddedPortalDefinition[] => {
-  const portalLayers = map.layers.filter(
-    (layer): layer is TiledObjectLayer =>
-      isObjectLayer(layer) &&
-      (layer.name.toLowerCase() === 'portals' || propertyValue(layer.properties, 'portals') === true),
-  );
+const integerProperty = (object: TiledObject, name: string, fallback?: number): number => {
+  const value = propertyValue(object.properties, name) ?? fallback;
+  if (!Number.isInteger(value)) invalid(`Portal property ${name} must be an integer.`);
+  return Number(value);
+};
 
+const stringProperty = (object: TiledObject, name: string): string => {
+  const value = propertyValue(object.properties, name);
+  if (typeof value !== 'string' || value.trim() === '') invalid(`Portal property ${name} must be a non-empty string.`);
+  return value;
+};
+
+export const extractEmbeddedPortals = (map: TiledMapJson): EmbeddedPortalDefinition[] => {
   const portals: EmbeddedPortalDefinition[] = [];
-  for (const layer of portalLayers) {
+  for (const { layer, offsetX, offsetY } of flattenLayers(map.layers)) {
+    if (
+      layer.type !== 'objectgroup' ||
+      (layer.name.toLowerCase() !== 'portals' && !boolProperty(layer.properties, 'portals'))
+    ) continue;
     for (const object of layer.objects) {
-      if (object.type && object.type.toLowerCase() !== 'portal') {
-        continue;
-      }
-      const sourceX = integerProperty(
-        object,
-        'sourceX',
-        object.x === undefined ? undefined : Math.floor(object.x / map.tilewidth),
-      );
-      const sourceY = integerProperty(
-        object,
-        'sourceY',
-        object.y === undefined ? undefined : Math.floor(object.y / map.tileheight),
-      );
+      if ((object.class ?? object.type)?.toLowerCase() !== 'portal') continue;
       portals.push({
-        sourceX,
-        sourceY,
+        sourceX: integerProperty(object, 'sourceX', Math.floor(((object.x ?? 0) + offsetX) / map.tilewidth)),
+        sourceY: integerProperty(object, 'sourceY', Math.floor(((object.y ?? 0) + offsetY) / map.tileheight)),
         destinationMapKey: stringProperty(object, 'destinationMapKey'),
         targetX: integerProperty(object, 'targetX'),
         targetY: integerProperty(object, 'targetY'),
       });
     }
   }
-
   return portals;
 };
