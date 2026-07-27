@@ -50,9 +50,22 @@ export interface TiledGroupLayer extends TiledLayerBase {
 
 export type TiledLayer = TiledTileLayer | TiledObjectLayer | TiledGroupLayer;
 
+export interface TiledTileDefinition {
+  id: number;
+  image?: string;
+  imagewidth?: number;
+  imageheight?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  properties?: TiledProperty[];
+}
+
 export interface TiledTilesetReference {
   firstgid: number;
   source?: string;
+  name?: string;
   image?: string;
   imagewidth?: number;
   imageheight?: number;
@@ -62,12 +75,13 @@ export interface TiledTilesetReference {
   columns?: number;
   margin?: number;
   spacing?: number;
+  tiles?: TiledTileDefinition[];
 }
 
 export interface TiledTilesetJson {
   type?: 'tileset';
   name?: string;
-  image: string;
+  image?: string;
   imagewidth?: number;
   imageheight?: number;
   tilewidth: number;
@@ -76,6 +90,7 @@ export interface TiledTilesetJson {
   columns: number;
   margin?: number;
   spacing?: number;
+  tiles?: TiledTileDefinition[];
 }
 
 export interface TiledMapJson {
