@@ -4,6 +4,8 @@ import { WORLD_TILE_SIZE } from './constants';
 import { gameAssetLoader } from './GameAssetLoader';
 
 const TILED_GID_MASK = 0x1fffffff;
+const TREE_TRUNK_GID = 3;
+const TREE_CANOPY_GID = 4;
 
 export class MapRenderer {
   readonly belowContainer = new Container();
@@ -79,13 +81,34 @@ export class MapRenderer {
         this.drawGeneratedTile(generated, gid, x, y, index);
         continue;
       }
-      const sprite = new Sprite(texture);
-      sprite.position.set(x, y);
-      sprite.width = WORLD_TILE_SIZE;
-      sprite.height = WORLD_TILE_SIZE;
-      container.addChild(sprite);
+      container.addChild(this.createTileSprite(texture, gid, x, y));
     }
     return container;
+  }
+
+  private createTileSprite(texture: Texture, gid: number, x: number, y: number): Sprite {
+    const sprite = new Sprite(texture);
+
+    if (gid === TREE_TRUNK_GID) {
+      sprite.anchor.set(0.5, 1);
+      sprite.position.set(x + WORLD_TILE_SIZE * 0.5, y + WORLD_TILE_SIZE);
+      sprite.width = WORLD_TILE_SIZE * 1.15;
+      sprite.height = WORLD_TILE_SIZE * 1.35;
+      return sprite;
+    }
+
+    if (gid === TREE_CANOPY_GID) {
+      sprite.anchor.set(0.5, 1);
+      sprite.position.set(x + WORLD_TILE_SIZE * 0.5, y + WORLD_TILE_SIZE * 1.35);
+      sprite.width = WORLD_TILE_SIZE * 1.75;
+      sprite.height = WORLD_TILE_SIZE * 1.6;
+      return sprite;
+    }
+
+    sprite.position.set(x, y);
+    sprite.width = WORLD_TILE_SIZE;
+    sprite.height = WORLD_TILE_SIZE;
+    return sprite;
   }
 
   private drawGeneratedTile(graphics: Graphics, gid: number, x: number, y: number, index: number): void {
@@ -103,17 +126,18 @@ export class MapRenderer {
       graphics.rect(x, y, size, size).stroke({ color: 0xd0ad72, width: 1, alpha: 0.28 });
       return;
     }
-    if (gid === 3) {
-      graphics.ellipse(x + size * 0.5, y + size * 0.86, size * 0.22, size * 0.09).fill({ color: 0x11170f, alpha: 0.35 });
-      graphics.roundRect(x + size * 0.38, y + size * 0.18, size * 0.24, size * 0.72, 4).fill({ color: 0x6b4326 });
-      graphics.rect(x + size * 0.46, y + size * 0.22, size * 0.05, size * 0.61).fill({ color: 0x93603a, alpha: 0.8 });
+    if (gid === TREE_TRUNK_GID) {
+      graphics.ellipse(x + size * 0.5, y + size * 0.94, size * 0.28, size * 0.1).fill({ color: 0x11170f, alpha: 0.35 });
+      graphics.roundRect(x + size * 0.36, y - size * 0.35, size * 0.28, size * 1.3, 4).fill({ color: 0x6b4326 });
+      graphics.rect(x + size * 0.45, y - size * 0.31, size * 0.06, size * 1.2).fill({ color: 0x93603a, alpha: 0.8 });
       return;
     }
-    if (gid === 4) {
-      graphics.circle(x + size * 0.5, y + size * 0.48, size * 0.43).fill({ color: 0x1f512c });
-      graphics.circle(x + size * 0.32, y + size * 0.39, size * 0.28).fill({ color: 0x347842 });
-      graphics.circle(x + size * 0.68, y + size * 0.36, size * 0.3).fill({ color: 0x2b6a39 });
-      graphics.circle(x + size * 0.56, y + size * 0.62, size * 0.3).fill({ color: 0x285f34 });
+    if (gid === TREE_CANOPY_GID) {
+      graphics.circle(x + size * 0.5, y + size * 0.48, size * 0.58).fill({ color: 0x1f512c });
+      graphics.circle(x + size * 0.2, y + size * 0.42, size * 0.38).fill({ color: 0x347842 });
+      graphics.circle(x + size * 0.8, y + size * 0.36, size * 0.4).fill({ color: 0x2b6a39 });
+      graphics.circle(x + size * 0.56, y + size * 0.75, size * 0.42).fill({ color: 0x285f34 });
+      graphics.rect(x + size * 0.42, y + size * 0.72, size * 0.16, size * 0.28).fill({ color: 0x6b4326 });
       return;
     }
     if (gid === 5) {
