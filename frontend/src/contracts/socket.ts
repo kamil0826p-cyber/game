@@ -6,7 +6,7 @@ export interface ItemStatBonuses { strength?: number; agility?: number; intellig
 export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; statBonuses: ItemStatBonuses; buyPriceSilver: number; sellPriceSilver: number; sellable: boolean; }
 export interface InventoryCharacterSnapshot { hp: number; maxHp: number; energy: number; maxEnergy: number; strength: number; agility: number; intelligence: number; armor: number; silver: number; }
 export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: InventoryCharacterSnapshot; }
-export interface MerchantItemPayload { definitionKey: string; name: string; description: string; icon: string; stackLimit: number; buyPriceSilver: number; sellPriceSilver: number; }
+export interface MerchantItemPayload { definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; stackLimit: number; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; statBonuses: ItemStatBonuses; effect?: { hp?: number; energy?: number }; buyPriceSilver: number; sellPriceSilver: number; }
 export interface MerchantSnapshot { merchant: { id: string; key: string; name: string }; silver: number; items: MerchantItemPayload[]; inventory: InventorySnapshot; }
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
