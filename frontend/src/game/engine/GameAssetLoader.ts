@@ -68,6 +68,23 @@ const parseTileset = (input: unknown, label: string): TiledTilesetJson => {
 const inlineTileset = (reference: TiledTilesetReference): TiledTilesetJson =>
   parseTileset(reference, 'inline tileset');
 
+const inheritedVersion = (baseUrl: string): string | undefined => {
+  try {
+    return new URL(baseUrl).searchParams.get('v') ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const versionedUrl = (relative: string, baseUrl: string): string => {
+  const url = new URL(relative, baseUrl);
+  const version = inheritedVersion(baseUrl);
+  if (version) {
+    url.searchParams.set('v', version);
+  }
+  return url.toString();
+};
+
 class GameAssetLoader {
   private manifestPromise?: Promise<AssetManifest>;
   private readonly tileTextureCache = new Map<
@@ -78,7 +95,7 @@ class GameAssetLoader {
 
   loadManifest(): Promise<AssetManifest> {
     if (!this.manifestPromise) {
-      this.manifestPromise = fetch('/assets/manifest.json', { cache: 'force-cache' }).then(
+      this.manifestPromise = fetch('/assets/manifest.json', { cache: 'no-cache' }).then(
         async (response) => {
           if (!response.ok) {
             throw new Error(`Asset manifest failed to load (${response.status}).`);
@@ -100,8 +117,8 @@ class GameAssetLoader {
     const loading = Promise.all(
       map.source.tilesets.map(async (reference) => {
         if (reference.source) {
-          const tilesetUrl = new URL(reference.source, map.sourceUrl).toString();
-          const response = await fetch(tilesetUrl, { cache: 'force-cache' });
+          const tilesetUrl = versionedUrl(reference.source, map.sourceUrl);
+          const response = await fetch(tilesetUrl, { cache: 'no-cache' });
           if (!response.ok) {
             throw new Error(`Tiled tileset ${reference.source} failed to load (${response.status}).`);
           }
@@ -125,7 +142,7 @@ class GameAssetLoader {
             if (definition.tiles && definition.tiles.length > 0) {
               await Promise.all(
                 definition.tiles.map(async (tile) => {
-                  const imageUrl = new URL(tile.image, baseUrl).toString();
+                  const imageUrl = versionedUrl(tile.image, baseUrl);
                   const texture = await Assets.load<Texture>(imageUrl);
                   texture.source.scaleMode = 'nearest';
                   textures.set(firstGid + tile.id, texture);
@@ -137,7 +154,7 @@ class GameAssetLoader {
             if (!definition.image || definition.columns <= 0) {
               throw new Error('Atlas tileset is missing its image or columns.');
             }
-            const imageUrl = new URL(definition.image, baseUrl).toString();
+            const imageUrl = versionedUrl(definition.image, baseUrl);
             const baseTexture = await Assets.load<Texture>(imageUrl);
             baseTexture.source.scaleMode = 'nearest';
             const margin = definition.margin ?? 0;
@@ -162,7 +179,11 @@ class GameAssetLoader {
         );
         return textures;
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        this.tileTextureCache.delete(cacheKey);
+        console.error('Tiled texture loading failed.', error);
+        return undefined;
+      });
 
     this.tileTextureCache.set(cacheKey, loading);
     return loading;
