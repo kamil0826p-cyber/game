@@ -6,48 +6,83 @@ export interface TiledProperty {
 
 export type TiledRenderBand = 'below' | 'above';
 
-export interface TiledTileLayer {
-  id?: number;
-  name: string;
-  type: 'tilelayer';
-  width: number;
-  height: number;
-  data: number[];
-  encoding?: 'base64';
-  compression?: 'zlib' | 'gzip';
-  visible?: boolean;
-  opacity?: number;
-  offsetx?: number;
-  offsety?: number;
-  properties?: TiledProperty[];
+export interface TiledPoint {
+  x: number;
+  y: number;
 }
 
 export interface TiledObject {
   id?: number;
   name?: string;
   type?: string;
+  class?: string;
   x?: number;
   y?: number;
   width?: number;
   height?: number;
-  properties?: TiledProperty[];
-}
-
-export interface TiledObjectLayer {
-  id?: number;
-  name: string;
-  type: 'objectgroup';
-  objects: TiledObject[];
+  rotation?: number;
+  gid?: number;
   visible?: boolean;
   opacity?: number;
+  ellipse?: boolean;
+  point?: boolean;
+  polygon?: TiledPoint[];
+  polyline?: TiledPoint[];
   properties?: TiledProperty[];
 }
 
-export type TiledLayer = TiledTileLayer | TiledObjectLayer;
+interface TiledLayerBase {
+  id?: number;
+  name: string;
+  visible?: boolean;
+  opacity?: number;
+  x?: number;
+  y?: number;
+  offsetx?: number;
+  offsety?: number;
+  properties?: TiledProperty[];
+}
+
+export interface TiledTileLayer extends TiledLayerBase {
+  type: 'tilelayer';
+  width: number;
+  height: number;
+  data: number[];
+  encoding?: 'base64' | 'csv';
+  compression?: 'zlib' | 'gzip' | 'zstd';
+}
+
+export interface TiledObjectLayer extends TiledLayerBase {
+  type: 'objectgroup';
+  objects: TiledObject[];
+  draworder?: 'topdown' | 'index';
+}
+
+export interface TiledGroupLayer extends TiledLayerBase {
+  type: 'group';
+  layers: TiledLayer[];
+}
+
+export type TiledLayer = TiledTileLayer | TiledObjectLayer | TiledGroupLayer;
+
+export interface TiledTileOffset {
+  x: number;
+  y: number;
+}
+
+export interface TiledTileDefinition {
+  id: number;
+  image?: string;
+  imagewidth?: number;
+  imageheight?: number;
+  objectgroup?: TiledObjectLayer;
+  properties?: TiledProperty[];
+}
 
 export interface TiledTilesetReference {
   firstgid: number;
   source?: string;
+  resolvedSourceUrl?: string;
   name?: string;
   image?: string;
   imagewidth?: number;
@@ -56,13 +91,17 @@ export interface TiledTilesetReference {
   tileheight?: number;
   columns?: number;
   tilecount?: number;
-  tiles?: Array<{ id: number; properties?: TiledProperty[] }>;
+  margin?: number;
+  spacing?: number;
+  objectalignment?: string;
+  tileoffset?: TiledTileOffset;
+  tiles?: TiledTileDefinition[];
 }
 
 export interface TiledMapJson {
   type: 'map';
   orientation: 'orthogonal' | string;
-  renderorder?: string;
+  renderorder?: 'right-down' | 'right-up' | 'left-down' | 'left-up' | string;
   infinite: boolean;
   width: number;
   height: number;
@@ -85,17 +124,32 @@ export interface CompiledTileLayer {
   name: string;
   band: TiledRenderBand;
   opacity: number;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
   data: readonly number[];
+}
+
+export interface CompiledTileRenderDefinition {
+  widthTiles: number;
+  heightTiles: number;
+  anchorX: number;
+  anchorY: number;
+  offsetXTiles: number;
+  offsetYTiles: number;
 }
 
 export interface LoadedMapDefinition {
   key: string;
+  sourceUrl: string;
   source: TiledMapJson;
   width: number;
   height: number;
   tileWidth: number;
   tileHeight: number;
   layers: readonly CompiledTileLayer[];
+  tileRenderDefinitions: ReadonlyMap<number, CompiledTileRenderDefinition>;
   collision: Uint8Array;
   portals: readonly ClientPortal[];
 }

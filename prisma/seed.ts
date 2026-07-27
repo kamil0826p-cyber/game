@@ -1,20 +1,14 @@
 import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '../src/generated/prisma/client.ts';
-import {
-  compileCollisionGrid,
-  extractEmbeddedPortals,
-  parseTiledMap,
-} from '../src/modules/maps/tiled-map.parser.js';
+import { compileCollisionGrid, extractEmbeddedPortals, parseTiledMap } from '../src/modules/maps/tiled-map.parser.js';
 import type { EmbeddedPortalDefinition, TiledMapJson } from '../src/modules/maps/tiled-map.types.js';
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
-const connectionString =
-  process.env.DATABASE_URL ??
-  'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public';
+const connectionString = process.env.DATABASE_URL ?? 'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public';
 const realmSlug = process.env.GAME_REALM_SLUG ?? 'world-1';
 const realmName = process.env.GAME_REALM_NAME ?? 'World 1';
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -39,30 +33,37 @@ const mapDefinitions: MapSeedDefinition[] = [
   { key: 'crystal-cave', name: 'Crystal Cave', fileName: 'crystal-cave.json', zoneType: 'OUTLAW', spawnX: 3, spawnY: 3 },
 ];
 
-const merchantStock = [
-  'traveler-sword',
-  'apprentice-staff',
-  'field-bow',
-  'minor-health-potion',
-  'field-rations',
-] as const;
+const merchantStock = ['traveler-sword', 'apprentice-staff', 'field-bow', 'minor-health-potion', 'field-rations'] as const;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+async function resolveExternalTilesets(input: unknown, mapPath: string): Promise<unknown> {
+  if (!isRecord(input) || !Array.isArray(input.tilesets)) return input;
+  const tilesets = await Promise.all(input.tilesets.map(async (tileset) => {
+    if (!isRecord(tileset) || typeof tileset.source !== 'string' || !tileset.source.trim()) return tileset;
+    const tilesetPath = resolve(dirname(mapPath), tileset.source);
+    if (!['.json', '.tsj'].includes(extname(tilesetPath).toLowerCase())) throw new Error(`External tileset ${tileset.source} must be exported as Tiled JSON (.tsj), not TSX/XML.`);
+    const external = JSON.parse(await readFile(tilesetPath, 'utf8')) as unknown;
+    if (!isRecord(external)) throw new Error(`External tileset ${tileset.source} is malformed.`);
+    return { ...external, firstgid: tileset.firstgid, source: tileset.source, resolvedSourceUrl: tilesetPath };
+  }));
+  return { ...input, tilesets };
+}
 
 async function loadMap(fileName: string): Promise<TiledMapJson> {
-  const raw = await readFile(resolve(currentDirectory, 'maps', fileName), 'utf8');
-  return parseTiledMap(JSON.parse(raw) as unknown);
+  const mapPath = resolve(currentDirectory, 'maps', fileName);
+  const raw = JSON.parse(await readFile(mapPath, 'utf8')) as unknown;
+  return parseTiledMap(await resolveExternalTilesets(raw, mapPath));
 }
 
 async function prepareMaps(): Promise<PreparedMap[]> {
-  const prepared = await Promise.all(
-    mapDefinitions.map(async (definition): Promise<PreparedMap> => {
-      const tiledMap = await loadMap(definition.fileName);
-      const collision = compileCollisionGrid(tiledMap);
-      const spawnInside = definition.spawnX >= 0 && definition.spawnY >= 0 && definition.spawnX < tiledMap.width && definition.spawnY < tiledMap.height;
-      const spawnIndex = definition.spawnY * tiledMap.width + definition.spawnX;
-      if (!spawnInside || collision[spawnIndex] === 1) throw new Error(`Map ${definition.key} has an invalid seed spawn tile.`);
-      return { ...definition, tiledMap, collision, portals: extractEmbeddedPortals(tiledMap) };
-    }),
-  );
+  const prepared = await Promise.all(mapDefinitions.map(async (definition): Promise<PreparedMap> => {
+    const tiledMap = await loadMap(definition.fileName);
+    const collision = compileCollisionGrid(tiledMap);
+    const spawnInside = definition.spawnX >= 0 && definition.spawnY >= 0 && definition.spawnX < tiledMap.width && definition.spawnY < tiledMap.height;
+    const spawnIndex = definition.spawnY * tiledMap.width + definition.spawnX;
+    if (!spawnInside || collision[spawnIndex] === 1) throw new Error(`Map ${definition.key} has an invalid seed spawn tile.`);
+    return { ...definition, tiledMap, collision, portals: extractEmbeddedPortals(tiledMap) };
+  }));
 
   const mapsByKey = new Map(prepared.map((definition) => [definition.key, definition]));
   if (mapsByKey.size !== prepared.length) throw new Error('Map seed keys must be unique.');
@@ -80,9 +81,7 @@ async function prepareMaps(): Promise<PreparedMap[]> {
   }
 
   const greenfields = mapsByKey.get('greenfields');
-  if (!greenfields || greenfields.collision[4 * greenfields.tiledMap.width + 6] === 1) {
-    throw new Error('Borin merchant must be placed on a walkable Greenfields tile.');
-  }
+  if (!greenfields || greenfields.collision[4 * greenfields.tiledMap.width + 6] === 1) throw new Error('Borin merchant must be placed on a walkable Greenfields tile.');
   return prepared;
 }
 

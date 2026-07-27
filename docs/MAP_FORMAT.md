@@ -1,84 +1,93 @@
 # Map Format
 
-Maps are authored manually in Tiled and committed as static JSON files. Nothing in the application generates or overwrites map files during start, build, test, or seed commands.
+Maps are authored in Tiled and committed as static JSON. The authoritative server copy lives in `prisma/maps`; the browser copy lives in `frontend/public/maps`. Keep both copies synchronized.
 
-The authoritative server copy lives in `prisma/maps`. The exact browser copy lives in `frontend/public/maps`. Whenever a map is exported from Tiled, place the same JSON content in both directories under the same file name.
+## Supported Tiled settings
 
-## Supported Tiled project settings
+The runtime accepts finite orthogonal maps with positive dimensions. Supported layers are `tilelayer`, `objectgroup`, and `group`. Parent group visibility, opacity, `renderBand`, tile offsets (`x`, `y`), and pixel offsets (`offsetx`, `offsety`) are inherited by child layers.
 
-The runtime accepts finite, orthogonal maps:
+Supported tile data formats:
 
-```json
-{
-  "type": "map",
-  "orientation": "orthogonal",
-  "infinite": false,
-  "width": 96,
-  "height": 64,
-  "tilewidth": 32,
-  "tileheight": 32,
-  "tilesets": [],
-  "layers": []
-}
-```
+- JSON integer arrays,
+- CSV strings,
+- base64 without compression,
+- base64 with `zlib` or `gzip`.
 
-All dimensions must be positive integers. Every tile layer must match the root map dimensions.
+Infinite maps, image layers, zstd, TSX/XML tilesets, and non-orthogonal orientations fail fast.
 
-Supported tile data formats are:
+## Export workflow
 
-- a normal JSON integer array,
-- Tiled `base64` encoding without compression,
-- Tiled `base64` encoding with `zlib` compression,
-- Tiled `base64` encoding with `gzip` compression.
+1. Create a finite orthogonal map in Tiled.
+2. Save/export JSON (`.json` or `.tmj`).
+3. Prefer embedded tilesets. External tilesets must be JSON `.tsj` files.
+4. Copy maps and external `.tsj` files to both `prisma/maps` and `frontend/public/maps`, preserving relative paths.
+5. Keep image paths relative to the map or tileset file.
+6. Add a new playable map to the seed configuration.
+7. Run `npm test`, `npm run frontend:test`, and `npm run frontend:build`.
+8. Run `npm run prisma:seed` after map metadata, dimensions, portals, or collisions change.
 
-Infinite chunked maps are not supported. Supported layer types are `tilelayer` and `objectgroup`.
+The frontend builds textures from Tiled tilesets. `frontend/public/assets/manifest.json` is only a legacy fallback.
 
-## Manual export workflow
+## Rendering
 
-1. Open or create the map in Tiled.
-2. Use an orthogonal, finite map.
-3. Export or save the map as JSON (`.json` or `.tmj`).
-4. Copy the exported content to both:
-   - `prisma/maps/<map-key>.json`
-   - `frontend/public/maps/<map-key>.json`
-5. Keep the map key and file name synchronized with the database seed and frontend map repository.
-6. Run `npm test` and `npm run frontend:test` before seeding.
-7. Run `npm run prisma:seed` when map dimensions, portals, or map metadata changed.
+Visible tile layers render in Tiled order. `right-down`, `right-up`, `left-down`, and `left-up` render orders are supported.
 
-The application never regenerates these files. Manual Tiled edits remain intact.
-
-## Rendering bands
-
-Visible tile layers are rendered in their Tiled order. A custom string property controls whether a layer is below or above characters:
+Use a string property on a layer or parent group:
 
 ```json
-{
-  "name": "renderBand",
-  "type": "string",
-  "value": "above"
-}
+{ "name": "renderBand", "type": "string", "value": "above" }
 ```
 
-- `below`, or an omitted property, renders the layer below players and NPCs.
+- `below`, or omitted, renders below characters.
 - `above` renders canopies, roofs, arches, and other occluders above characters.
 
-Object layers are metadata and are not drawn by the normal tile renderer.
+Property names are matched case-insensitively.
 
-## Collision sources
+### Large and offset tiles
 
-The frontend route preview and authoritative backend compile the same tile-sized collision grid. The backend remains the security boundary. Collision sources are combined with logical OR.
+There is no tree-specific path. Any tileset tile may define generic render metadata:
 
-### Collision tile layer
+```json
+{
+  "id": 12,
+  "properties": [
+    { "name": "renderWidthTiles", "type": "float", "value": 3.0 },
+    { "name": "renderHeightTiles", "type": "float", "value": 2.5 },
+    { "name": "renderAnchorX", "type": "float", "value": 0.5 },
+    { "name": "renderAnchorY", "type": "float", "value": 1.0 },
+    { "name": "renderOffsetXTiles", "type": "float", "value": 0.5 },
+    { "name": "renderOffsetYTiles", "type": "float", "value": 1.0 }
+  ]
+}
+```
 
-A tile layer is collision data when its name is `collision`, case-insensitive, or when it has a boolean `collision=true` property. GID `0` is walkable and every non-zero GID is blocked.
+Dimensions and offsets use map-tile units; anchors are normalized sprite coordinates. The same mechanism works for trees, buildings, statues, gates, rocks, and roofs. Without custom values, tileset dimensions, per-tile image dimensions, and `tileoffset` provide defaults.
 
-### Collision object layer
+All four Tiled high-bit flags are removed before GID lookup. Orthogonal horizontal, vertical, and diagonal sprite transforms are supported.
 
-An object layer named `collisions`, or one with `collision=true`, may contain axis-aligned rectangles. Every map tile touched by a rectangle becomes blocked.
+## Tileset assets
 
-### Tileset tile property
+Embedded atlas tilesets support `image`, image dimensions, tile dimensions, `columns`, `tilecount`, `margin`, `spacing`, and `tileoffset`. Image-collection tilesets with per-tile images and multiple tilesets are supported.
 
-A tile definition may contain:
+External tileset example:
+
+```json
+{ "firstgid": 1, "source": "tiles/world.tsj" }
+```
+
+Image paths inside it resolve relative to the `.tsj` file.
+
+## Collision
+
+The frontend route preview and authoritative backend compile equivalent tile-sized collision grids.
+
+### Collision layer
+
+A tile layer named `collision`, or one with `collision=true`, blocks every non-zero placed tile. An object layer named `collisions`, or one with `collision=true`, blocks cells touched by its objects.
+
+Object geometry uses conservative axis-aligned bounds and supports rectangles, rotated rectangles, ellipses, points, polygons, and polylines.
+
+### Simple collidable tile
 
 ```json
 {
@@ -89,13 +98,30 @@ A tile definition may contain:
 }
 ```
 
-Every placed GID corresponding to that local tile ID becomes blocked. Tiled flip flags are ignored when resolving collision identity.
+### Generic large-tile footprint
 
-At least one collision source is required. Portal source cells are reopened after collision compilation so a portal may be embedded in a blocked map boundary.
+Use Tiled's tile collision editor. Its exported `objectgroup` is applied to every placed tile instance:
 
-## Portal layers
+```json
+{
+  "id": 12,
+  "objectgroup": {
+    "type": "objectgroup",
+    "name": "Collision",
+    "objects": [
+      { "x": -32, "y": -32, "width": 96, "height": 64 }
+    ]
+  }
+}
+```
 
-Portal objects are stored in an object layer named `portals`, case-insensitive, or one with `portals=true`.
+This replaces the previous tree-specific footprint and works for every oversized tile.
+
+The backend requires at least one collision source. Portal rectangles are reopened after all collision sources are combined.
+
+## Portals
+
+Portal objects live in an object layer named `portals`, or one with `portals=true`:
 
 ```json
 {
@@ -112,28 +138,10 @@ Portal objects are stored in an object layer named `portals`, case-insensitive, 
 }
 ```
 
-When `sourceX` or `sourceY` is omitted, it is derived from the object's pixel position divided by the map tile dimensions. The seed normalizes portal objects into database `Portal` rows.
-
-## Tileset assets
-
-The sample maps use an embedded tileset definition pointing to:
-
-```text
-../assets/tiles/tiled-world.svg
-```
-
-The frontend also maps GIDs to textures through `frontend/public/assets/manifest.json`. When replacing the tileset image, dimensions, columns, or GID layout, update the manifest as well.
-
-For convenient editing, open the copy under `frontend/public/maps`, where the relative image path resolves to `frontend/public/assets/tiles`. The backend copy is used for parsing and collision authority and does not need to resolve the image visually.
-
-## Runtime validation
-
-Startup or seeding fails for malformed dimensions, unsupported layer types, invalid compressed data, missing collision sources, blocked spawns, invalid portals, or destinations outside the map. Movement is validated against the compiled backend grid before every accepted step.
+When `sourceX`/`sourceY` are omitted, they are derived from object position including inherited offsets. The full portal rectangle is walkable. The seed normalizes portals into database rows.
 
 ## Zones
 
-The normalized `Map.zoneType` controls player overlap and future rules:
-
-- `SAFE`: players may occupy and pass through the same tile.
+- `SAFE`: players may share a tile.
 - `OUTLAW`: player occupancy blocks movement.
 - `PVP`: player occupancy blocks movement.
