@@ -1,8 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="32" viewBox="0 0 192 32">
-  <rect width="32" height="32" fill="#3f7a43"/><path d="M0 8h32M0 24h32M8 0v32M24 0v32" stroke="#4b8750" opacity=".35"/>
-  <rect x="32" width="32" height="32" fill="#b9955e"/><path d="M32 7h32M32 23h32" stroke="#d1b27a" opacity=".6"/>
-  <rect x="64" width="32" height="32" fill="none"/><ellipse cx="80" cy="29" rx="8" ry="3" fill="#152419" opacity=".38"/><path d="M75 32V0h10v32z" fill="#6b4326"/><path d="M78 32V0h3v32z" fill="#93603a" opacity=".88"/><path d="M84 15l5-5v6l-5 5zM76 11l-5-5v6l5 5z" fill="#6b4326"/>
-  <rect x="96" width="32" height="32" fill="none"/><circle cx="112" cy="15" r="16" fill="#1f512c"/><circle cx="102" cy="14" r="10" fill="#347842"/><circle cx="121" cy="12" r="11" fill="#2b6a39"/><circle cx="112" cy="23" r="12" fill="#285f34"/>
-  <rect x="128" width="32" height="32" fill="#29263b"/><path d="M128 8h32M128 24h32" stroke="#37334d" opacity=".6"/>
-  <rect x="160" width="32" height="32" fill="none"/><path d="M164 27l5-17 7-5 8 8 5 14z" fill="#5f6689"/><path d="M176 5l3 11 8-3" fill="#9fa9e6" opacity=".75"/>
+  <g data-tile-id="0">
+    <rect width="32" height="32" fill="#3f7a43"/>
+    <path d="M0 8h32M0 24h32M8 0v32M24 0v32" stroke="#4b8750" opacity=".35"/>
+  </g>
+  <g data-tile-id="1">
+    <rect x="32" width="32" height="32" fill="#b9955e"/>
+    <path d="M32 7h32M32 23h32" stroke="#d1b27a" opacity=".6"/>
+  </g>
+  <g data-tile-id="2" data-viewbox="63 -1 34 34">
+    <rect x="64" width="32" height="32" fill="none"/>
+    <ellipse cx="80" cy="29" rx="8" ry="3" fill="#152419" opacity=".38"/>
+    <path d="M75 32V0h10v32z" fill="#6b4326"/>
+    <path d="M78 32V0h3v32z" fill="#93603a" opacity=".88"/>
+    <path d="M84 15l5-5v6l-5 5zM76 11l-5-5v6l5 5z" fill="#6b4326"/>
+  </g>
+  <g data-tile-id="3" data-viewbox="91 -2 42 38">
+    <rect x="96" width="32" height="32" fill="none"/>
+    <circle cx="112" cy="15" r="16" fill="#1f512c"/>
+    <circle cx="102" cy="14" r="10" fill="#347842"/>
+    <circle cx="121" cy="12" r="11" fill="#2b6a39"/>
+    <circle cx="112" cy="23" r="12" fill="#285f34"/>
+  </g>
+  <g data-tile-id="4">
+    <rect x="128" width="32" height="32" fill="#29263b"/>
+    <path d="M128 8h32M128 24h32" stroke="#37334d" opacity=".6"/>
+  </g>
+  <g data-tile-id="5">
+    <rect x="160" width="32" height="32" fill="none"/>
+    <path d="M164 27l5-17 7-5 8 8 5 14z" fill="#5f6689"/>
+    <path d="M176 5l3 11 8-3" fill="#9fa9e6" opacity=".75"/>
+  </g>
 </svg>
