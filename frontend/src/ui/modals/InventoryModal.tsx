@@ -41,7 +41,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
   const droppedItem = (event: React.DragEvent) => inventory?.items.find((item) => item.id === event.dataTransfer.getData('text/item-id'));
 
   return (
-    <Modal title={t('modal.inventory.title')} subtitle={locale === 'pl' ? 'Najedź na przedmiot, aby zobaczyć jego statystyki.' : 'Hover an item to view its stats.'} icon="▦" onClose={onClose} widthClass="max-w-4xl">
+    <Modal title={t('modal.inventory.title')} subtitle={locale === 'pl' ? 'Najedź po statystyki, kliknij po akcje.' : 'Hover for stats, click for actions.'} icon="▦" onClose={onClose} widthClass="max-w-4xl">
       <div className="grid gap-5 md:grid-cols-[240px_1fr]">
         <section>
           <h3 className="modal-section-title">{t('modal.inventory.equipment')}</h3>
@@ -62,7 +62,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                   if (dropped?.equipmentSlot === slot) void mutate(() => connection.equipInventoryItem(dropped.id));
                 }}
                 onClick={() => item && setSelectedId(item.id)}
-                className={`equipment-slot min-h-20 ${item ? rarityClasses(item.rarity) : ''}`}
+                className={`equipment-slot min-h-20 ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''}`}
               ><span>{slotLabels[slot][locale]}</span>{item ? <strong className="mt-1 text-lg">{item.icon}</strong> : null}</button>;
               return item ? <ItemTooltip key={slot} item={tooltipItem(item)}>{button}</ItemTooltip> : button;
             })}
@@ -70,7 +70,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
         </section>
         <section>
           <h3 className="modal-section-title">{t('modal.inventory.backpack')}</h3>
-          <div className="mt-3 grid grid-cols-8 gap-1.5">
+          <div className="mt-3 grid grid-cols-8 gap-1.5 pb-2">
             {slots.map((item, index) => {
               const button = <button key={index} type="button" draggable={Boolean(item)} disabled={busy}
                 onDragStart={(event) => item && startDrag(event, item)}
@@ -83,15 +83,17 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
           </div>
         </section>
       </div>
-      {selected ? <section className={`mt-5 flex flex-wrap items-center justify-between gap-3 rounded border bg-black/20 p-3 ${rarityClasses(selected.rarity)}`}>
-        <div className="flex items-center gap-3"><span className="text-2xl">{selected.icon}</span><strong>{name(selected)}</strong></div>
-        <div className="flex flex-wrap gap-2">
-          {selected.usable ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.useInventoryItem(selected.id))}>{locale === 'pl' ? 'Użyj' : 'Use'}</button> : null}
-          {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.equipInventoryItem(selected.id))}>{locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
-          {selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.unequipInventoryItem(selected.id))}>{locale === 'pl' ? 'Zdejmij' : 'Unequip'}</button> : null}
-          <button className="hud-utility-button" disabled={busy || Boolean(selected.equippedSlot)} onClick={() => void mutate(() => connection.discardInventoryItem(selected.id, 1))}>{locale === 'pl' ? 'Wyrzuć 1' : 'Discard 1'}</button>
-        </div>
-      </section> : null}
+      <section className={`sticky -bottom-5 z-20 -mx-5 -mb-5 mt-5 min-h-[76px] border-t bg-slate-950/[0.98] px-5 py-3 shadow-[0_-12px_24px_rgba(2,6,23,0.75)] ${selected ? rarityClasses(selected.rarity) : 'border-white/10'}`}>
+        {selected ? <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3"><span className="text-2xl">{selected.icon}</span><div><strong className="block">{name(selected)}</strong><span className="text-[11px] text-slate-400">{locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
+          <div className="flex flex-wrap gap-2">
+            {selected.usable ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.useInventoryItem(selected.id))}>{locale === 'pl' ? 'Użyj' : 'Use'}</button> : null}
+            {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.equipInventoryItem(selected.id))}>{locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
+            {selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.unequipInventoryItem(selected.id))}>{locale === 'pl' ? 'Zdejmij' : 'Unequip'}</button> : null}
+            <button className="hud-utility-button" disabled={busy || Boolean(selected.equippedSlot)} onClick={() => void mutate(() => connection.discardInventoryItem(selected.id, 1))}>{locale === 'pl' ? 'Wyrzuć 1' : 'Discard 1'}</button>
+          </div>
+        </div> : <p className="py-3 text-center text-sm text-slate-400">{locale === 'pl' ? 'Kliknij przedmiot, aby wyświetlić przyciski akcji.' : 'Click an item to show its action buttons.'}</p>}
+      </section>
     </Modal>
   );
 }
