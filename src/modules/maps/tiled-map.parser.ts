@@ -58,7 +58,6 @@ const walkLayers = (map: TiledMapJson, visit: (layer: TiledLayer, context: Conte
   const walk = (layers: TiledLayer[], parent: Context): void => {
     for (const layer of layers) {
       const context = childContext(map, layer, parent);
-      if (!context.visible) continue;
       if (isGroupLayer(layer)) walk(layer.layers, context); else visit(layer, context);
     }
   };
