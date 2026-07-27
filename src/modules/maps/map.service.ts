@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import type { Coordinates, ZoneType } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
@@ -5,7 +8,17 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { RealmService } from '../realm/realm.service.js';
 import type { RuntimeMap, RuntimePortal } from './runtime-map.types.js';
 import { tileKey } from './runtime-map.types.js';
-import { compileCollisionGrid, parseTiledMap } from './tiled-map.parser.js';
+import {
+  compileCollisionGrid,
+  extractEmbeddedPortals,
+  extractMapMetadata,
+  parseTiledMap,
+} from './tiled-map.parser.js';
+import type {
+  EmbeddedPortalDefinition,
+  TiledMapJson,
+  TiledMapMetadata,
+} from './tiled-map.types.js';
 
 interface MapRecord {
   id: string;
@@ -19,17 +32,18 @@ interface MapRecord {
   spawnY: number;
   tiledData: unknown;
   version: number;
-  sourcePortals: Array<{
-    id: string;
-    sourceMapId: string;
-    sourceX: number;
-    sourceY: number;
-    destinationMapId: string;
-    targetX: number;
-    targetY: number;
-    enabled: boolean;
-  }>;
 }
+
+interface CanonicalMapDefinition {
+  map: RuntimeMap;
+  portals: Map<string, RuntimePortal>;
+  embeddedPortals: EmbeddedPortalDefinition[];
+}
+
+const canonicalMapsDirectory = resolve(process.cwd(), 'frontend', 'public', 'maps');
+
+const canonicalVersion = (raw: string): number =>
+  Number.parseInt(createHash('sha256').update(raw).digest('hex').slice(0, 8), 16);
 
 @Injectable()
 export class MapService implements OnModuleInit {
@@ -44,10 +58,9 @@ export class MapService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     const realm = await this.realmService.getCurrentRealm();
-    const records = await this.prisma.map.findMany({
+    const records = (await this.prisma.map.findMany({
       where: { realmId: realm.id },
-      include: { sourcePortals: true },
-    });
+    })) as unknown as MapRecord[];
 
     if (records.length === 0) {
       throw new GameError(GAME_ERROR_CODES.REALM_UNAVAILABLE, 'errors.realm.unavailable', {
@@ -55,14 +68,29 @@ export class MapService implements OnModuleInit {
       });
     }
 
-    for (const record of records) {
-      const runtimeMap = this.compileMap(record as unknown as MapRecord);
-      this.mapsById.set(runtimeMap.id, runtimeMap);
-      this.mapsByKey.set(runtimeMap.key, runtimeMap);
+    this.mapsById.clear();
+    this.mapsByKey.clear();
+
+    const definitions = await Promise.all(records.map((record) => this.loadCanonicalMap(record)));
+    for (const definition of definitions) {
+      if (this.mapsById.has(definition.map.id) || this.mapsByKey.has(definition.map.key)) {
+        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
+          reason: `Duplicate canonical map ${definition.map.key}.`,
+        });
+      }
+      this.mapsById.set(definition.map.id, definition.map);
+      this.mapsByKey.set(definition.map.key, definition.map);
+    }
+
+    for (const definition of definitions) {
+      this.attachEmbeddedPortals(definition);
     }
 
     this.validatePortalDestinations();
-    this.logger.log(`Compiled ${records.length} map definitions for realm ${realm.slug}.`);
+    this.logger.log(
+      `Compiled ${definitions.length} canonical map files for realm ${realm.slug}. ` +
+        'Runtime collision and portals no longer depend on stale seeded Tiled JSON.',
+    );
   }
 
   async getMap(mapId: string): Promise<RuntimeMap> {
@@ -70,20 +98,9 @@ export class MapService implements OnModuleInit {
     if (cached) {
       return cached;
     }
-
-    const realm = await this.realmService.getCurrentRealm();
-    const record = await this.prisma.map.findFirst({
-      where: { id: mapId, realmId: realm.id },
-      include: { sourcePortals: true },
+    throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
+      reason: `Map ${mapId} is not part of the initialized canonical map set.`,
     });
-    if (!record) {
-      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid');
-    }
-
-    const runtimeMap = this.compileMap(record as unknown as MapRecord);
-    this.mapsById.set(runtimeMap.id, runtimeMap);
-    this.mapsByKey.set(runtimeMap.key, runtimeMap);
-    return runtimeMap;
   }
 
   async getMapByKey(mapKey: string): Promise<RuntimeMap> {
@@ -91,24 +108,20 @@ export class MapService implements OnModuleInit {
     if (cached) {
       return cached;
     }
-
-    const realm = await this.realmService.getCurrentRealm();
-    const record = await this.prisma.map.findUnique({
-      where: { realmId_key: { realmId: realm.id, key: mapKey } },
-      include: { sourcePortals: true },
+    throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
+      reason: `Map ${mapKey} is not part of the initialized canonical map set.`,
     });
-    if (!record) {
-      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid');
-    }
-
-    const runtimeMap = this.compileMap(record as unknown as MapRecord);
-    this.mapsById.set(runtimeMap.id, runtimeMap);
-    this.mapsByKey.set(runtimeMap.key, runtimeMap);
-    return runtimeMap;
   }
 
   isInside(map: RuntimeMap, x: number, y: number): boolean {
-    return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < map.width && y < map.height;
+    return (
+      Number.isInteger(x) &&
+      Number.isInteger(y) &&
+      x >= 0 &&
+      y >= 0 &&
+      x < map.width &&
+      y < map.height
+    );
   }
 
   isCollision(map: RuntimeMap, x: number, y: number): boolean {
@@ -180,60 +193,114 @@ export class MapService implements OnModuleInit {
     });
   }
 
-  private compileMap(record: MapRecord): RuntimeMap {
-    const tiledData = parseTiledMap(record.tiledData);
-    if (tiledData.width !== record.width || tiledData.height !== record.height) {
+  private async loadCanonicalMap(record: MapRecord): Promise<CanonicalMapDefinition> {
+    if (!/^[a-z0-9-]+$/.test(record.key)) {
       throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-        reason: `Map ${record.key} database dimensions do not match the Tiled JSON.`,
+        reason: `Map key ${record.key} cannot be resolved as a canonical file name.`,
+      });
+    }
+
+    const filePath = resolve(canonicalMapsDirectory, `${record.key}.json`);
+    let raw: string;
+    try {
+      raw = await readFile(filePath, 'utf8');
+    } catch (error: unknown) {
+      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
+        reason: `Canonical map file is missing for ${record.key}: ${error instanceof Error ? error.message : 'read failed'}.`,
+      });
+    }
+
+    let tiledData: TiledMapJson;
+    try {
+      tiledData = parseTiledMap(JSON.parse(raw) as unknown);
+    } catch (error: unknown) {
+      if (error instanceof GameError) {
+        throw error;
+      }
+      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
+        reason: `Canonical map ${record.key} is not valid JSON.`,
+      });
+    }
+
+    const metadata = extractMapMetadata(tiledData);
+    if (metadata.key !== record.key) {
+      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
+        reason: `Canonical map file ${record.key}.json declares key ${metadata.key}.`,
       });
     }
 
     const portals = new Map<string, RuntimePortal>();
-    for (const portal of record.sourcePortals) {
-      if (!portal.enabled) {
-        continue;
-      }
-      portals.set(tileKey(portal.sourceX, portal.sourceY), {
-        id: portal.id,
-        sourceMapId: portal.sourceMapId,
-        sourceX: portal.sourceX,
-        sourceY: portal.sourceY,
-        destinationMapId: portal.destinationMapId,
-        targetX: portal.targetX,
-        targetY: portal.targetY,
-      });
-    }
-
     const map: RuntimeMap = {
       id: record.id,
       realmId: record.realmId,
-      key: record.key,
-      name: record.name,
-      width: record.width,
-      height: record.height,
-      zoneType: record.zoneType as ZoneType,
-      spawn: { x: record.spawnX, y: record.spawnY },
-      version: record.version,
+      key: metadata.key,
+      name: metadata.name,
+      width: tiledData.width,
+      height: tiledData.height,
+      zoneType: metadata.zoneType as ZoneType,
+      spawn: { x: metadata.spawnX, y: metadata.spawnY },
+      version: canonicalVersion(raw),
       tiledData,
       collision: compileCollisionGrid(tiledData),
       portalsByTile: portals,
     };
 
-    if (this.isCollision(map, map.spawn.x, map.spawn.y)) {
+    this.validateSpawn(map, metadata);
+    return {
+      map,
+      portals,
+      embeddedPortals: extractEmbeddedPortals(tiledData),
+    };
+  }
+
+  private validateSpawn(map: RuntimeMap, metadata: TiledMapMetadata): void {
+    if (
+      !this.isInside(map, metadata.spawnX, metadata.spawnY) ||
+      this.isCollision(map, metadata.spawnX, metadata.spawnY)
+    ) {
       throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-        reason: `Map ${record.key} spawn tile is blocked.`,
+        reason: `Map ${map.key} spawn tile is outside the map or blocked.`,
       });
     }
+  }
 
-    for (const portal of portals.values()) {
-      if (!this.isInside(map, portal.sourceX, portal.sourceY) || this.isCollision(map, portal.sourceX, portal.sourceY)) {
+  private attachEmbeddedPortals(definition: CanonicalMapDefinition): void {
+    for (const embedded of definition.embeddedPortals) {
+      const destination = this.mapsByKey.get(embedded.destinationMapKey);
+      if (!destination) {
         throw new GameError(GAME_ERROR_CODES.PORTAL_INVALID, 'errors.portal.invalid', {
-          reason: `Portal ${portal.id} has an invalid source tile.`,
+          reason: `Portal on ${definition.map.key} references missing map ${embedded.destinationMapKey}.`,
         });
       }
-    }
 
-    return map;
+      if (
+        !this.isInside(definition.map, embedded.sourceX, embedded.sourceY) ||
+        this.isCollision(definition.map, embedded.sourceX, embedded.sourceY) ||
+        !this.isInside(destination, embedded.targetX, embedded.targetY) ||
+        this.isCollision(destination, embedded.targetX, embedded.targetY)
+      ) {
+        throw new GameError(GAME_ERROR_CODES.PORTAL_INVALID, 'errors.portal.invalid', {
+          reason: `Portal on ${definition.map.key} has a blocked or out-of-bounds endpoint.`,
+        });
+      }
+
+      const key = tileKey(embedded.sourceX, embedded.sourceY);
+      if (definition.portals.has(key)) {
+        throw new GameError(GAME_ERROR_CODES.PORTAL_INVALID, 'errors.portal.invalid', {
+          reason: `Map ${definition.map.key} has multiple portals on ${key}.`,
+        });
+      }
+
+      definition.portals.set(key, {
+        id: `tiled:${definition.map.key}:${key}`,
+        sourceMapId: definition.map.id,
+        sourceX: embedded.sourceX,
+        sourceY: embedded.sourceY,
+        destinationMapId: destination.id,
+        targetX: embedded.targetX,
+        targetY: embedded.targetY,
+      });
+    }
   }
 
   private validatePortalDestinations(): void {
