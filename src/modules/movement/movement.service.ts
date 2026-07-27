@@ -79,6 +79,17 @@ export class MovementService {
         requestId,
       );
     }
+    if (await this.npcs.isTileOccupied(sourceMap.id, stepX, stepY)) {
+      return this.reject(
+        session,
+        new GameError(
+          GAME_ERROR_CODES.MOVE_TILE_OCCUPIED,
+          'errors.movement.occupied',
+          { occupantType: 'NPC' },
+        ),
+        requestId,
+      );
+    }
     if (
       sourceMap.zoneType !== 'SAFE' &&
       this.worldState.isOccupied(sourceMap.id, stepX, stepY, session.characterId)
@@ -109,6 +120,17 @@ export class MovementService {
         return this.reject(
           session,
           new GameError(GAME_ERROR_CODES.PORTAL_INVALID, 'errors.portal.invalid'),
+          requestId,
+        );
+      }
+      if (await this.npcs.isTileOccupied(destinationMap.id, destinationX, destinationY)) {
+        return this.reject(
+          session,
+          new GameError(
+            GAME_ERROR_CODES.MOVE_TILE_OCCUPIED,
+            'errors.movement.occupied',
+            { occupantType: 'NPC' },
+          ),
           requestId,
         );
       }
