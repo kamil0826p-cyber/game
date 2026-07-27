@@ -7,6 +7,7 @@ FROM dependencies AS build
 COPY tsconfig.json tsconfig.build.json nest-cli.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY src ./src
+COPY frontend/public/maps ./frontend/public/maps
 RUN npm run build
 
 FROM node:22-bookworm-slim AS production
@@ -17,6 +18,7 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit
     && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/frontend/public/maps ./frontend/public/maps
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
