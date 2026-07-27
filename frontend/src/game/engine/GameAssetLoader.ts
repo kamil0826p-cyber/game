@@ -1,6 +1,10 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
 import type { CharacterClass, Direction } from '../../contracts/game';
 
+const ASSET_CACHE_VERSION = 'forest-path-v2';
+const versionedUrl = (url: string): string =>
+  `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(ASSET_CACHE_VERSION)}`;
+
 export interface TileSetAssetDefinition {
   image: string;
   tileWidth: number;
@@ -40,7 +44,7 @@ class GameAssetLoader {
 
   loadManifest(): Promise<AssetManifest> {
     if (!this.manifestPromise) {
-      this.manifestPromise = fetch('/assets/manifest.json', { cache: 'force-cache' }).then(
+      this.manifestPromise = fetch(versionedUrl('/assets/manifest.json'), { cache: 'no-store' }).then(
         async (response) => {
           if (!response.ok) {
             throw new Error(`Asset manifest failed to load (${response.status}).`);
@@ -63,7 +67,7 @@ class GameAssetLoader {
         if (!definition) {
           return undefined;
         }
-        const baseTexture = await Assets.load<Texture>(definition.image);
+        const baseTexture = await Assets.load<Texture>(versionedUrl(definition.image));
         baseTexture.source.scaleMode = 'nearest';
         const textures = new Map<number, Texture>();
         for (const [gidText, frameIndex] of Object.entries(definition.gidToFrame)) {
@@ -100,7 +104,7 @@ class GameAssetLoader {
         if (!definition) {
           return undefined;
         }
-        const baseTexture = await Assets.load<Texture>(definition.image);
+        const baseTexture = await Assets.load<Texture>(versionedUrl(definition.image));
         baseTexture.source.scaleMode = 'nearest';
         const directions = Object.keys(definition.directionRows) as Direction[];
         const frames = Object.fromEntries(
