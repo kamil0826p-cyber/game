@@ -6,6 +6,7 @@ import type {
   TiledTilesetJson,
   TiledTilesetReference,
 } from '../../contracts/tiled';
+import { fetchJsonResource, publicAssetUrl } from '../../utils/httpJson';
 
 export interface OutfitAssetDefinition {
   image: string;
@@ -148,12 +149,10 @@ class GameAssetLoader {
 
   loadManifest(): Promise<AssetManifest> {
     if (!this.manifestPromise) {
-      this.manifestPromise = fetch('/assets/manifest.json', { cache: 'force-cache' }).then(
-        async (response) => {
-          if (!response.ok) throw new Error(`Asset manifest failed to load (${response.status}).`);
-          return response.json() as Promise<AssetManifest>;
-        },
-      );
+      const manifestUrl = publicAssetUrl('assets/manifest.json');
+      this.manifestPromise = fetchJsonResource(manifestUrl, 'Asset manifest', {
+        cache: 'force-cache',
+      }).then((value) => value as AssetManifest);
     }
     return this.manifestPromise;
   }
@@ -166,15 +165,13 @@ class GameAssetLoader {
       map.source.tilesets.map(async (reference) => {
         if (reference.source) {
           const tilesetUrl = new URL(reference.source, map.sourceUrl).toString();
-          const response = await fetch(tilesetUrl, { cache: 'force-cache' });
-          if (!response.ok) {
-            throw new Error(`Tiled tileset ${reference.source} failed to load (${response.status}).`);
-          }
-          return {
-            firstGid: reference.firstgid,
-            definition: parseTileset(await response.json(), reference.source),
-            baseUrl: tilesetUrl,
-          };
+          const definition = parseTileset(
+            await fetchJsonResource(tilesetUrl, `Tiled tileset ${reference.source}`, {
+              cache: 'force-cache',
+            }),
+            reference.source,
+          );
+          return { firstGid: reference.firstgid, definition, baseUrl: tilesetUrl };
         }
         return {
           firstGid: reference.firstgid,
