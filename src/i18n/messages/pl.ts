@@ -18,6 +18,11 @@ export const polishMessages = {
   'errors.movement.searchLimit': 'Wyszukiwanie trasy przekroczyło limit obliczeń serwera.',
   'errors.map.invalid': 'Definicja mapy jest nieprawidłowa.',
   'errors.portal.invalid': 'Cel portalu jest nieprawidłowy.',
+  'errors.items.inventoryFull': 'Brakuje miejsca w ekwipunku.',
+  'errors.items.insufficientSilver': 'Nie masz wystarczającej ilości srebra.',
+  'errors.items.notSellable': 'Tego przedmiotu nie można sprzedać.',
+  'errors.items.equipped': 'Zdejmij przedmiot przed sprzedażą.',
+  'errors.items.merchantUnavailable': 'Podejdź bliżej do handlarza, aby handlować.',
   'errors.internal': 'Wystąpił wewnętrzny błąd serwera.',
   'notifications.sessionReplaced': 'Ta postać połączyła się z innej sesji.',
 } satisfies Record<MessageKey, string>;
