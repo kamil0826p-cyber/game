@@ -5,6 +5,7 @@ import { gameAssetLoader } from './GameAssetLoader';
 
 export class MapRenderer {
   readonly belowContainer = new Container();
+  readonly container = this.belowContainer;
   readonly aboveContainer = new Container();
   private readonly portalLayer = new Container();
   private readonly portalGraphics: Graphics[] = [];
@@ -13,6 +14,8 @@ export class MapRenderer {
   private destroyed = false;
 
   constructor() {
+    this.belowContainer.zIndex = 0;
+    this.aboveContainer.zIndex = 3;
     this.belowContainer.addChild(this.portalLayer);
   }
 
@@ -25,6 +28,8 @@ export class MapRenderer {
     if (textures) this.renderLayers(map, textures);
     else this.renderFallback(map);
     this.renderPortals(map);
+    const world = this.belowContainer.parent;
+    if (world && this.aboveContainer.parent !== world) world.addChild(this.aboveContainer);
     return true;
   }
 
@@ -44,6 +49,7 @@ export class MapRenderer {
     this.destroyed = true;
     this.loadSequence += 1;
     this.destroyChildren();
+    this.aboveContainer.removeFromParent();
     this.belowContainer.destroy({ children: true });
     this.aboveContainer.destroy({ children: true });
   }
