@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { compileMapDefinition, parseTiledMap } from '../src/game/map/tiledMap';
+import { compileMapDefinition, isCollisionTile, parseTiledMap } from '../src/game/map/tiledMap';
 
 const loadFixture = async (name: string) => {
   const raw = await readFile(resolve(process.cwd(), 'public/maps', name), 'utf8');
@@ -10,49 +10,48 @@ const loadFixture = async (name: string) => {
 };
 
 describe('Tiled map compiler', () => {
-  it('compiles every visible village tile layer in Tiled order', async () => {
+  it('compiles the forest map and its explicit collision grid', async () => {
     const map = await loadFixture('greenfields.json');
-    expect(map.width).toBe(32);
-    expect(map.height).toBe(24);
     expect(map.renderLayers.map((layer) => layer.name)).toEqual([
       'Ground',
-      'Paths and bridges',
-      'Decorations',
+      'Roads and water',
+      'Forest details',
     ]);
-    expect(map.source.tilesets).toEqual([
-      { firstgid: 1, source: 'tilesets/greenfields.tsj' },
-    ]);
-    expect(map.collision.length).toBe(32 * 24);
-    expect(map.portals).toEqual([
-      {
-        sourceX: 28,
-        sourceY: 12,
-        destinationMapKey: 'crystal-cave',
-        targetX: 2,
-        targetY: 10,
-      },
-    ]);
-  });
-
-  it('compiles the cave layers and reciprocal portal', async () => {
-    const map = await loadFixture('crystal-cave.json');
-    expect(map.width).toBe(26);
-    expect(map.height).toBe(20);
-    expect(map.renderLayers.map((layer) => layer.name)).toEqual([
-      'Cave floor',
-      'Walls',
-      'Details',
-    ]);
+    expect(isCollisionTile(map, 0, 0)).toBe(true);
+    expect(isCollisionTile(map, 3, 7)).toBe(false);
+    expect(isCollisionTile(map, 17, 7)).toBe(false);
+    expect(isCollisionTile(map, 13, 10)).toBe(true);
+    expect(isCollisionTile(map, 13, 12)).toBe(false);
     expect(map.portals[0]).toEqual({
-      sourceX: 1,
-      sourceY: 10,
-      destinationMapKey: 'greenfields',
-      targetX: 27,
-      targetY: 12,
+      sourceX: 17,
+      sourceY: 7,
+      destinationMapKey: 'crystal-cave',
+      targetX: 2,
+      targetY: 7,
     });
   });
 
-  it('does not render collision layers even if a map author makes them visible', () => {
+  it('compiles the cave map and keeps the portal corridor walkable', async () => {
+    const map = await loadFixture('crystal-cave.json');
+    expect(map.renderLayers.map((layer) => layer.name)).toEqual([
+      'Cave floor',
+      'Rock walls',
+      'Crystals and details',
+    ]);
+    expect(isCollisionTile(map, 0, 0)).toBe(true);
+    expect(isCollisionTile(map, 1, 7)).toBe(false);
+    expect(isCollisionTile(map, 3, 7)).toBe(false);
+    expect(isCollisionTile(map, 12, 3)).toBe(true);
+    expect(map.portals[0]).toEqual({
+      sourceX: 1,
+      sourceY: 7,
+      destinationMapKey: 'greenfields',
+      targetX: 16,
+      targetY: 7,
+    });
+  });
+
+  it('does not render collision layers even when visible', () => {
     const map = parseTiledMap({
       type: 'map',
       orientation: 'orthogonal',
