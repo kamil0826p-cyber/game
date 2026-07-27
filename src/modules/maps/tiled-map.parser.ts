@@ -9,6 +9,7 @@ const hasValidProperties = (value: unknown): value is TiledProperty[] | undefine
 const propertyValue = (properties: TiledProperty[] | undefined, name: string): unknown => properties?.find((property) => property.name === name)?.value;
 const isTileLayer = (layer: TiledLayer): layer is TiledTileLayer => isRecord(layer) && layer.type === 'tilelayer';
 const isObjectLayer = (layer: TiledLayer): layer is TiledObjectLayer => isRecord(layer) && layer.type === 'objectgroup';
+const isPortalLayer = (layer: TiledObjectLayer): boolean => layer.name.toLowerCase() === 'portals' || propertyValue(layer.properties, 'portals') === true;
 
 export const parseTiledMap = (input: unknown): TiledMapJson => {
   if (!isRecord(input)) return invalid('The Tiled map root must be an object.');
@@ -50,6 +51,11 @@ export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
     for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if (gid === tileset.firstgid + tile.id) grid[index] = 1; });
   }
   if (collisionSourceCount === 0) return invalid('At least one collision tile layer, object layer, or collidable tile property is required.');
+  for (const layer of map.layers.filter(isObjectLayer).filter(isPortalLayer)) for (const object of layer.objects) {
+    const x = Math.floor((object.x ?? 0) / map.tilewidth);
+    const y = Math.floor((object.y ?? 0) / map.tileheight);
+    if (x >= 0 && y >= 0 && x < map.width && y < map.height) grid[y * map.width + x] = 0;
+  }
   return grid;
 };
 
@@ -64,7 +70,7 @@ const stringProperty = (object: TiledObject, name: string): string => {
   return value;
 };
 
-export const extractEmbeddedPortals = (map: TiledMapJson): EmbeddedPortalDefinition[] => map.layers.filter(isObjectLayer).filter((layer) => layer.name.toLowerCase() === 'portals' || propertyValue(layer.properties, 'portals') === true).flatMap((layer) => layer.objects.filter((object) => !object.type || object.type.toLowerCase() === 'portal').map((object) => ({
+export const extractEmbeddedPortals = (map: TiledMapJson): EmbeddedPortalDefinition[] => map.layers.filter(isObjectLayer).filter(isPortalLayer).flatMap((layer) => layer.objects.filter((object) => !object.type || object.type.toLowerCase() === 'portal').map((object) => ({
   sourceX: integerProperty(object, 'sourceX', Math.floor((object.x ?? 0) / map.tilewidth)),
   sourceY: integerProperty(object, 'sourceY', Math.floor((object.y ?? 0) / map.tileheight)),
   destinationMapKey: stringProperty(object, 'destinationMapKey'),
