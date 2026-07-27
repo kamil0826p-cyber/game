@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -7,11 +7,18 @@ import { Prisma, PrismaClient } from '../src/generated/prisma/client.ts';
 import {
   compileCollisionGrid,
   extractEmbeddedPortals,
+  extractMapMetadata,
+  extractTiledPoint,
   parseTiledMap,
 } from '../src/modules/maps/tiled-map.parser.js';
-import type { EmbeddedPortalDefinition, TiledMapJson } from '../src/modules/maps/tiled-map.types.js';
+import type {
+  EmbeddedPortalDefinition,
+  TiledMapJson,
+  TiledMapMetadata,
+} from '../src/modules/maps/tiled-map.types.js';
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
+const mapsDirectory = resolve(currentDirectory, '..', 'frontend', 'public', 'maps');
 const connectionString =
   process.env.DATABASE_URL ??
   'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public';
@@ -19,25 +26,12 @@ const realmSlug = process.env.GAME_REALM_SLUG ?? 'world-1';
 const realmName = process.env.GAME_REALM_NAME ?? 'World 1';
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
-interface MapSeedDefinition {
-  key: string;
-  name: string;
+interface PreparedMap extends TiledMapMetadata {
   fileName: string;
-  zoneType: 'SAFE' | 'OUTLAW' | 'PVP';
-  spawnX: number;
-  spawnY: number;
-}
-
-interface PreparedMap extends MapSeedDefinition {
   tiledMap: TiledMapJson;
   collision: Uint8Array;
   portals: EmbeddedPortalDefinition[];
 }
-
-const mapDefinitions: MapSeedDefinition[] = [
-  { key: 'greenfields', name: 'Greenfields', fileName: 'greenfields.json', zoneType: 'SAFE', spawnX: 4, spawnY: 4 },
-  { key: 'crystal-cave', name: 'Crystal Cave', fileName: 'crystal-cave.json', zoneType: 'OUTLAW', spawnX: 3, spawnY: 3 },
-];
 
 const merchantStock = [
   'traveler-sword',
@@ -47,47 +41,106 @@ const merchantStock = [
   'field-rations',
 ] as const;
 
-async function loadMap(fileName: string): Promise<TiledMapJson> {
-  const raw = await readFile(resolve(currentDirectory, 'maps', fileName), 'utf8');
-  return parseTiledMap(JSON.parse(raw) as unknown);
+async function loadMap(fileName: string): Promise<PreparedMap> {
+  const raw = await readFile(resolve(mapsDirectory, fileName), 'utf8');
+  const tiledMap = parseTiledMap(JSON.parse(raw) as unknown);
+  const metadata = extractMapMetadata(tiledMap);
+  const collision = compileCollisionGrid(tiledMap);
+  const spawnInside =
+    metadata.spawnX >= 0 &&
+    metadata.spawnY >= 0 &&
+    metadata.spawnX < tiledMap.width &&
+    metadata.spawnY < tiledMap.height;
+  const spawnIndex = metadata.spawnY * tiledMap.width + metadata.spawnX;
+  if (!spawnInside || collision[spawnIndex] === 1) {
+    throw new Error(`Map ${metadata.key} has an invalid Tiled spawn tile.`);
+  }
+  return {
+    ...metadata,
+    fileName,
+    tiledMap,
+    collision,
+    portals: extractEmbeddedPortals(tiledMap),
+  };
 }
 
 async function prepareMaps(): Promise<PreparedMap[]> {
-  const prepared = await Promise.all(
-    mapDefinitions.map(async (definition): Promise<PreparedMap> => {
-      const tiledMap = await loadMap(definition.fileName);
-      const collision = compileCollisionGrid(tiledMap);
-      const spawnInside = definition.spawnX >= 0 && definition.spawnY >= 0 && definition.spawnX < tiledMap.width && definition.spawnY < tiledMap.height;
-      const spawnIndex = definition.spawnY * tiledMap.width + definition.spawnX;
-      if (!spawnInside || collision[spawnIndex] === 1) throw new Error(`Map ${definition.key} has an invalid seed spawn tile.`);
-      return { ...definition, tiledMap, collision, portals: extractEmbeddedPortals(tiledMap) };
-    }),
-  );
+  const entries = await readdir(mapsDirectory, { withFileTypes: true });
+  const mapFiles = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => entry.name)
+    .sort();
+  if (mapFiles.length === 0) {
+    throw new Error(`No Tiled JSON maps found in ${mapsDirectory}.`);
+  }
 
+  const prepared = await Promise.all(mapFiles.map(loadMap));
   const mapsByKey = new Map(prepared.map((definition) => [definition.key, definition]));
-  if (mapsByKey.size !== prepared.length) throw new Error('Map seed keys must be unique.');
+  if (mapsByKey.size !== prepared.length) {
+    throw new Error('Tiled map property key values must be unique.');
+  }
+
+  const defaults = prepared.filter((definition) => definition.isDefault);
+  if (defaults.length !== 1) {
+    throw new Error('Exactly one Tiled map must define the boolean property default=true.');
+  }
 
   for (const source of prepared) {
     for (const portal of source.portals) {
       const destination = mapsByKey.get(portal.destinationMapKey);
-      if (!destination) throw new Error(`Portal on ${source.key} references unknown map ${portal.destinationMapKey}.`);
-      const sourceInside = portal.sourceX >= 0 && portal.sourceY >= 0 && portal.sourceX < source.tiledMap.width && portal.sourceY < source.tiledMap.height;
-      const destinationInside = portal.targetX >= 0 && portal.targetY >= 0 && portal.targetX < destination.tiledMap.width && portal.targetY < destination.tiledMap.height;
-      const sourceBlocked = sourceInside && source.collision[portal.sourceY * source.tiledMap.width + portal.sourceX] === 1;
-      const destinationBlocked = destinationInside && destination.collision[portal.targetY * destination.tiledMap.width + portal.targetX] === 1;
-      if (!sourceInside || sourceBlocked || !destinationInside || destinationBlocked) throw new Error(`Portal on ${source.key} has an invalid source or target tile.`);
+      if (!destination) {
+        throw new Error(
+          `Portal on ${source.key} references unknown map ${portal.destinationMapKey}.`,
+        );
+      }
+      const sourceInside =
+        portal.sourceX >= 0 &&
+        portal.sourceY >= 0 &&
+        portal.sourceX < source.tiledMap.width &&
+        portal.sourceY < source.tiledMap.height;
+      const destinationInside =
+        portal.targetX >= 0 &&
+        portal.targetY >= 0 &&
+        portal.targetX < destination.tiledMap.width &&
+        portal.targetY < destination.tiledMap.height;
+      const sourceBlocked =
+        sourceInside &&
+        source.collision[portal.sourceY * source.tiledMap.width + portal.sourceX] === 1;
+      const destinationBlocked =
+        destinationInside &&
+        destination.collision[
+          portal.targetY * destination.tiledMap.width + portal.targetX
+        ] === 1;
+      if (!sourceInside || sourceBlocked || !destinationInside || destinationBlocked) {
+        throw new Error(`Portal on ${source.key} has an invalid source or target tile.`);
+      }
     }
   }
 
-  const greenfields = mapsByKey.get('greenfields');
-  if (!greenfields || greenfields.collision[4 * greenfields.tiledMap.width + 6] === 1) {
-    throw new Error('Borin merchant must be placed on a walkable Greenfields tile.');
+  const defaultMap = defaults[0]!;
+  const merchant = extractTiledPoint(defaultMap.tiledMap, 'quartermaster');
+  const merchantX = merchant.x;
+  const merchantY = merchant.y;
+  const merchantInside =
+    merchantX >= 0 &&
+    merchantY >= 0 &&
+    merchantX < defaultMap.tiledMap.width &&
+    merchantY < defaultMap.tiledMap.height;
+  if (
+    !merchantInside ||
+    defaultMap.collision[merchantY * defaultMap.tiledMap.width + merchantX] === 1
+  ) {
+    throw new Error('Borin merchant must be placed on a walkable default-map tile.');
   }
   return prepared;
 }
 
 async function main(): Promise<void> {
   const preparedMaps = await prepareMaps();
+  const defaultDefinition = preparedMaps.find((definition) => definition.isDefault)!;
+  const merchant = extractTiledPoint(defaultDefinition.tiledMap, 'quartermaster');
+  const merchantX = merchant.x;
+  const merchantY = merchant.y;
   const result = await prisma.$transaction(async (transaction) => {
     const realm = await transaction.realm.upsert({
       where: { slug: realmSlug },
@@ -142,8 +195,7 @@ async function main(): Promise<void> {
       }
     }
 
-    const defaultMapId = mapIds.get('greenfields');
-    if (!defaultMapId) throw new Error('The greenfields map is required as the realm default.');
+    const defaultMapId = mapIds.get(defaultDefinition.key)!;
 
     await transaction.npcDefinition.upsert({
       where: { mapId_key: { mapId: defaultMapId, key: 'quartermaster' } },
@@ -151,17 +203,23 @@ async function main(): Promise<void> {
         mapId: defaultMapId,
         key: 'quartermaster',
         name: 'Borin Żelazna Dłoń',
-        x: 6,
-        y: 4,
+        x: merchantX,
+        y: merchantY,
         outfitKey: 'npc-warrior-merchant',
-        dialogue: { type: 'MERCHANT', merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true } },
+        dialogue: {
+          type: 'MERCHANT',
+          merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true },
+        },
       },
       update: {
         name: 'Borin Żelazna Dłoń',
-        x: 6,
-        y: 4,
+        x: merchantX,
+        y: merchantY,
         outfitKey: 'npc-warrior-merchant',
-        dialogue: { type: 'MERCHANT', merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true } },
+        dialogue: {
+          type: 'MERCHANT',
+          merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true },
+        },
       },
     });
 
@@ -169,7 +227,9 @@ async function main(): Promise<void> {
     return { realmSlug: realm.slug, mapCount: preparedMaps.length };
   });
 
-  console.log(`Seeded realm ${result.realmSlug} with ${result.mapCount} maps and the Borin merchant NPC.`);
+  console.log(
+    `Seeded realm ${result.realmSlug} with ${result.mapCount} Tiled maps and the Borin merchant NPC.`,
+  );
 }
 
 main()
