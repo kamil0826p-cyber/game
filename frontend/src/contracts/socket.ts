@@ -19,6 +19,7 @@ export interface ViewportUpdatePayload { requestId: string; halfWidth: number; h
 export type ChatChannel = 'GLOBAL' | 'LOCAL';
 export interface ChatSendPayload { requestId: string; channel: ChatChannel; text: string; }
 export interface ChatMessagePayload { id: string; channel: ChatChannel; characterId: string; author: string; text: string; mapId: string; sentAt: number; }
+export interface CharacterCurrencyUpdatedPayload { characterId: string; currency: 'SILVER' | 'GOLD'; amount: number; balance: number; }
 export type NpcInteractionType = 'DIALOGUE' | 'MERCHANT' | 'QUEST';
 export interface NpcStatePayload { id: string; key: string; name: string; mapId: string; x: number; y: number; outfitKey: string; interactionType: NpcInteractionType; interactionRadius: number; }
 export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; npcs: NpcStatePayload[]; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
@@ -59,6 +60,7 @@ export interface ServerToClientEvents {
   'world:mapChanged': (payload: { map: MapStatePayload; npcs: NpcStatePayload[]; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[]; serverTime: number; }) => void;
   'movement:committed': (payload: MovementCommittedPayload) => void;
   'movement:rejected': (payload: MovementRejectedPayload) => void;
+  'character:currencyUpdated': (payload: CharacterCurrencyUpdatedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
   notification: (payload: SocketErrorPayload) => void;
 }
