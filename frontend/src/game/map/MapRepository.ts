@@ -1,8 +1,6 @@
 import type { LoadedMapDefinition } from '../../contracts/tiled';
+import { fetchJsonResource, publicAssetUrl } from '../../utils/httpJson';
 import { compileMapDefinition, parseTiledMap } from './tiledMap';
-
-const absoluteMapUrl = (url: string): string =>
-  typeof window === 'undefined' ? url : new URL(url, window.location.href).toString();
 
 class MapRepository {
   private readonly cache = new Map<string, Promise<LoadedMapDefinition>>();
@@ -13,16 +11,10 @@ class MapRepository {
       return cached;
     }
 
-    const url = `/maps/${encodeURIComponent(key)}.json`;
-    const loading = fetch(url, { cache: 'force-cache' })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Map ${key} could not be loaded (${response.status}).`);
-        }
-        return response.json() as Promise<unknown>;
-      })
+    const url = publicAssetUrl(`maps/${encodeURIComponent(key)}.json`);
+    const loading = fetchJsonResource(url, `Map ${key}`, { cache: 'force-cache' })
       .then(parseTiledMap)
-      .then((source) => compileMapDefinition(key, source, absoluteMapUrl(url)))
+      .then((source) => compileMapDefinition(key, source, url))
       .catch((error: unknown) => {
         this.cache.delete(key);
         throw error;
