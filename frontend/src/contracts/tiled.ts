@@ -12,9 +12,17 @@ export interface TiledChunk {
   data: number[];
 }
 
-export interface TiledTileLayer {
+interface TiledLayerBase {
   id?: number;
   name: string;
+  visible?: boolean;
+  opacity?: number;
+  offsetx?: number;
+  offsety?: number;
+  properties?: TiledProperty[];
+}
+
+export interface TiledTileLayer extends TiledLayerBase {
   type: 'tilelayer';
   width?: number;
   height?: number;
@@ -22,11 +30,11 @@ export interface TiledTileLayer {
   chunks?: TiledChunk[];
   x?: number;
   y?: number;
-  offsetx?: number;
-  offsety?: number;
-  visible?: boolean;
-  opacity?: number;
-  properties?: TiledProperty[];
+}
+
+export interface TiledPoint {
+  x: number;
+  y: number;
 }
 
 export interface TiledObject {
@@ -38,35 +46,23 @@ export interface TiledObject {
   y?: number;
   width?: number;
   height?: number;
+  rotation?: number;
+  visible?: boolean;
   point?: boolean;
   ellipse?: boolean;
-  polygon?: Array<{ x: number; y: number }>;
-  polyline?: Array<{ x: number; y: number }>;
+  polygon?: TiledPoint[];
+  polyline?: TiledPoint[];
   properties?: TiledProperty[];
 }
 
-export interface TiledObjectLayer {
-  id?: number;
-  name: string;
+export interface TiledObjectLayer extends TiledLayerBase {
   type: 'objectgroup';
   objects: TiledObject[];
-  offsetx?: number;
-  offsety?: number;
-  visible?: boolean;
-  opacity?: number;
-  properties?: TiledProperty[];
 }
 
-export interface TiledGroupLayer {
-  id?: number;
-  name: string;
+export interface TiledGroupLayer extends TiledLayerBase {
   type: 'group';
   layers: TiledLayer[];
-  offsetx?: number;
-  offsety?: number;
-  visible?: boolean;
-  opacity?: number;
-  properties?: TiledProperty[];
 }
 
 export type TiledLayer = TiledTileLayer | TiledObjectLayer | TiledGroupLayer;
@@ -96,7 +92,7 @@ export interface TiledTilesetReference {
 export interface TiledMapJson {
   type: 'map';
   orientation: 'orthogonal';
-  renderorder?: string;
+  renderorder?: 'right-down' | 'right-up' | 'left-down' | 'left-up';
   infinite: boolean;
   width: number;
   height: number;
