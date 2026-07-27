@@ -2,6 +2,9 @@ import { gunzipSync, inflateSync } from 'node:zlib';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { EmbeddedPortalDefinition, TiledLayer, TiledMapJson, TiledObject, TiledObjectLayer, TiledProperty, TiledTileLayer } from './tiled-map.types.js';
 
+const TREE_TRUNK_GID = 3;
+const TREE_TRUNK_LAYER_NAME = 'tree trunks';
+
 const invalid = (reason: string): never => {
   throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason });
 };
@@ -53,6 +56,22 @@ const markRectangle = (grid: Uint8Array, map: TiledMapJson, object: TiledObject)
   for (let y = Math.max(0, top); y < Math.min(map.height, bottom); y += 1) for (let x = Math.max(0, left); x < Math.min(map.width, right); x += 1) grid[y * map.width + x] = 1;
 };
 
+const markTreeFootprints = (grid: Uint8Array, map: TiledMapJson): void => {
+  for (const layer of map.layers.filter(isTileLayer)) {
+    if (layer.name.trim().toLowerCase() !== TREE_TRUNK_LAYER_NAME) continue;
+    layer.data.forEach((rawGid, index) => {
+      if ((rawGid & 0x1fffffff) !== TREE_TRUNK_GID) return;
+      const treeX = index % map.width;
+      const treeY = Math.floor(index / map.width);
+      for (let y = treeY - 1; y <= treeY; y += 1) {
+        for (let x = treeX - 1; x <= treeX + 1; x += 1) {
+          if (x >= 0 && y >= 0 && x < map.width && y < map.height) grid[y * map.width + x] = 1;
+        }
+      }
+    });
+  }
+};
+
 export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
   const grid = new Uint8Array(map.width * map.height);
   let collisionSourceCount = 0;
@@ -71,6 +90,7 @@ export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
     collisionSourceCount += 1;
     for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if ((gid & 0x1fffffff) === tileset.firstgid + tile.id) grid[index] = 1; });
   }
+  markTreeFootprints(grid, map);
   if (collisionSourceCount === 0) return invalid('At least one collision tile layer, object layer, or collidable tile property is required.');
   for (const layer of map.layers.filter(isObjectLayer).filter(isPortalLayer)) for (const object of layer.objects) {
     const x = Math.floor((object.x ?? 0) / map.tilewidth);
