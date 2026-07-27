@@ -1,22 +1,15 @@
 import type { Direction } from '../../contracts/game';
 import type { LoadedMapDefinition } from '../../contracts/tiled';
+import { mapRepository } from '../map/MapRepository';
 import { isCollisionTile } from '../map/tiledMap';
 import { GameSocketClient } from '../realtime/GameSocketClient';
 import { gameStore } from '../state/gameStore';
 
 const directionByKey: Readonly<Record<string, Direction | undefined>> = {
-  w: 'NORTH',
-  W: 'NORTH',
-  ArrowUp: 'NORTH',
-  d: 'EAST',
-  D: 'EAST',
-  ArrowRight: 'EAST',
-  s: 'SOUTH',
-  S: 'SOUTH',
-  ArrowDown: 'SOUTH',
-  a: 'WEST',
-  A: 'WEST',
-  ArrowLeft: 'WEST',
+  w: 'NORTH', W: 'NORTH', ArrowUp: 'NORTH',
+  d: 'EAST', D: 'EAST', ArrowRight: 'EAST',
+  s: 'SOUTH', S: 'SOUTH', ArrowDown: 'SOUTH',
+  a: 'WEST', A: 'WEST', ArrowLeft: 'WEST',
 };
 
 const directionDelta: Readonly<Record<Direction, { x: number; y: number }>> = {
@@ -35,11 +28,11 @@ export class KeyboardMovementController {
   private readonly pressed = new Map<string, number>();
   private nextAllowedAt = 0;
   private requestInFlight = false;
+  private currentMap?: LoadedMapDefinition;
+  private currentMapIdentity = '';
+  private mapLoadSequence = 0;
 
-  constructor(
-    private readonly client: GameSocketClient,
-    private readonly getCurrentMap: () => LoadedMapDefinition | undefined,
-  ) {
+  constructor(private readonly client: GameSocketClient) {
     window.addEventListener('keydown', this.onKeyDown, { passive: false });
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
@@ -47,6 +40,7 @@ export class KeyboardMovementController {
 
   update(now: number): void {
     const state = gameStore.getSnapshot();
+    if (state.map) this.ensureMap(state.map.key, state.map.version);
     if (
       state.phase !== 'in-world' ||
       !state.socketConnected ||
@@ -58,7 +52,7 @@ export class KeyboardMovementController {
 
     const direction = this.activeDirection();
     const self = state.self;
-    const map = this.getCurrentMap();
+    const map = this.currentMap;
     if (!direction || !self || !map || state.map?.key !== map.key) return;
 
     const delta = directionDelta[direction];
@@ -78,9 +72,23 @@ export class KeyboardMovementController {
   }
 
   destroy(): void {
+    this.mapLoadSequence += 1;
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
+  }
+
+  private ensureMap(key: string, version: number): void {
+    const identity = `${key}:${version}`;
+    if (identity === this.currentMapIdentity) return;
+    this.currentMapIdentity = identity;
+    this.currentMap = undefined;
+    const sequence = ++this.mapLoadSequence;
+    void mapRepository.load(key, version).then((map) => {
+      if (sequence === this.mapLoadSequence && this.currentMapIdentity === identity) this.currentMap = map;
+    }).catch(() => {
+      if (sequence === this.mapLoadSequence) this.currentMapIdentity = '';
+    });
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
