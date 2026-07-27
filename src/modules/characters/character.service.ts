@@ -32,13 +32,14 @@ export class CharacterService {
       where: { firebaseUid: auth.firebaseUid },
       create: { firebaseUid: auth.firebaseUid, email: auth.email, displayName: auth.displayName },
       update: { email: auth.email, displayName: auth.displayName },
-      select: { id: true, firebaseUid: true, email: true, displayName: true },
+      select: { id: true, firebaseUid: true, email: true, displayName: true, role: true },
     });
     return {
       id: user.id,
       firebaseUid: user.firebaseUid,
       email: user.email ?? undefined,
       displayName: user.displayName ?? undefined,
+      role: user.role,
     };
   }
 

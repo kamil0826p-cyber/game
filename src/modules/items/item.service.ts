@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { CharacterClass, EquipmentSlot, ItemCategory } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
-import type { InventorySnapshot, MerchantSnapshot } from '../../contracts/socket.events.js';
+import type { InventorySnapshot, ItemRarity, MerchantSnapshot } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 
@@ -10,6 +10,7 @@ export const INVENTORY_CAPACITY = 40;
 type StatBonuses = Partial<Record<'strength' | 'agility' | 'intelligence' | 'armor' | 'maxHp' | 'maxEnergy', number>>;
 type ItemMetadata = {
   category: ItemCategory;
+  rarity: ItemRarity;
   icon: string;
   equipmentSlot?: EquipmentSlot;
   requiredClass?: CharacterClass;
@@ -24,12 +25,12 @@ type CatalogDefinition = { key: string; name: string; description: string; stack
 type CharacterStats = { strength: number; agility: number; intelligence: number; armor: number; maxHp: number; maxEnergy: number };
 
 const CATALOG: readonly CatalogDefinition[] = [
-  { key: 'traveler-sword', name: 'Traveler Sword', description: 'A dependable steel blade for a beginning warrior.', stackLimit: 1, metadata: { category: 'EQUIPMENT', icon: '⚔', equipmentSlot: 'MAIN_HAND', requiredClass: 'WARRIOR', statBonuses: { strength: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'apprentice-staff', name: 'Apprentice Staff', description: 'A simple focus for novice spellcasters.', stackLimit: 1, metadata: { category: 'EQUIPMENT', icon: '✦', equipmentSlot: 'MAIN_HAND', requiredClass: 'MAGE', statBonuses: { intelligence: 3, maxEnergy: 10 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'field-bow', name: 'Field Bow', description: 'A light bow made for quick shots.', stackLimit: 1, metadata: { category: 'EQUIPMENT', icon: '➶', equipmentSlot: 'MAIN_HAND', requiredClass: 'ARCHER', statBonuses: { agility: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'minor-health-potion', name: 'Minor Health Potion', description: 'Restores 35 health.', stackLimit: 20, metadata: { category: 'CONSUMABLE', icon: '◆', effect: { hp: 35 }, buyPriceSilver: 24, sellPriceSilver: 9 } },
-  { key: 'field-rations', name: 'Field Rations', description: 'Restores 30 energy.', stackLimit: 20, metadata: { category: 'CONSUMABLE', icon: '●', effect: { energy: 30 }, buyPriceSilver: 18, sellPriceSilver: 7 } },
-  { key: 'town-scroll', name: 'Town Scroll', description: 'A dormant scroll prepared for a future travel system.', stackLimit: 10, metadata: { category: 'QUEST', icon: '▱', buyPriceSilver: 0, sellPriceSilver: 0, sellable: false } },
+  { key: 'traveler-sword', name: 'Traveler Sword', description: 'A dependable steel blade for a beginning warrior.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'COMMON', icon: '⚔', equipmentSlot: 'MAIN_HAND', requiredClass: 'WARRIOR', statBonuses: { strength: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
+  { key: 'apprentice-staff', name: 'Apprentice Staff', description: 'A simple focus for novice spellcasters.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'ARTIFACT', icon: '✦', equipmentSlot: 'MAIN_HAND', requiredClass: 'MAGE', statBonuses: { intelligence: 3, maxEnergy: 10 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
+  { key: 'field-bow', name: 'Field Bow', description: 'A light bow made for quick shots.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'MYTHIC', icon: '➶', equipmentSlot: 'MAIN_HAND', requiredClass: 'ARCHER', statBonuses: { agility: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
+  { key: 'minor-health-potion', name: 'Minor Health Potion', description: 'Restores 35 health.', stackLimit: 20, metadata: { category: 'CONSUMABLE', rarity: 'COMMON', icon: '◆', effect: { hp: 35 }, buyPriceSilver: 24, sellPriceSilver: 9 } },
+  { key: 'field-rations', name: 'Field Rations', description: 'Restores 30 energy.', stackLimit: 20, metadata: { category: 'CONSUMABLE', rarity: 'COMMON', icon: '●', effect: { energy: 30 }, buyPriceSilver: 18, sellPriceSilver: 7 } },
+  { key: 'town-scroll', name: 'Town Scroll', description: 'A dormant scroll prepared for a future travel system.', stackLimit: 10, metadata: { category: 'QUEST', rarity: 'COMMON', icon: '▱', buyPriceSilver: 0, sellPriceSilver: 0, sellable: false } },
 ];
 
 @Injectable()
@@ -179,13 +180,29 @@ export class ItemService {
     if (!character) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
     const merchant = await this.requireNearbyMerchant(this.prisma, character);
     const definitions = await this.prisma.itemDefinition.findMany({ where: { key: { in: merchant.itemKeys } }, orderBy: { key: 'asc' } });
-    return { merchant: { id: merchant.id, key: merchant.key, name: merchant.name }, silver: character.silver, items: definitions.map((definition) => { const metadata = this.metadata(definition.metadata); return { definitionKey: definition.key, name: definition.name, description: definition.description, icon: metadata.icon, stackLimit: definition.stackLimit, buyPriceSilver: metadata.buyPriceSilver, sellPriceSilver: metadata.sellPriceSilver }; }), inventory: await this.snapshot(userId, characterId, true) };
+    return {
+      merchant: { id: merchant.id, key: merchant.key, name: merchant.name },
+      silver: character.silver,
+      items: definitions.map((definition) => {
+        const metadata = this.metadata(definition.metadata);
+        return { definitionKey: definition.key, name: definition.name, description: definition.description, category: metadata.category, rarity: metadata.rarity, icon: metadata.icon, stackLimit: definition.stackLimit, equipmentSlot: metadata.equipmentSlot, requiredClass: metadata.requiredClass, minimumLevel: metadata.minimumLevel ?? 1, statBonuses: metadata.statBonuses ?? {}, effect: metadata.effect, buyPriceSilver: metadata.buyPriceSilver, sellPriceSilver: metadata.sellPriceSilver };
+      }),
+      inventory: await this.snapshot(userId, characterId, true),
+    };
   }
 
   private async snapshot(userId: string, characterId: string, includeCharacter = false): Promise<InventorySnapshot> {
     const character = await this.prisma.character.findFirst({ where: { id: characterId, userId }, select: { hp: true, maxHp: true, energy: true, maxEnergy: true, strength: true, agility: true, intelligence: true, armor: true, silver: true, inventoryItems: { orderBy: { slotIndex: 'asc' }, include: { itemDefinition: true } } } });
     if (!character) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
-    return { capacity: INVENTORY_CAPACITY, silver: character.silver, items: character.inventoryItems.map((item) => { const metadata = this.metadata(item.itemDefinition.metadata); return { id: item.id, definitionKey: item.itemDefinition.key, name: item.itemDefinition.name, description: item.itemDefinition.description, category: metadata.category, icon: metadata.icon, quantity: item.quantity, stackLimit: item.itemDefinition.stackLimit, slotIndex: item.slotIndex, equippedSlot: item.equippedSlot ? item.equippedSlot as EquipmentSlot : undefined, equipmentSlot: metadata.equipmentSlot, requiredClass: metadata.requiredClass, minimumLevel: metadata.minimumLevel ?? 1, usable: metadata.category === 'CONSUMABLE', statBonuses: metadata.statBonuses ?? {}, buyPriceSilver: metadata.buyPriceSilver, sellPriceSilver: metadata.sellPriceSilver, sellable: metadata.sellable !== false && metadata.sellPriceSilver > 0 }; }), character: includeCharacter ? { hp: character.hp, maxHp: character.maxHp, energy: character.energy, maxEnergy: character.maxEnergy, strength: character.strength, agility: character.agility, intelligence: character.intelligence, armor: character.armor, silver: character.silver } : undefined };
+    return {
+      capacity: INVENTORY_CAPACITY,
+      silver: character.silver,
+      items: character.inventoryItems.map((item) => {
+        const metadata = this.metadata(item.itemDefinition.metadata);
+        return { id: item.id, definitionKey: item.itemDefinition.key, name: item.itemDefinition.name, description: item.itemDefinition.description, category: metadata.category, rarity: metadata.rarity, icon: metadata.icon, quantity: item.quantity, stackLimit: item.itemDefinition.stackLimit, slotIndex: item.slotIndex, equippedSlot: item.equippedSlot ? item.equippedSlot as EquipmentSlot : undefined, equipmentSlot: metadata.equipmentSlot, requiredClass: metadata.requiredClass, minimumLevel: metadata.minimumLevel ?? 1, usable: metadata.category === 'CONSUMABLE', statBonuses: metadata.statBonuses ?? {}, effect: metadata.effect, buyPriceSilver: metadata.buyPriceSilver, sellPriceSilver: metadata.sellPriceSilver, sellable: metadata.sellable !== false && metadata.sellPriceSilver > 0 };
+      }),
+      character: includeCharacter ? { hp: character.hp, maxHp: character.maxHp, energy: character.energy, maxEnergy: character.maxEnergy, strength: character.strength, agility: character.agility, intelligence: character.intelligence, armor: character.armor, silver: character.silver } : undefined,
+    };
   }
 
   private async baseStatsBeforeEquipmentChange(tx: Prisma.TransactionClient, characterId: string): Promise<CharacterStats> {
@@ -241,7 +258,7 @@ export class ItemService {
 
   private metadata(value: Prisma.JsonValue): ItemMetadata {
     const metadata = value as unknown as Partial<ItemMetadata>;
-    if (!metadata.category || !metadata.icon || !Number.isInteger(metadata.buyPriceSilver) || !Number.isInteger(metadata.sellPriceSilver)) this.invalidItem();
+    if (!metadata.category || !metadata.icon || !metadata.rarity || !['COMMON', 'ARTIFACT', 'MYTHIC'].includes(metadata.rarity) || !Number.isInteger(metadata.buyPriceSilver) || !Number.isInteger(metadata.sellPriceSilver)) this.invalidItem();
     return metadata as ItemMetadata;
   }
 

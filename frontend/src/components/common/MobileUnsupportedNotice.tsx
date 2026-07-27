@@ -16,12 +16,10 @@ export function MobileUnsupportedNotice(): React.JSX.Element | null {
 
   useEffect(() => {
     if (!isMobile) return;
-
     const blockKeyboardInput = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopImmediatePropagation();
     };
-
     window.addEventListener('keydown', blockKeyboardInput, true);
     window.addEventListener('keyup', blockKeyboardInput, true);
     return () => {
@@ -33,17 +31,11 @@ export function MobileUnsupportedNotice(): React.JSX.Element | null {
   if (!isMobile) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/95 p-6 text-center text-slate-100">
-      <section className="w-full max-w-sm rounded-2xl border border-amber-400/40 bg-slate-900 p-6 shadow-2xl shadow-black/60">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300">
-          Elderglen Online
-        </p>
-        <h2 className="font-display mt-3 text-3xl text-amber-100">
-          {t('game.mobileUnsupportedTitle')}
-        </h2>
-        <p className="mt-4 text-sm leading-6 text-slate-300">
-          {t('game.mobileUnsupportedMessage')}
-        </p>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#120b03]/95 p-6 text-center text-amber-50">
+      <section className="w-full max-w-sm rounded-2xl border border-amber-300/60 bg-gradient-to-b from-amber-950 to-[#1a0f05] p-6 shadow-2xl shadow-black/70 ring-1 ring-amber-500/20">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300">Elderglen Online</p>
+        <h2 className="font-display mt-3 text-3xl text-amber-100">{t('game.mobileUnsupportedTitle')}</h2>
+        <p className="mt-4 text-sm leading-6 text-amber-100/70">{t('game.mobileUnsupportedMessage')}</p>
       </section>
     </div>
   );
