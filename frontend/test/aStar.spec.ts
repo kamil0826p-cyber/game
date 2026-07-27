@@ -19,6 +19,7 @@ const map = (collision: number[], width = 5, height = 5): LoadedMapDefinition =>
   tileWidth: 32,
   tileHeight: 32,
   ground: new Array<number>(width * height).fill(1),
+  obstacles: collision.map((value) => (value === 0 ? 0 : 2)),
   collision: Uint8Array.from(collision),
   portals: [],
 });
