@@ -59,9 +59,16 @@ export class AddCurrencyAdminCommand implements AdminCommandHandler {
     const input = parseAddCurrencyArguments(rawArguments);
     const operationId = `admin:add:${context.actorUserId}:${context.requestId}`;
 
-    await transaction.$queryRaw`
-      SELECT pg_advisory_xact_lock(hashtextextended(${operationId}, 0))
+    const lockRows = await transaction.$queryRaw<Array<{ locked: boolean }>>`
+      WITH operation_lock AS MATERIALIZED (
+        SELECT pg_advisory_xact_lock(hashtextextended(${operationId}, 0))
+      )
+      SELECT TRUE AS "locked"
+      FROM operation_lock
     `;
+    if (lockRows.length !== 1 || lockRows[0]?.locked !== true) {
+      throw new AdminCommandError('ADMIN_COMMAND_LOCK_FAILED', 'Nie udało się zabezpieczyć wykonania komendy.');
+    }
 
     const previous = await transaction.characterCurrencyLedger.findFirst({
       where: { operationId },
