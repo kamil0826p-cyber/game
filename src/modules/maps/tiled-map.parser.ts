@@ -95,6 +95,19 @@ const isObjectLayer = (layer: TiledLayer): layer is TiledObjectLayer =>
 const isGroupLayer = (layer: TiledLayer): layer is TiledGroupLayer =>
   layer.type === 'group';
 
+const hasCollisionMarkerData = (
+  name: string,
+  properties: TiledProperty[] | undefined,
+): boolean => {
+  const normalizedName = name.trim().toLowerCase();
+  return (
+    normalizedName === 'collision' ||
+    normalizedName === 'collisions' ||
+    normalizedName === 'obstacles' ||
+    propertyValue(properties, 'collision') === true
+  );
+};
+
 const validateTileset = (tileset: unknown): tileset is TiledTilesetReference => {
   if (!isRecord(tileset) || !Number.isInteger(tileset.firstgid) || Number(tileset.firstgid) <= 0) {
     return false;
@@ -134,13 +147,25 @@ const validateLayer = (layer: unknown): TiledLayer => {
       !Number.isInteger(layer.height) ||
       Number(layer.height) <= 0 ||
       !Array.isArray(layer.data) ||
-      layer.data.length !== Number(layer.width) * Number(layer.height) ||
       !layer.data.every((tile) => Number.isInteger(tile) && Number(tile) >= 0)
     ) {
-      return invalidMap(
-        `Tile layer ${layer.name} must use an uncompressed integer array matching its dimensions.`,
-      );
+      return invalidMap(`Tile layer ${layer.name} must use an uncompressed integer array.`);
     }
+
+    const expectedLength = Number(layer.width) * Number(layer.height);
+    if (layer.data.length !== expectedLength) {
+      const properties = layer.properties as TiledProperty[] | undefined;
+      if (hasCollisionMarkerData(layer.name, properties)) {
+        return invalidMap(
+          `Collision tile layer ${layer.name} must contain exactly ${expectedLength} cells.`,
+        );
+      }
+
+      const normalized = layer.data.slice(0, expectedLength);
+      while (normalized.length < expectedLength) normalized.push(0);
+      layer.data = normalized;
+    }
+
     return layer as unknown as TiledTileLayer;
   }
 
@@ -240,15 +265,8 @@ const walkLayers = (
   return visits;
 };
 
-const hasCollisionMarker = (layer: TiledLayer): boolean => {
-  const name = layer.name.toLowerCase();
-  return (
-    name === 'collision' ||
-    name === 'collisions' ||
-    name === 'obstacles' ||
-    propertyValue(layer.properties, 'collision') === true
-  );
-};
+const hasCollisionMarker = (layer: TiledLayer): boolean =>
+  hasCollisionMarkerData(layer.name, layer.properties);
 
 const blockTile = (grid: Uint8Array, map: TiledMapJson, x: number, y: number): void => {
   if (x >= 0 && y >= 0 && x < map.width && y < map.height) {
