@@ -1,5 +1,8 @@
 import type { ClientPortal, CompiledTileLayer, LoadedMapDefinition, TiledLayer, TiledMapJson, TiledObject, TiledObjectLayer, TiledProperty, TiledTileLayer } from '../../contracts/tiled';
 
+const TREE_TRUNK_GID = 3;
+const TREE_TRUNK_LAYER_NAME = 'tree trunks';
+
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isProperties = (value: unknown): value is TiledProperty[] | undefined => value === undefined || (Array.isArray(value) && value.every((item) => isRecord(item) && typeof item.name === 'string' && Object.hasOwn(item, 'value')));
 const propertyValue = (properties: TiledProperty[] | undefined, name: string): unknown => properties?.find((property) => property.name === name)?.value;
@@ -65,6 +68,22 @@ const markRectangle = (grid: Uint8Array, map: TiledMapJson, object: TiledObject)
   for (let y = Math.max(0, top); y < Math.min(map.height, bottom); y += 1) for (let x = Math.max(0, left); x < Math.min(map.width, right); x += 1) grid[y * map.width + x] = 1;
 };
 
+const markTreeFootprints = (grid: Uint8Array, map: TiledMapJson): void => {
+  for (const layer of map.layers.filter(isTileLayer)) {
+    if (layer.name.trim().toLowerCase() !== TREE_TRUNK_LAYER_NAME) continue;
+    layer.data.forEach((rawGid, index) => {
+      if ((rawGid & 0x1fffffff) !== TREE_TRUNK_GID) return;
+      const treeX = index % map.width;
+      const treeY = Math.floor(index / map.width);
+      for (let y = treeY - 1; y <= treeY; y += 1) {
+        for (let x = treeX - 1; x <= treeX + 1; x += 1) {
+          if (x >= 0 && y >= 0 && x < map.width && y < map.height) grid[y * map.width + x] = 1;
+        }
+      }
+    });
+  }
+};
+
 const compileCollision = (map: TiledMapJson): Uint8Array => {
   const grid = new Uint8Array(map.width * map.height);
   for (const layer of map.layers) {
@@ -75,6 +94,7 @@ const compileCollision = (map: TiledMapJson): Uint8Array => {
     if (isObjectLayer(layer) && (layer.name.toLowerCase() === 'collisions' || propertyValue(layer.properties, 'collision') === true)) layer.objects.forEach((object) => markRectangle(grid, map, object));
   }
   for (const tileset of map.tilesets) for (const tile of tileset.tiles ?? []) if (propertyValue(tile.properties, 'collides') === true) for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if ((gid & 0x1fffffff) === tileset.firstgid + tile.id && index < grid.length) grid[index] = 1; });
+  markTreeFootprints(grid, map);
   for (const layer of map.layers.filter(isObjectLayer).filter((item) => item.name.toLowerCase() === 'portals' || propertyValue(item.properties, 'portals') === true)) for (const object of layer.objects) {
     const x = Math.floor((object.x ?? 0) / map.tilewidth);
     const y = Math.floor((object.y ?? 0) / map.tileheight);
