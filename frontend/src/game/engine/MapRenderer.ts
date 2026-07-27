@@ -1,20 +1,22 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
-import type { CompiledTileLayer, LoadedMapDefinition } from '../../contracts/tiled';
+import type { CompiledTileLayer, CompiledTileRenderDefinition, LoadedMapDefinition } from '../../contracts/tiled';
+import {
+  normalizedGid,
+  TILED_FLIPPED_DIAGONALLY_FLAG,
+  TILED_FLIPPED_HORIZONTALLY_FLAG,
+  TILED_FLIPPED_VERTICALLY_FLAG,
+} from '../map/tiledMap';
 import { WORLD_TILE_SIZE } from './constants';
 import { gameAssetLoader } from './GameAssetLoader';
 
-const TILED_GID_MASK = 0x1fffffff;
-const TREE_TRUNK_GID = 3;
-const TREE_CANOPY_GID = 4;
-const TREE_TRUNK_LAYER_NAME = 'tree trunks';
-const TREE_CANOPY_LAYER_NAME = 'tree canopies';
-const TREE_TRUNK_WIDTH_TILES = 0.78;
-const TREE_TRUNK_HEIGHT_TILES = 2.65;
-const TREE_CANOPY_WIDTH_TILES = 3.6;
-const TREE_CANOPY_HEIGHT_TILES = 3.4;
-const TREE_CANOPY_BOTTOM_ABOVE_BASE_TILES = 0.82;
-
-const normalizedLayerName = (layer: CompiledTileLayer): string => layer.name.trim().toLowerCase();
+const DEFAULT_RENDER_DEFINITION: CompiledTileRenderDefinition = {
+  widthTiles: 1,
+  heightTiles: 1,
+  anchorX: 0,
+  anchorY: 1,
+  offsetXTiles: 0,
+  offsetYTiles: 1,
+};
 
 export class MapRenderer {
   readonly belowContainer = new Container();
@@ -34,7 +36,7 @@ export class MapRenderer {
 
   async load(map: LoadedMapDefinition): Promise<boolean> {
     const sequence = ++this.loadSequence;
-    const textures = await gameAssetLoader.getTileTextures(map.key);
+    const textures = await gameAssetLoader.getTileTextures(map);
     if (this.destroyed || sequence !== this.loadSequence) return false;
     this.destroyChildren();
     this.map = map;
@@ -67,160 +69,92 @@ export class MapRenderer {
   }
 
   private renderLayers(map: LoadedMapDefinition, textures?: ReadonlyMap<number, Texture>): void {
-    const trunkLayer = map.layers.find((layer) => normalizedLayerName(layer) === TREE_TRUNK_LAYER_NAME);
-    const canopyLayer = map.layers.find((layer) => normalizedLayerName(layer) === TREE_CANOPY_LAYER_NAME);
-
     for (const layer of map.layers) {
-      if (layer === trunkLayer || layer === canopyLayer) continue;
       const container = this.renderTileLayer(map, layer, textures);
       (layer.band === 'above' ? this.aboveContainer : this.belowContainer).addChild(container);
     }
-
-    if (trunkLayer) {
-      this.renderTrees(map, trunkLayer, canopyLayer, textures);
-    } else if (canopyLayer) {
-      this.aboveContainer.addChild(this.renderTileLayer(map, canopyLayer, textures));
-    }
-  }
-
-  private renderTrees(
-    map: LoadedMapDefinition,
-    trunkLayer: CompiledTileLayer,
-    canopyLayer: CompiledTileLayer | undefined,
-    textures?: ReadonlyMap<number, Texture>,
-  ): void {
-    const trunks = new Container();
-    const canopies = new Container();
-    const generatedTrunks = new Graphics();
-    const generatedCanopies = new Graphics();
-    const trunkTexture = textures?.get(TREE_TRUNK_GID);
-    const canopyTexture = textures?.get(TREE_CANOPY_GID);
-
-    trunks.label = trunkLayer.name;
-    trunks.alpha = trunkLayer.opacity;
-    canopies.label = canopyLayer?.name ?? 'Tree Canopies';
-    canopies.alpha = canopyLayer?.opacity ?? 1;
-    trunks.addChild(generatedTrunks);
-    canopies.addChild(generatedCanopies);
-
-    for (let index = 0; index < trunkLayer.data.length; index += 1) {
-      const gid = (trunkLayer.data[index] ?? 0) & TILED_GID_MASK;
-      if (gid === 0) continue;
-      const x = (index % map.width) * WORLD_TILE_SIZE;
-      const y = Math.floor(index / map.width) * WORLD_TILE_SIZE;
-      const centerX = x + WORLD_TILE_SIZE * 0.5;
-      const baseY = y + WORLD_TILE_SIZE;
-
-      generatedTrunks
-        .ellipse(centerX, baseY - 2, WORLD_TILE_SIZE * 0.66, WORLD_TILE_SIZE * 0.18)
-        .fill({ color: 0x11170f, alpha: 0.42 });
-
-      if (trunkTexture) trunks.addChild(this.createTreeTrunkSprite(trunkTexture, centerX, baseY));
-      else this.drawGeneratedTreeTrunk(generatedTrunks, centerX, baseY);
-
-      if (canopyTexture) canopies.addChild(this.createTreeCanopySprite(canopyTexture, centerX, baseY));
-      else this.drawGeneratedTreeCanopy(generatedCanopies, centerX, baseY);
-    }
-
-    this.belowContainer.addChild(trunks);
-    this.aboveContainer.addChild(canopies);
-  }
-
-  private createTreeTrunkSprite(texture: Texture, centerX: number, baseY: number): Sprite {
-    const sprite = new Sprite(texture);
-    sprite.anchor.set(0.5, 1);
-    sprite.position.set(centerX, baseY);
-    sprite.width = WORLD_TILE_SIZE * TREE_TRUNK_WIDTH_TILES;
-    sprite.height = WORLD_TILE_SIZE * TREE_TRUNK_HEIGHT_TILES;
-    return sprite;
-  }
-
-  private createTreeCanopySprite(texture: Texture, centerX: number, baseY: number): Sprite {
-    const sprite = new Sprite(texture);
-    sprite.anchor.set(0.5, 1);
-    sprite.position.set(centerX, baseY - WORLD_TILE_SIZE * TREE_CANOPY_BOTTOM_ABOVE_BASE_TILES);
-    sprite.width = WORLD_TILE_SIZE * TREE_CANOPY_WIDTH_TILES;
-    sprite.height = WORLD_TILE_SIZE * TREE_CANOPY_HEIGHT_TILES;
-    return sprite;
   }
 
   private renderTileLayer(map: LoadedMapDefinition, layer: CompiledTileLayer, textures?: ReadonlyMap<number, Texture>): Container {
     const container = new Container();
-    const generated = new Graphics();
     container.label = layer.name;
     container.alpha = layer.opacity;
-    container.addChild(generated);
+    const scaleX = WORLD_TILE_SIZE / map.tileWidth;
+    const scaleY = WORLD_TILE_SIZE / map.tileHeight;
+    container.position.set(layer.offsetX * scaleX, layer.offsetY * scaleY);
 
-    for (let index = 0; index < layer.data.length; index += 1) {
-      const gid = (layer.data[index] ?? 0) & TILED_GID_MASK;
+    for (const index of this.tileIndexes(layer, map.source.renderorder)) {
+      const rawGid = layer.data[index] ?? 0;
+      const gid = normalizedGid(rawGid);
       if (gid === 0) continue;
-      const x = (index % map.width) * WORLD_TILE_SIZE;
-      const y = Math.floor(index / map.width) * WORLD_TILE_SIZE;
+      const x = (index % layer.width) * WORLD_TILE_SIZE;
+      const y = Math.floor(index / layer.width) * WORLD_TILE_SIZE;
+      const renderDefinition = map.tileRenderDefinitions.get(gid) ?? DEFAULT_RENDER_DEFINITION;
       const texture = textures?.get(gid);
       if (!texture) {
-        this.drawGeneratedTile(generated, gid, x, y, index);
+        container.addChild(this.createMissingTile(gid, x, y, renderDefinition));
         continue;
       }
-      const sprite = new Sprite(texture);
-      sprite.position.set(x, y);
-      sprite.width = WORLD_TILE_SIZE;
-      sprite.height = WORLD_TILE_SIZE;
-      container.addChild(sprite);
+      container.addChild(this.createTileSprite(texture, rawGid, x, y, renderDefinition));
     }
     return container;
   }
 
-  private drawGeneratedTreeTrunk(graphics: Graphics, centerX: number, baseY: number): void {
-    const size = WORLD_TILE_SIZE;
-    graphics
-      .roundRect(centerX - size * 0.26, baseY - size * 2.6, size * 0.52, size * 2.58, 7)
-      .fill({ color: 0x6b4326 })
-      .rect(centerX - size * 0.08, baseY - size * 2.55, size * 0.1, size * 2.42)
-      .fill({ color: 0x93603a, alpha: 0.82 });
+  private tileIndexes(layer: CompiledTileLayer, renderOrder: string | undefined): number[] {
+    const xValues = Array.from({ length: layer.width }, (_, index) => index);
+    const yValues = Array.from({ length: layer.height }, (_, index) => index);
+    if (renderOrder?.startsWith('left-')) xValues.reverse();
+    if (renderOrder?.endsWith('-up')) yValues.reverse();
+    return yValues.flatMap((y) => xValues.map((x) => y * layer.width + x));
   }
 
-  private drawGeneratedTreeCanopy(graphics: Graphics, centerX: number, baseY: number): void {
-    const size = WORLD_TILE_SIZE;
-    const centerY = baseY - size * 2.38;
-    graphics
-      .ellipse(centerX, centerY, size * 1.48, size * 1.35)
-      .fill({ color: 0x1f512c })
-      .ellipse(centerX - size * 1.02, centerY + size * 0.08, size * 0.88, size * 0.92)
-      .fill({ color: 0x347842 })
-      .ellipse(centerX + size * 1.02, centerY - size * 0.12, size * 0.94, size * 0.98)
-      .fill({ color: 0x2b6a39 })
-      .ellipse(centerX + size * 0.22, centerY + size * 0.86, size * 1.08, size * 0.92)
-      .fill({ color: 0x285f34 });
+  private createTileSprite(texture: Texture, rawGid: number, x: number, y: number, definition: CompiledTileRenderDefinition): Sprite {
+    const width = WORLD_TILE_SIZE * definition.widthTiles;
+    const height = WORLD_TILE_SIZE * definition.heightTiles;
+    const left = x + WORLD_TILE_SIZE * definition.offsetXTiles - width * definition.anchorX;
+    const top = y + WORLD_TILE_SIZE * definition.offsetYTiles - height * definition.anchorY;
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.position.set(left + width / 2, top + height / 2);
+    sprite.width = width;
+    sprite.height = height;
+    this.applyTiledTransform(sprite, rawGid);
+    return sprite;
   }
 
-  private drawGeneratedTile(graphics: Graphics, gid: number, x: number, y: number, index: number): void {
-    const size = WORLD_TILE_SIZE;
-    if (gid === 1) {
-      const color = index % 2 === 0 ? 0x315f39 : 0x2c5735;
-      graphics.rect(x, y, size, size).fill({ color });
-      graphics.rect(x, y, size, size).stroke({ color: 0x47784d, width: 1, alpha: 0.22 });
-      if (index % 7 === 0) graphics.circle(x + 12, y + 15, 2).fill({ color: 0x5f8c55, alpha: 0.65 });
+  private applyTiledTransform(sprite: Sprite, rawGid: number): void {
+    const horizontal = (rawGid & TILED_FLIPPED_HORIZONTALLY_FLAG) !== 0;
+    const vertical = (rawGid & TILED_FLIPPED_VERTICALLY_FLAG) !== 0;
+    const diagonal = (rawGid & TILED_FLIPPED_DIAGONALLY_FLAG) !== 0;
+    if (!diagonal) {
+      if (horizontal) sprite.scale.x *= -1;
+      if (vertical) sprite.scale.y *= -1;
       return;
     }
-    if (gid === 2) {
-      graphics.rect(x, y, size, size).fill({ color: 0x9a7648 });
-      graphics.rect(x, y + size * 0.18, size, size * 0.64).fill({ color: 0xb48d57 });
-      graphics.rect(x, y, size, size).stroke({ color: 0xd0ad72, width: 1, alpha: 0.28 });
-      return;
+    if (horizontal && vertical) {
+      sprite.rotation = Math.PI / 2;
+      sprite.scale.x *= -1;
+    } else if (horizontal) {
+      sprite.rotation = Math.PI / 2;
+    } else if (vertical) {
+      sprite.rotation = -Math.PI / 2;
+    } else {
+      sprite.rotation = Math.PI / 2;
+      sprite.scale.y *= -1;
     }
-    if (gid === 5) {
-      const color = index % 2 === 0 ? 0x29263b : 0x252235;
-      graphics.rect(x, y, size, size).fill({ color });
-      graphics.rect(x, y, size, size).stroke({ color: 0x403b59, width: 1, alpha: 0.3 });
-      if (index % 9 === 0) graphics.circle(x + 31, y + 12, 2).fill({ color: 0x8d8bd1, alpha: 0.45 });
-      return;
-    }
-    if (gid === 6) {
-      graphics.ellipse(x + size * 0.5, y + size * 0.87, size * 0.34, size * 0.1).fill({ color: 0x11111b, alpha: 0.45 });
-      graphics.roundRect(x + size * 0.16, y + size * 0.25, size * 0.68, size * 0.58, 8).fill({ color: 0x5f6689 });
-      graphics.roundRect(x + size * 0.29, y + size * 0.2, size * 0.31, size * 0.38, 6).fill({ color: 0x949de0, alpha: 0.78 });
-      graphics.circle(x + size * 0.67, y + size * 0.42, size * 0.09).fill({ color: 0xc4c9ff, alpha: 0.75 });
-    }
+  }
+
+  private createMissingTile(gid: number, x: number, y: number, definition: CompiledTileRenderDefinition): Graphics {
+    const width = WORLD_TILE_SIZE * definition.widthTiles;
+    const height = WORLD_TILE_SIZE * definition.heightTiles;
+    const left = x + WORLD_TILE_SIZE * definition.offsetXTiles - width * definition.anchorX;
+    const top = y + WORLD_TILE_SIZE * definition.offsetYTiles - height * definition.anchorY;
+    const color = (Math.imul(gid, 2_654_435_761) >>> 8) & 0xffffff;
+    return new Graphics()
+      .rect(left, top, width, height)
+      .fill({ color, alpha: 0.72 })
+      .rect(left, top, width, height)
+      .stroke({ color: 0xffffff, width: 1, alpha: 0.45 });
   }
 
   private renderPortals(map: LoadedMapDefinition): void {
