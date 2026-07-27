@@ -3,6 +3,7 @@ import type { Direction } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES } from '../../common/errors/game.error.js';
 import { KeyedSerialExecutor } from '../../common/utils/keyed-serial-executor.js';
 import { MapService } from '../maps/map.service.js';
+import { NpcService } from '../npcs/npc.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { MovementService } from './movement.service.js';
@@ -25,6 +26,7 @@ export class PathMovementService {
 
   constructor(
     private readonly maps: MapService,
+    private readonly npcs: NpcService,
     private readonly worldState: WorldStateService,
     private readonly pathfinding: PathfindingService,
     private readonly movement: MovementService,
@@ -39,13 +41,15 @@ export class PathMovementService {
   ): Promise<{ requestId: string; pathLength: number }> {
     this.cancel(session.characterId);
     const map = await this.maps.getMap(session.mapId);
+    const occupiedNpcTiles = await this.npcs.getOccupiedTiles(map.id);
     const path = this.pathfinding.findPath(
       map,
       { x: session.x, y: session.y },
       { x: targetX, y: targetY },
       (x, y) =>
-        map.zoneType !== 'SAFE' &&
-        this.worldState.isOccupied(map.id, x, y, session.characterId),
+        occupiedNpcTiles.has(`${x},${y}`) ||
+        (map.zoneType !== 'SAFE' &&
+          this.worldState.isOccupied(map.id, x, y, session.characterId)),
     );
 
     if (path.length === 0) {

@@ -119,17 +119,17 @@ export class GameEngine {
       const identity = `${state.map.key}:${state.map.version}`;
       if (identity !== this.currentMapIdentity) {
         this.currentMapIdentity = identity;
-        void this.loadMap(state.map.key);
+        void this.loadMap(state.map.key, state.map.version);
       }
     }
     this.syncNpcs(state.npcs);
     this.syncCharacters(state);
   };
 
-  private async loadMap(key: string): Promise<void> {
+  private async loadMap(key: string, version: number): Promise<void> {
     const sequence = ++this.loadSequence;
     try {
-      const map = await mapRepository.load(key);
+      const map = await mapRepository.load(key, version);
       if (this.destroyed || sequence !== this.loadSequence) return;
       const rendered = await this.mapRenderer.load(map);
       if (!rendered || this.destroyed || sequence !== this.loadSequence) return;

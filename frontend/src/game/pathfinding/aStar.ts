@@ -16,9 +16,7 @@ export interface FindPathOptions {
 }
 
 const keyOf = (x: number, y: number): string => `${x},${y}`;
-const manhattan = (a: Coordinates, b: Coordinates): number =>
-  Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-
+const manhattan = (a: Coordinates, b: Coordinates): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const neighbors = (x: number, y: number): Coordinates[] => [
   { x, y: y - 1 },
   { x: x + 1, y },
@@ -27,24 +25,17 @@ const neighbors = (x: number, y: number): Coordinates[] => [
 ];
 
 const popLowest = (open: OpenNode[]): OpenNode | undefined => {
-  if (open.length === 0) {
-    return undefined;
-  }
+  if (open.length === 0) return undefined;
   let bestIndex = 0;
   for (let index = 1; index < open.length; index += 1) {
     const candidate = open[index]!;
     const best = open[bestIndex]!;
-    if (candidate.f < best.f || (candidate.f === best.f && candidate.h < best.h)) {
-      bestIndex = index;
-    }
+    if (candidate.f < best.f || (candidate.f === best.f && candidate.h < best.h)) bestIndex = index;
   }
   return open.splice(bestIndex, 1)[0];
 };
 
-const reconstruct = (
-  cameFrom: ReadonlyMap<string, string>,
-  targetKey: string,
-): Coordinates[] => {
+const reconstruct = (cameFrom: ReadonlyMap<string, string>, targetKey: string): Coordinates[] => {
   const reversed: Coordinates[] = [];
   let currentKey: string | undefined = targetKey;
   while (currentKey) {
@@ -62,32 +53,21 @@ export const findPath = (
   target: Coordinates,
   options: FindPathOptions = {},
 ): Coordinates[] => {
-  const maxVisitedNodes = options.maxVisitedNodes ?? 4_096;
-  const maxPathLength = options.maxPathLength ?? 96;
+  const maxVisitedNodes = Math.max(options.maxVisitedNodes ?? 4_096, map.width * map.height);
+  const maxPathLength = Math.max(options.maxPathLength ?? 96, map.width + map.height);
 
   if (
     !isInsideMap(map, start.x, start.y) ||
     !isInsideMap(map, target.x, target.y) ||
     isCollisionTile(map, target.x, target.y) ||
     options.isDynamicallyBlocked?.(target.x, target.y)
-  ) {
-    return [];
-  }
-  if (start.x === target.x && start.y === target.y) {
-    return [];
-  }
+  ) return [];
+  if (start.x === target.x && start.y === target.y) return [];
 
   const startKey = keyOf(start.x, start.y);
   const targetKey = keyOf(target.x, target.y);
-  const open: OpenNode[] = [
-    {
-      ...start,
-      g: 0,
-      h: manhattan(start, target),
-      f: manhattan(start, target),
-      key: startKey,
-    },
-  ];
+  const startHeuristic = manhattan(start, target);
+  const open: OpenNode[] = [{ ...start, g: 0, h: startHeuristic, f: startHeuristic, key: startKey }];
   const openByKey = new Map<string, OpenNode>([[startKey, open[0]!]]);
   const closed = new Set<string>();
   const cameFrom = new Map<string, string>();
@@ -96,13 +76,9 @@ export const findPath = (
 
   while (open.length > 0 && visited < maxVisitedNodes) {
     const current = popLowest(open);
-    if (!current) {
-      break;
-    }
+    if (!current) break;
     openByKey.delete(current.key);
-    if (closed.has(current.key)) {
-      continue;
-    }
+    if (closed.has(current.key)) continue;
     closed.add(current.key);
     visited += 1;
 
@@ -113,18 +89,9 @@ export const findPath = (
 
     for (const neighbor of neighbors(current.x, current.y)) {
       const neighborKey = keyOf(neighbor.x, neighbor.y);
-      if (
-        closed.has(neighborKey) ||
-        isCollisionTile(map, neighbor.x, neighbor.y) ||
-        options.isDynamicallyBlocked?.(neighbor.x, neighbor.y)
-      ) {
-        continue;
-      }
-
+      if (closed.has(neighborKey) || isCollisionTile(map, neighbor.x, neighbor.y) || options.isDynamicallyBlocked?.(neighbor.x, neighbor.y)) continue;
       const tentativeG = current.g + 1;
-      if (tentativeG >= (scores.get(neighborKey) ?? Number.POSITIVE_INFINITY)) {
-        continue;
-      }
+      if (tentativeG >= (scores.get(neighborKey) ?? Number.POSITIVE_INFINITY)) continue;
 
       cameFrom.set(neighborKey, current.key);
       scores.set(neighborKey, tentativeG);
@@ -135,13 +102,7 @@ export const findPath = (
         existing.h = h;
         existing.f = tentativeG + h;
       } else {
-        const node: OpenNode = {
-          ...neighbor,
-          g: tentativeG,
-          h,
-          f: tentativeG + h,
-          key: neighborKey,
-        };
+        const node: OpenNode = { ...neighbor, g: tentativeG, h, f: tentativeG + h, key: neighborKey };
         open.push(node);
         openByKey.set(neighborKey, node);
       }

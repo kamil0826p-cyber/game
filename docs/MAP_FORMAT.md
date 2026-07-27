@@ -1,74 +1,139 @@
 # Map Format
 
-Maps are stored in `Map.tiledData` as finite Tiled-compatible JSON. Phase 1 intentionally supports finite orthogonal tile maps with array-backed tile layers. Infinite chunked maps are not accepted yet.
+Maps are authored manually in Tiled and committed as static JSON files. Nothing in the application generates or overwrites map files during start, build, test, or seed commands.
 
-## Required root fields
+The authoritative server copy lives in `prisma/maps`. The exact browser copy lives in `frontend/public/maps`. Whenever a map is exported from Tiled, place the same JSON content in both directories under the same file name.
+
+## Supported Tiled project settings
+
+The runtime accepts finite, orthogonal maps:
 
 ```json
 {
   "type": "map",
-  "width": 20,
-  "height": 15,
+  "orientation": "orthogonal",
+  "infinite": false,
+  "width": 96,
+  "height": 64,
   "tilewidth": 32,
   "tileheight": 32,
+  "tilesets": [],
   "layers": []
 }
 ```
 
-All dimensions must be positive integers.
+All dimensions must be positive integers. Every tile layer must match the root map dimensions.
 
-## Collision layers
+Supported tile data formats are:
 
-At least one tile layer must be recognized as collision data. A layer is treated as collision when one of these rules matches:
+- a normal JSON integer array,
+- Tiled `base64` encoding without compression,
+- Tiled `base64` encoding with `zlib` compression,
+- Tiled `base64` encoding with `gzip` compression.
 
-- Its name is `collision`, case-insensitive.
-- Its name is `obstacles`, case-insensitive.
-- It contains a boolean Tiled property named `collision` with value `true`.
+Infinite chunked maps are not supported. Supported layer types are `tilelayer` and `objectgroup`.
 
-The layer dimensions and data length must exactly match the map. Tile value `0` is walkable. Any non-zero tile value is blocked.
+## Manual export workflow
 
-Multiple collision layers are combined with logical OR.
+1. Open or create the map in Tiled.
+2. Use an orthogonal, finite map.
+3. Export or save the map as JSON (`.json` or `.tmj`).
+4. Copy the exported content to both:
+   - `prisma/maps/<map-key>.json`
+   - `frontend/public/maps/<map-key>.json`
+5. Keep the map key and file name synchronized with the database seed and frontend map repository.
+6. Run `npm test` and `npm run frontend:test` before seeding.
+7. Run `npm run prisma:seed` when map dimensions, portals, or map metadata changed.
 
-## Portal layers
+The application never regenerates these files. Manual Tiled edits remain intact.
 
-Portal objects can be stored in an object layer named `portals`, case-insensitive, or an object layer with a boolean `portals=true` property.
+## Rendering bands
 
-A portal object may provide explicit source coordinates:
+Visible tile layers are rendered in their Tiled order. A custom string property controls whether a layer is below or above characters:
 
 ```json
 {
-  "type": "portal",
+  "name": "renderBand",
+  "type": "string",
+  "value": "above"
+}
+```
+
+- `below`, or an omitted property, renders the layer below players and NPCs.
+- `above` renders canopies, roofs, arches, and other occluders above characters.
+
+Object layers are metadata and are not drawn by the normal tile renderer.
+
+## Collision sources
+
+The frontend route preview and authoritative backend compile the same tile-sized collision grid. The backend remains the security boundary. Collision sources are combined with logical OR.
+
+### Collision tile layer
+
+A tile layer is collision data when its name is `collision`, case-insensitive, or when it has a boolean `collision=true` property. GID `0` is walkable and every non-zero GID is blocked.
+
+### Collision object layer
+
+An object layer named `collisions`, or one with `collision=true`, may contain axis-aligned rectangles. Every map tile touched by a rectangle becomes blocked.
+
+### Tileset tile property
+
+A tile definition may contain:
+
+```json
+{
+  "id": 5,
   "properties": [
-    { "name": "sourceX", "type": "int", "value": 18 },
-    { "name": "sourceY", "type": "int", "value": 7 },
-    { "name": "destinationMapKey", "type": "string", "value": "crystal-cave" },
-    { "name": "targetX", "type": "int", "value": 2 },
-    { "name": "targetY", "type": "int", "value": 7 }
+    { "name": "collides", "type": "bool", "value": true }
   ]
 }
 ```
 
-When `sourceX` or `sourceY` is omitted, the seed importer derives it from the object's pixel position divided by `tilewidth` or `tileheight`.
+Every placed GID corresponding to that local tile ID becomes blocked. Tiled flip flags are ignored when resolving collision identity.
 
-The seed process normalizes embedded portal objects into `Portal` rows. Runtime transitions use those normalized rows rather than trusting client map data.
+At least one collision source is required. Portal source cells are reopened after collision compilation so a portal may be embedded in a blocked map boundary.
+
+## Portal layers
+
+Portal objects are stored in an object layer named `portals`, case-insensitive, or one with `portals=true`.
+
+```json
+{
+  "type": "portal",
+  "x": 3040,
+  "y": 1024,
+  "width": 32,
+  "height": 32,
+  "properties": [
+    { "name": "destinationMapKey", "type": "string", "value": "crystal-cave" },
+    { "name": "targetX", "type": "int", "value": 1 },
+    { "name": "targetY", "type": "int", "value": 32 }
+  ]
+}
+```
+
+When `sourceX` or `sourceY` is omitted, it is derived from the object's pixel position divided by the map tile dimensions. The seed normalizes portal objects into database `Portal` rows.
+
+## Tileset assets
+
+The sample maps use an embedded tileset definition pointing to:
+
+```text
+../assets/tiles/tiled-world.svg
+```
+
+The frontend also maps GIDs to textures through `frontend/public/assets/manifest.json`. When replacing the tileset image, dimensions, columns, or GID layout, update the manifest as well.
+
+For convenient editing, open the copy under `frontend/public/maps`, where the relative image path resolves to `frontend/public/assets/tiles`. The backend copy is used for parsing and collision authority and does not need to resolve the image visually.
 
 ## Runtime validation
 
-Application startup fails when any of these conditions is found:
-
-- Missing or malformed collision data.
-- Database dimensions do not match Tiled dimensions.
-- A map spawn is outside the map or blocked.
-- A portal source is outside the map or blocked.
-- A portal destination map does not exist in the realm.
-- A portal target is outside the destination map or blocked.
-
-Fail-fast startup prevents a partially invalid map set from serving players.
+Startup or seeding fails for malformed dimensions, unsupported layer types, invalid compressed data, missing collision sources, blocked spawns, invalid portals, or destinations outside the map. Movement is validated against the compiled backend grid before every accepted step.
 
 ## Zones
 
-The normalized `Map.zoneType` field controls player overlap and future rules:
+The normalized `Map.zoneType` controls player overlap and future rules:
 
 - `SAFE`: players may occupy and pass through the same tile.
-- `OUTLAW`: player occupancy blocks movement; future outlaw rules are not implemented.
-- `PVP`: player occupancy blocks movement; future PvP combat rules are not implemented.
+- `OUTLAW`: player occupancy blocks movement.
+- `PVP`: player occupancy blocks movement.

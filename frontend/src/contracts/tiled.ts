@@ -4,6 +4,8 @@ export interface TiledProperty {
   value: unknown;
 }
 
+export type TiledRenderBand = 'below' | 'above';
+
 export interface TiledTileLayer {
   id?: number;
   name: string;
@@ -11,8 +13,12 @@ export interface TiledTileLayer {
   width: number;
   height: number;
   data: number[];
+  encoding?: 'base64';
+  compression?: 'zlib' | 'gzip';
   visible?: boolean;
   opacity?: number;
+  offsetx?: number;
+  offsety?: number;
   properties?: TiledProperty[];
 }
 
@@ -42,6 +48,7 @@ export type TiledLayer = TiledTileLayer | TiledObjectLayer;
 export interface TiledTilesetReference {
   firstgid: number;
   source?: string;
+  name?: string;
   image?: string;
   imagewidth?: number;
   imageheight?: number;
@@ -49,18 +56,20 @@ export interface TiledTilesetReference {
   tileheight?: number;
   columns?: number;
   tilecount?: number;
+  tiles?: Array<{ id: number; properties?: TiledProperty[] }>;
 }
 
 export interface TiledMapJson {
   type: 'map';
   orientation: 'orthogonal' | string;
+  renderorder?: string;
   infinite: boolean;
   width: number;
   height: number;
   tilewidth: number;
   tileheight: number;
   layers: TiledLayer[];
-  tilesets?: TiledTilesetReference[];
+  tilesets: TiledTilesetReference[];
   properties?: TiledProperty[];
 }
 
@@ -72,6 +81,13 @@ export interface ClientPortal {
   targetY: number;
 }
 
+export interface CompiledTileLayer {
+  name: string;
+  band: TiledRenderBand;
+  opacity: number;
+  data: readonly number[];
+}
+
 export interface LoadedMapDefinition {
   key: string;
   source: TiledMapJson;
@@ -79,7 +95,7 @@ export interface LoadedMapDefinition {
   height: number;
   tileWidth: number;
   tileHeight: number;
-  ground: readonly number[];
+  layers: readonly CompiledTileLayer[];
   collision: Uint8Array;
   portals: readonly ClientPortal[];
 }

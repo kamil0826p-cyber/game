@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.10",
-    "@nestjs/testing": "11.1.28",
+    "@nestjs/testing": "11.0.10",
     "@types/node": "^22.15.30",
     "@types/pg": "^8.15.5",
     "prettier": "^3.6.2",
