@@ -1,11 +1,11 @@
 import { Container, Graphics, Rectangle, Text } from 'pixi.js';
-import type { NpcDefinition } from '../npc/npcCatalog';
+import type { NpcStatePayload } from '../../contracts/socket';
 import { WORLD_TILE_SIZE } from './constants';
 
 export class NpcView {
   readonly container = new Container();
 
-  constructor(readonly npc: NpcDefinition, onInteract: (npc: NpcDefinition) => void) {
+  constructor(readonly npc: NpcStatePayload, onInteract: (npc: NpcStatePayload) => void) {
     this.container.position.set(
       npc.x * WORLD_TILE_SIZE + WORLD_TILE_SIZE / 2,
       npc.y * WORLD_TILE_SIZE + WORLD_TILE_SIZE / 2,
@@ -33,14 +33,16 @@ export class NpcView {
       .rect(12, -14, 2, 23).fill({ color: 0xd1d5db })
       .rect(9, 5, 8, 2).fill({ color: 0xfbbf24 })
       .rect(12, 7, 2, 7).fill({ color: 0x78350f });
-    const tradeMarker = new Text({ text: '¤', style: { fill: 0xfbbf24, fontSize: 16, fontWeight: 'bold', stroke: { color: 0x451a03, width: 3 } } });
-    tradeMarker.anchor.set(0.5);
-    tradeMarker.position.set(0, -34);
+    const markerText = npc.interactionType === 'MERCHANT' ? '¤' : npc.interactionType === 'QUEST' ? '!' : '…';
+    const interactionMarker = new Text({ text: markerText, style: { fill: 0xfbbf24, fontSize: 16, fontWeight: 'bold', stroke: { color: 0x451a03, width: 3 } } });
+    interactionMarker.anchor.set(0.5);
+    interactionMarker.position.set(0, -34);
     const name = new Text({ text: npc.name, style: { fill: 0xfef3c7, fontSize: 10, fontWeight: 'bold', stroke: { color: 0x111827, width: 3 } } });
     name.anchor.set(0.5, 0);
     name.position.set(0, 22);
 
-    this.container.addChild(shadow, body, head, shield, sword, tradeMarker, name);
+    this.container.label = npc.outfitKey;
+    this.container.addChild(shadow, body, head, shield, sword, interactionMarker, name);
     this.container.on('pointertap', (event) => {
       event.stopPropagation();
       onInteract(npc);

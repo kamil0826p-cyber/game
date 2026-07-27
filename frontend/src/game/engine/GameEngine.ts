@@ -5,10 +5,10 @@ import {
   type FederatedPointerEvent,
 } from 'pixi.js';
 import type { PublicPlayerState } from '../../contracts/game';
+import type { NpcStatePayload } from '../../contracts/socket';
 import type { LoadedMapDefinition } from '../../contracts/tiled';
 import { KeyboardMovementController } from '../input/KeyboardMovementController';
 import { mapRepository } from '../map/MapRepository';
-import { npcsForMap, type NpcDefinition } from '../npc/npcCatalog';
 import { findPath } from '../pathfinding/aStar';
 import { GameSocketClient } from '../realtime/GameSocketClient';
 import { gameStore, type GameState } from '../state/gameStore';
@@ -122,6 +122,7 @@ export class GameEngine {
         void this.loadMap(state.map.key);
       }
     }
+    this.syncNpcs(state.npcs);
     this.syncCharacters(state);
   };
 
@@ -135,8 +136,8 @@ export class GameEngine {
       this.currentMap = map;
       this.cameraX = 0;
       this.cameraY = 0;
-      this.syncNpcs(key);
       const state = gameStore.getSnapshot();
+      this.syncNpcs(state.npcs);
       this.syncCharacters(state, true);
       this.reportViewport();
       if (state.portalTransition !== 'idle') {
@@ -148,17 +149,24 @@ export class GameEngine {
     }
   }
 
-  private syncNpcs(mapKey: string): void {
-    for (const view of this.npcViews.values()) view.destroy();
-    this.npcViews.clear();
-    for (const npc of npcsForMap(mapKey)) {
+  private syncNpcs(npcs: readonly NpcStatePayload[]): void {
+    const expected = new Map(npcs.map((npc) => [npc.id, npc]));
+    for (const [npcId, view] of this.npcViews) {
+      const npc = expected.get(npcId);
+      if (!npc || view.npc.x !== npc.x || view.npc.y !== npc.y || view.npc.name !== npc.name || view.npc.outfitKey !== npc.outfitKey || view.npc.interactionType !== npc.interactionType || view.npc.interactionRadius !== npc.interactionRadius) {
+        view.destroy();
+        this.npcViews.delete(npcId);
+      }
+    }
+    for (const npc of npcs) {
+      if (this.npcViews.has(npc.id)) continue;
       const view = new NpcView(npc, this.interactWithNpc);
-      this.npcViews.set(npc.key, view);
+      this.npcViews.set(npc.id, view);
       this.npcLayer.addChild(view.container);
     }
   }
 
-  private readonly interactWithNpc = (npc: NpcDefinition): void => {
+  private readonly interactWithNpc = (npc: NpcStatePayload): void => {
     const state = gameStore.getSnapshot();
     const self = state.self;
     if (!self || state.phase !== 'in-world' || !state.socketConnected || state.portalTransition !== 'idle') return;
@@ -166,11 +174,11 @@ export class GameEngine {
     if (distance > npc.interactionRadius) {
       gameStore.addNotification({
         code: 'NPC_TOO_FAR',
-        message: 'Podejdź bliżej do handlarza, aby rozpocząć handel.',
+        message: 'Podejdź bliżej do NPC, aby rozpocząć interakcję.',
       });
       return;
     }
-    if (npc.type === 'MERCHANT') gameStore.setActiveModal('merchant');
+    if (npc.interactionType === 'MERCHANT') gameStore.setActiveModal('merchant');
   };
 
   private syncCharacters(state: GameState, immediate = false): void {
@@ -247,7 +255,7 @@ export class GameEngine {
     if (state.map?.zoneType !== 'SAFE') {
       for (const player of Object.values(state.players)) occupied.add(`${player.x},${player.y}`);
     }
-    for (const npc of npcsForMap(state.map?.key ?? '')) occupied.add(`${npc.x},${npc.y}`);
+    for (const npc of state.npcs) occupied.add(`${npc.x},${npc.y}`);
     const path = findPath(map, { x: self.x, y: self.y }, target, {
       maxPathLength: 96,
       maxVisitedNodes: 4_096,

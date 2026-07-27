@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { KeyedSerialExecutor } from '../../common/utils/keyed-serial-executor.js';
 import { MapModule } from '../maps/map.module.js';
+import { NpcModule } from '../npcs/npc.module.js';
 import { PersistenceModule } from '../persistence/persistence.module.js';
 import { WorldModule } from '../world/world.module.js';
 import { MovementCoordinatorService } from './movement-coordinator.service.js';
@@ -9,7 +10,7 @@ import { PathMovementService } from './path-movement.service.js';
 import { PathfindingService } from './pathfinding.service.js';
 
 @Module({
-  imports: [MapModule, WorldModule, PersistenceModule],
+  imports: [MapModule, NpcModule, WorldModule, PersistenceModule],
   providers: [
     KeyedSerialExecutor,
     PathfindingService,

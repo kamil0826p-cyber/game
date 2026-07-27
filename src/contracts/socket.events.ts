@@ -9,7 +9,9 @@ export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErr
 export interface PublicPlayerState { characterId: string; name: string; characterClass: CharacterClass; level: number; outfitKey: string; mapId: string; x: number; y: number; direction: Direction; combatState: CombatState; }
 export interface SelfCharacterState extends PublicPlayerState, CharacterStats, CurrencyBalance { experience: number; }
 export interface MapStatePayload { id: string; key: string; name: string; width: number; height: number; zoneType: ZoneType; version: number; }
-export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
+export type NpcInteractionType = 'DIALOGUE' | 'MERCHANT' | 'QUEST';
+export interface NpcStatePayload { id: string; key: string; name: string; mapId: string; x: number; y: number; outfitKey: string; interactionType: NpcInteractionType; interactionRadius: number; }
+export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; npcs: NpcStatePayload[]; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
 export interface MovementCommittedPayload { requestId?: string; source: 'DIRECT' | 'PATH'; mapId: string; x: number; y: number; direction: Direction; serverTime: number; portalTransition?: { sourceMapId: string; destinationMapId: string; targetX: number; targetY: number; }; }
 export interface MovementRejectedPayload extends SocketErrorPayload { requestId?: string; retryAfterMs?: number; authoritative: { mapId: string; x: number; y: number; direction: Direction; }; }
 export interface SessionReadyPayload { realm: { id: string; slug: string; name: string }; requiresCharacter: boolean; serverTime: number; }
@@ -49,7 +51,7 @@ export interface ServerToClientEvents {
   'world:playerEntered': (payload: PublicPlayerState) => void;
   'world:playerMoved': (payload: PublicPlayerState & { serverTime: number }) => void;
   'world:playerLeft': (payload: { characterId: string }) => void;
-  'world:mapChanged': (payload: { map: MapStatePayload; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[]; serverTime: number; }) => void;
+  'world:mapChanged': (payload: { map: MapStatePayload; npcs: NpcStatePayload[]; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[]; serverTime: number; }) => void;
   'movement:committed': (payload: MovementCommittedPayload) => void;
   'movement:rejected': (payload: MovementRejectedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;

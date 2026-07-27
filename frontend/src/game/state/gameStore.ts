@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { CharacterClass, Coordinates, MapStatePayload, PublicPlayerState, RealmState, SelfCharacterState } from '../../contracts/game';
-import type { InventorySnapshot, MovementCommittedPayload, MovementRejectedPayload, SessionReadyPayload, SocketErrorPayload, WorldSpawnPayload } from '../../contracts/socket';
+import type { InventorySnapshot, MovementCommittedPayload, MovementRejectedPayload, NpcStatePayload, SessionReadyPayload, SocketErrorPayload, WorldSpawnPayload } from '../../contracts/socket';
 
 export type GamePhase = 'idle' | 'connecting' | 'character-required' | 'character-select' | 'in-world' | 'reconnecting' | 'fatal';
 export type PortalTransitionState = 'idle' | 'fade-out' | 'loading' | 'fade-in';
@@ -9,11 +9,11 @@ export interface ClientNotification extends SocketErrorPayload { id: string; cre
 export interface GameState {
   phase: GamePhase; socketConnected: boolean; desiredInWorld: boolean; realm: RealmState | undefined;
   allowedClasses: CharacterClass[]; self: SelfCharacterState | undefined; map: MapStatePayload | undefined;
-  players: Readonly<Record<string, PublicPlayerState>>; unlockedOutfits: Array<{ key: string; unlockLevel: number }>;
+  npcs: readonly NpcStatePayload[]; players: Readonly<Record<string, PublicPlayerState>>; unlockedOutfits: Array<{ key: string; unlockLevel: number }>;
   movementStepMs: number; plannedPath: readonly Coordinates[]; portalTransition: PortalTransitionState;
   activeModal: ModalKey; notifications: readonly ClientNotification[]; fatalError: string | undefined;
 }
-const initialState = (): GameState => ({ phase: 'idle', socketConnected: false, desiredInWorld: false, realm: undefined, allowedClasses: [], self: undefined, map: undefined, players: {}, unlockedOutfits: [], movementStepMs: 200, plannedPath: [], portalTransition: 'idle', activeModal: null, notifications: [], fatalError: undefined });
+const initialState = (): GameState => ({ phase: 'idle', socketConnected: false, desiredInWorld: false, realm: undefined, allowedClasses: [], self: undefined, map: undefined, npcs: [], players: {}, unlockedOutfits: [], movementStepMs: 200, plannedPath: [], portalTransition: 'idle', activeModal: null, notifications: [], fatalError: undefined });
 
 class GameStore {
   private state: GameState = initialState();
@@ -25,13 +25,13 @@ class GameStore {
   markConnected(): void { this.patch({ socketConnected: true }); }
   setSessionReady(payload: SessionReadyPayload): void { this.patch({ realm: payload.realm, phase: payload.requiresCharacter ? 'character-required' : 'connecting' }); }
   requireCharacter(allowedClasses: CharacterClass[]): void { this.patch({ phase: 'character-required', allowedClasses: [...allowedClasses] }); }
-  spawn(payload: WorldSpawnPayload): void { this.patch({ phase: this.state.desiredInWorld ? 'in-world' : 'character-select', socketConnected: true, self: payload.self, map: payload.map, players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), unlockedOutfits: [...payload.unlockedOutfits], movementStepMs: payload.movementStepMs, plannedPath: [], portalTransition: 'idle', activeModal: null, fatalError: undefined }); }
+  spawn(payload: WorldSpawnPayload): void { this.patch({ phase: this.state.desiredInWorld ? 'in-world' : 'character-select', socketConnected: true, self: payload.self, map: payload.map, npcs: [...payload.npcs], players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), unlockedOutfits: [...payload.unlockedOutfits], movementStepMs: payload.movementStepMs, plannedPath: [], portalTransition: 'idle', activeModal: null, fatalError: undefined }); }
   enterWorld(): void { if (this.state.self && this.state.map) this.patch({ desiredInWorld: true, phase: 'in-world' }); }
   markDisconnected(reason?: string): void { if (this.state.phase === 'idle') return; this.patch({ socketConnected: false, phase: this.state.desiredInWorld ? 'reconnecting' : 'connecting', plannedPath: [], activeModal: null }); if (reason && reason !== 'io client disconnect') this.addNotification({ code: 'SOCKET_DISCONNECTED', message: reason }); }
   setFatalError(message: string): void { this.patch({ phase: 'fatal', socketConnected: false, fatalError: message }); }
   commitMovement(payload: MovementCommittedPayload): void { const self = this.state.self; if (!self) return; this.patch({ self: { ...self, mapId: payload.mapId, x: payload.x, y: payload.y, direction: payload.direction }, plannedPath: this.consumePath(payload.x, payload.y), portalTransition: payload.portalTransition ? 'fade-out' : this.state.portalTransition }); }
   rejectMovement(payload: MovementRejectedPayload): void { const self = this.state.self; this.patch({ self: self ? { ...self, mapId: payload.authoritative.mapId, x: payload.authoritative.x, y: payload.authoritative.y, direction: payload.authoritative.direction } : self, plannedPath: [] }); if (payload.code !== 'MOVE_TOO_FAST') this.addNotification(payload); }
-  changeMap(payload: { map: MapStatePayload; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[] }): void { this.patch({ map: payload.map, self: payload.self, players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), plannedPath: [], portalTransition: 'loading', activeModal: null }); }
+  changeMap(payload: { map: MapStatePayload; npcs: NpcStatePayload[]; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[] }): void { this.patch({ map: payload.map, npcs: [...payload.npcs], self: payload.self, players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), plannedPath: [], portalTransition: 'loading', activeModal: null }); }
   setPortalTransition(portalTransition: PortalTransitionState): void { this.patch({ portalTransition }); }
   setPlannedPath(path: readonly Coordinates[]): void { this.patch({ plannedPath: [...path] }); }
   clearPlannedPath(): void { if (this.state.plannedPath.length > 0) this.patch({ plannedPath: [] }); }
