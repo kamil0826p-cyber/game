@@ -1,5 +1,9 @@
 import type { CharacterClass, Direction, MapStatePayload, PublicPlayerState, RealmState, SelfCharacterState } from './game';
 
+export type EquipmentSlot = 'HEAD' | 'CHEST' | 'LEGS' | 'FEET' | 'MAIN_HAND' | 'OFF_HAND' | 'AMULET' | 'RING';
+export type ItemCategory = 'EQUIPMENT' | 'CONSUMABLE' | 'MATERIAL' | 'QUEST';
+export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; }
+export interface InventorySnapshot { capacity: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
 export interface CreateCharacterPayload { requestId: string; name: string; characterClass: CharacterClass; }
@@ -27,6 +31,12 @@ export interface ClientToServerEvents {
   'movement:stop': (payload: MoveStopPayload, acknowledgement: (response: SocketAck<MovementStopPayload>) => void) => void;
   'visibility:viewport': (payload: ViewportUpdatePayload, acknowledgement: (response: SocketAck<VisibilityViewportPayload>) => void) => void;
   'chat:send': (payload: ChatSendPayload, acknowledgement: (response: SocketAck<ChatMessagePayload>) => void) => void;
+  'inventory:get': (payload: { requestId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:move': (payload: { requestId: string; itemId: string; targetSlotIndex: number }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:equip': (payload: { requestId: string; itemId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:unequip': (payload: { requestId: string; itemId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:use': (payload: { requestId: string; itemId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'inventory:discard': (payload: { requestId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
 }
 
 export interface ServerToClientEvents {
