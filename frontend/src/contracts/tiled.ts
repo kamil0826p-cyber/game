@@ -80,6 +80,7 @@ export interface LoadedMapDefinition {
   tileWidth: number;
   tileHeight: number;
   ground: readonly number[];
+  obstacles: readonly number[];
   collision: Uint8Array;
   portals: readonly ClientPortal[];
 }
