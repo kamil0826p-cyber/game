@@ -1,3 +1,4 @@
+import { gunzipSync, inflateSync } from 'node:zlib';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { EmbeddedPortalDefinition, TiledLayer, TiledMapJson, TiledObject, TiledObjectLayer, TiledProperty, TiledTileLayer } from './tiled-map.types.js';
 
@@ -11,17 +12,37 @@ const isTileLayer = (layer: TiledLayer): layer is TiledTileLayer => isRecord(lay
 const isObjectLayer = (layer: TiledLayer): layer is TiledObjectLayer => isRecord(layer) && layer.type === 'objectgroup';
 const isPortalLayer = (layer: TiledObjectLayer): boolean => layer.name.toLowerCase() === 'portals' || propertyValue(layer.properties, 'portals') === true;
 
+const decodeLayer = (layer: unknown): unknown => {
+  if (!isRecord(layer) || layer.type !== 'tilelayer' || typeof layer.data !== 'string') return layer;
+  if (layer.encoding !== 'base64') return invalid(`Tile layer ${String(layer.name ?? '')} uses an unsupported encoding.`);
+  const encoded = Buffer.from(layer.data.replace(/\s+/g, ''), 'base64');
+  let bytes: Buffer;
+  if (layer.compression === undefined || layer.compression === '') bytes = encoded;
+  else if (layer.compression === 'zlib') bytes = inflateSync(encoded);
+  else if (layer.compression === 'gzip') bytes = gunzipSync(encoded);
+  else return invalid(`Tile layer ${String(layer.name ?? '')} uses unsupported compression ${String(layer.compression)}.`);
+  if (bytes.byteLength % 4 !== 0) return invalid(`Tile layer ${String(layer.name ?? '')} has invalid binary data.`);
+  const data = Array.from({ length: bytes.byteLength / 4 }, (_, index) => bytes.readUInt32LE(index * 4));
+  return { ...layer, data };
+};
+
+const decodeMapPayload = (input: unknown): unknown => {
+  if (!isRecord(input) || !Array.isArray(input.layers)) return input;
+  return { ...input, layers: input.layers.map(decodeLayer) };
+};
+
 export const parseTiledMap = (input: unknown): TiledMapJson => {
-  if (!isRecord(input)) return invalid('The Tiled map root must be an object.');
-  const { width, height, tilewidth, tileheight, layers, type, orientation, infinite, tilesets } = input;
-  if (type !== 'map' || orientation !== 'orthogonal' || infinite !== false || !Number.isInteger(width) || !Number.isInteger(height) || !Number.isInteger(tilewidth) || !Number.isInteger(tileheight) || Number(width) <= 0 || Number(height) <= 0 || Number(tilewidth) <= 0 || Number(tileheight) <= 0 || !Array.isArray(layers) || !Array.isArray(tilesets) || !hasValidProperties(input.properties)) return invalid('The Tiled map dimensions, tilesets, or layers are invalid.');
+  const decoded = decodeMapPayload(input);
+  if (!isRecord(decoded)) return invalid('The Tiled map root must be an object.');
+  const { width, height, tilewidth, tileheight, layers, type, orientation, infinite, tilesets } = decoded;
+  if (type !== 'map' || orientation !== 'orthogonal' || infinite !== false || !Number.isInteger(width) || !Number.isInteger(height) || !Number.isInteger(tilewidth) || !Number.isInteger(tileheight) || Number(width) <= 0 || Number(height) <= 0 || Number(tilewidth) <= 0 || Number(tileheight) <= 0 || !Array.isArray(layers) || !Array.isArray(tilesets) || !hasValidProperties(decoded.properties)) return invalid('The Tiled map dimensions, tilesets, or layers are invalid.');
   for (const layer of layers) {
     if (!isRecord(layer) || typeof layer.name !== 'string' || typeof layer.type !== 'string' || !hasValidProperties(layer.properties)) return invalid('Every Tiled layer must include string name and type fields.');
     if (layer.type === 'tilelayer' && (!Number.isInteger(layer.width) || !Number.isInteger(layer.height) || !Array.isArray(layer.data) || !layer.data.every((tile) => Number.isInteger(tile) && Number(tile) >= 0))) return invalid(`Tile layer ${layer.name} is malformed.`);
     if (layer.type === 'objectgroup' && (!Array.isArray(layer.objects) || !layer.objects.every((object) => isRecord(object) && (object.x === undefined || typeof object.x === 'number') && (object.y === undefined || typeof object.y === 'number') && (object.width === undefined || typeof object.width === 'number') && (object.height === undefined || typeof object.height === 'number') && hasValidProperties(object.properties)))) return invalid(`Object layer ${layer.name} contains a malformed object.`);
     if (layer.type !== 'tilelayer' && layer.type !== 'objectgroup') return invalid(`Unsupported Tiled layer type: ${layer.type}.`);
   }
-  return input as unknown as TiledMapJson;
+  return decoded as unknown as TiledMapJson;
 };
 
 const markRectangle = (grid: Uint8Array, map: TiledMapJson, object: TiledObject): void => {
@@ -48,7 +69,7 @@ export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
   }
   for (const tileset of map.tilesets ?? []) for (const tile of tileset.tiles ?? []) if (propertyValue(tile.properties, 'collides') === true) {
     collisionSourceCount += 1;
-    for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if (gid === tileset.firstgid + tile.id) grid[index] = 1; });
+    for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if ((gid & 0x1fffffff) === tileset.firstgid + tile.id) grid[index] = 1; });
   }
   if (collisionSourceCount === 0) return invalid('At least one collision tile layer, object layer, or collidable tile property is required.');
   for (const layer of map.layers.filter(isObjectLayer).filter(isPortalLayer)) for (const object of layer.objects) {
