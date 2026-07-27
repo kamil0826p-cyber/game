@@ -13,7 +13,7 @@ export const parseTiledMap = (input: unknown): TiledMapJson => {
   for (const layer of layers) {
     if (!isRecord(layer) || typeof layer.name !== 'string' || typeof layer.type !== 'string' || !isProperties(layer.properties)) throw new Error('Every Tiled layer must include a name and type.');
     if (layer.type === 'tilelayer' && (!Number.isInteger(layer.width) || !Number.isInteger(layer.height) || !Array.isArray(layer.data) || !layer.data.every((tile) => Number.isInteger(tile) && Number(tile) >= 0))) throw new Error(`Tile layer ${layer.name} is malformed.`);
-    if (layer.type === 'objectgroup' && (!Array.isArray(layer.objects) || !layer.objects.every((object) => isRecord(object) && (object.x === undefined || typeof object.x === 'number') && (object.y === undefined || typeof object.y === 'number') && (object.width === undefined || typeof object.width === 'number') && (object.height === undefined || typeof object.height === 'number') && !(!isProperties(object.properties))))) throw new Error(`Object layer ${layer.name} is malformed.`);
+    if (layer.type === 'objectgroup' && (!Array.isArray(layer.objects) || !layer.objects.every((object) => isRecord(object) && (object.x === undefined || typeof object.x === 'number') && (object.y === undefined || typeof object.y === 'number') && (object.width === undefined || typeof object.width === 'number') && (object.height === undefined || typeof object.height === 'number') && isProperties(object.properties)))) throw new Error(`Object layer ${layer.name} is malformed.`);
     if (layer.type !== 'tilelayer' && layer.type !== 'objectgroup') throw new Error(`Unsupported Tiled layer type: ${layer.type}.`);
   }
   return input as unknown as TiledMapJson;
@@ -21,8 +21,7 @@ export const parseTiledMap = (input: unknown): TiledMapJson => {
 
 const compileLayers = (map: TiledMapJson): CompiledTileLayer[] => map.layers.filter(isTileLayer).filter((layer) => layer.visible !== false && propertyValue(layer.properties, 'collision') !== true).map((layer) => {
   if (layer.width !== map.width || layer.height !== map.height || layer.data.length !== map.width * map.height) throw new Error(`Layer ${layer.name} does not match map dimensions.`);
-  const requestedBand = propertyValue(layer.properties, 'renderBand');
-  return { name: layer.name, band: requestedBand === 'above' ? 'above' : 'below', opacity: typeof layer.opacity === 'number' ? layer.opacity : 1, data: layer.data };
+  return { name: layer.name, band: propertyValue(layer.properties, 'renderBand') === 'above' ? 'above' : 'below', opacity: typeof layer.opacity === 'number' ? layer.opacity : 1, data: layer.data };
 });
 
 const markRectangle = (grid: Uint8Array, map: TiledMapJson, object: TiledObject): void => {
@@ -40,6 +39,11 @@ const compileCollision = (map: TiledMapJson): Uint8Array => {
     if (isObjectLayer(layer) && (layer.name.toLowerCase() === 'collisions' || propertyValue(layer.properties, 'collision') === true)) layer.objects.forEach((object) => markRectangle(grid, map, object));
   }
   for (const tileset of map.tilesets) for (const tile of tileset.tiles ?? []) if (propertyValue(tile.properties, 'collides') === true) for (const layer of map.layers.filter(isTileLayer)) layer.data.forEach((gid, index) => { if (gid === tileset.firstgid + tile.id) grid[index] = 1; });
+  for (const layer of map.layers.filter(isObjectLayer).filter((item) => item.name.toLowerCase() === 'portals' || propertyValue(item.properties, 'portals') === true)) for (const object of layer.objects) {
+    const x = Math.floor((object.x ?? 0) / map.tilewidth);
+    const y = Math.floor((object.y ?? 0) / map.tileheight);
+    if (x >= 0 && y >= 0 && x < map.width && y < map.height) grid[y * map.width + x] = 0;
+  }
   return grid;
 };
 
