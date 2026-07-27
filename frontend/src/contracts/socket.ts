@@ -2,8 +2,10 @@ import type { CharacterClass, Direction, MapStatePayload, PublicPlayerState, Rea
 
 export type EquipmentSlot = 'HEAD' | 'CHEST' | 'LEGS' | 'FEET' | 'MAIN_HAND' | 'OFF_HAND' | 'AMULET' | 'RING';
 export type ItemCategory = 'EQUIPMENT' | 'CONSUMABLE' | 'MATERIAL' | 'QUEST';
-export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; }
-export interface InventorySnapshot { capacity: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
+export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; buyPriceSilver: number; sellPriceSilver: number; sellable: boolean; }
+export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
+export interface MerchantItemPayload { definitionKey: string; name: string; description: string; icon: string; stackLimit: number; buyPriceSilver: number; sellPriceSilver: number; }
+export interface MerchantSnapshot { merchant: { id: string; key: string; name: string }; silver: number; items: MerchantItemPayload[]; inventory: InventorySnapshot; }
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
 export interface CreateCharacterPayload { requestId: string; name: string; characterClass: CharacterClass; }
@@ -37,6 +39,9 @@ export interface ClientToServerEvents {
   'inventory:unequip': (payload: { requestId: string; itemId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:use': (payload: { requestId: string; itemId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:discard': (payload: { requestId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'merchant:get': (payload: { requestId: string }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:buy': (payload: { requestId: string; itemKey: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:sell': (payload: { requestId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
 }
 
 export interface ServerToClientEvents {
