@@ -8,23 +8,6 @@ const VERTICAL_FLIP = 0x40000000;
 const DIAGONAL_FLIP = 0x20000000;
 const GID_MASK = 0x0fffffff;
 
-const mapPalette: Readonly<
-  Record<string, { ground: number; groundAccent: number; wall: number; wallAccent: number }>
-> = {
-  greenfields: {
-    ground: 0x355e38,
-    groundAccent: 0x27472e,
-    wall: 0x59624f,
-    wallAccent: 0x9aab86,
-  },
-  'crystal-cave': {
-    ground: 0x302b45,
-    groundAccent: 0x242038,
-    wall: 0x4d5270,
-    wallAccent: 0x8793c9,
-  },
-};
-
 const tileGid = (rawGid: number): number => (rawGid >>> 0) & GID_MASK;
 
 const applyTileTransform = (sprite: Sprite, rawGid: number): void => {
@@ -32,13 +15,11 @@ const applyTileTransform = (sprite: Sprite, rawGid: number): void => {
   const horizontal = (unsignedGid & HORIZONTAL_FLIP) !== 0;
   const vertical = (unsignedGid & VERTICAL_FLIP) !== 0;
   const diagonal = (unsignedGid & DIAGONAL_FLIP) !== 0;
-
   if (!diagonal) {
     if (horizontal) sprite.scale.x *= -1;
     if (vertical) sprite.scale.y *= -1;
     return;
   }
-
   if (horizontal && vertical) {
     sprite.rotation = Math.PI / 2;
     sprite.scale.x *= -1;
@@ -49,6 +30,24 @@ const applyTileTransform = (sprite: Sprite, rawGid: number): void => {
   } else {
     sprite.rotation = Math.PI / 2;
     sprite.scale.y *= -1;
+  }
+};
+
+const assertTextureCoverage = (
+  map: LoadedMapDefinition,
+  textures: ReadonlyMap<number, Texture>,
+): void => {
+  const missing = new Set<number>();
+  for (const layer of map.renderLayers) {
+    for (const rawGid of layer.data) {
+      const gid = tileGid(rawGid);
+      if (gid !== 0 && !textures.has(gid)) missing.add(gid);
+    }
+  }
+  if (missing.size > 0) {
+    throw new Error(
+      `Map ${map.key} references tile GIDs without graphics: ${[...missing].sort((a, b) => a - b).join(', ')}.`,
+    );
   }
 };
 
@@ -67,17 +66,11 @@ export class MapRenderer {
   async load(map: LoadedMapDefinition): Promise<boolean> {
     const sequence = ++this.loadSequence;
     const textures = await gameAssetLoader.getTileTextures(map);
-    if (this.destroyed || sequence !== this.loadSequence) {
-      return false;
-    }
-
+    if (this.destroyed || sequence !== this.loadSequence) return false;
+    assertTextureCoverage(map, textures);
     this.destroyChildren();
     this.map = map;
-    if (textures && textures.size > 0) {
-      this.renderTexturedMap(map, textures);
-    } else {
-      this.renderPrimitiveMap(map);
-    }
+    this.renderTexturedMap(map, textures);
     this.renderPortals(map);
     return true;
   }
@@ -99,19 +92,14 @@ export class MapRenderer {
   }
 
   destroy(): void {
-    if (this.destroyed) {
-      return;
-    }
+    if (this.destroyed) return;
     this.destroyed = true;
     this.loadSequence += 1;
     this.destroyChildren();
     this.container.destroy({ children: true });
   }
 
-  private renderTexturedMap(
-    map: LoadedMapDefinition,
-    textures: ReadonlyMap<number, Texture>,
-  ): void {
+  private renderTexturedMap(map: LoadedMapDefinition, textures: ReadonlyMap<number, Texture>): void {
     for (const layer of map.renderLayers) {
       this.container.addChildAt(
         this.renderTileLayer(map, layer, textures),
@@ -131,17 +119,12 @@ export class MapRenderer {
     const pixelScaleY = WORLD_TILE_SIZE / map.tileHeight;
     const layerPixelOffsetX = layer.pixelOffsetX * pixelScaleX;
     const layerPixelOffsetY = layer.pixelOffsetY * pixelScaleY;
-
     for (let localY = 0; localY < layer.height; localY += 1) {
       for (let localX = 0; localX < layer.width; localX += 1) {
         const rawGid = layer.data[localY * layer.width + localX] ?? 0;
-        if (rawGid === 0) {
-          continue;
-        }
+        if (rawGid === 0) continue;
         const texture = textures.get(tileGid(rawGid));
-        if (!texture) {
-          continue;
-        }
+        if (!texture) continue;
         const sprite = new Sprite(texture);
         sprite.anchor.set(0.5);
         sprite.position.set(
@@ -155,28 +138,6 @@ export class MapRenderer {
       }
     }
     return layerContainer;
-  }
-
-  private renderPrimitiveMap(map: LoadedMapDefinition): void {
-    const palette = mapPalette[map.key] ?? mapPalette.greenfields!;
-    const graphics = new Graphics();
-    for (let y = 0; y < map.height; y += 1) {
-      for (let x = 0; x < map.width; x += 1) {
-        const left = x * WORLD_TILE_SIZE;
-        const top = y * WORLD_TILE_SIZE;
-        const checker = (x + y) % 2 === 0;
-        graphics
-          .rect(left, top, WORLD_TILE_SIZE, WORLD_TILE_SIZE)
-          .fill({ color: checker ? palette.ground : palette.groundAccent });
-        if (map.collision[y * map.width + x] === 1) {
-          graphics
-            .roundRect(left + 2, top + 2, WORLD_TILE_SIZE - 4, WORLD_TILE_SIZE - 4, 6)
-            .fill({ color: palette.wall })
-            .stroke({ color: palette.wallAccent, width: 2, alpha: 0.55 });
-        }
-      }
-    }
-    this.container.addChildAt(graphics, 0);
   }
 
   private renderPortals(map: LoadedMapDefinition): void {
@@ -200,14 +161,10 @@ export class MapRenderer {
   private destroyChildren(): void {
     const children = this.container.removeChildren();
     for (const child of children) {
-      if (child !== this.portalLayer) {
-        child.destroy({ children: true });
-      }
+      if (child !== this.portalLayer) child.destroy({ children: true });
     }
     this.portalLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.portalGraphics.length = 0;
-    if (!this.portalLayer.parent) {
-      this.container.addChild(this.portalLayer);
-    }
+    if (!this.portalLayer.parent) this.container.addChild(this.portalLayer);
   }
 }
