@@ -2,6 +2,8 @@ import type { LoadedMapDefinition } from '../../contracts/tiled';
 import { fetchJsonResource, publicAssetUrl } from '../../utils/httpJson';
 import { compileMapDefinition, parseTiledMap } from './tiledMap';
 
+const assetCacheMode: RequestCache = import.meta.env.DEV ? 'no-store' : 'force-cache';
+
 class MapRepository {
   private readonly cache = new Map<string, Promise<LoadedMapDefinition>>();
 
@@ -12,7 +14,7 @@ class MapRepository {
     }
 
     const url = publicAssetUrl(`maps/${encodeURIComponent(key)}.json`);
-    const loading = fetchJsonResource(url, `Map ${key}`, { cache: 'force-cache' })
+    const loading = fetchJsonResource(url, `Map ${key}`, { cache: assetCacheMode })
       .then(parseTiledMap)
       .then((source) => compileMapDefinition(key, source, url))
       .catch((error: unknown) => {
