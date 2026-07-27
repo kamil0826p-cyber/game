@@ -13,6 +13,21 @@ export type CombatState = (typeof COMBAT_STATES)[number];
 export const CURRENCY_TYPES = ['SILVER', 'GOLD'] as const;
 export type CurrencyType = (typeof CURRENCY_TYPES)[number];
 
+export const EQUIPMENT_SLOTS = [
+  'HEAD',
+  'CHEST',
+  'LEGS',
+  'FEET',
+  'MAIN_HAND',
+  'OFF_HAND',
+  'AMULET',
+  'RING',
+] as const;
+export type EquipmentSlot = (typeof EQUIPMENT_SLOTS)[number];
+
+export const ITEM_CATEGORIES = ['EQUIPMENT', 'CONSUMABLE', 'MATERIAL', 'QUEST'] as const;
+export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
+
 export interface CurrencyBalance {
   silver: number;
   gold: number;
