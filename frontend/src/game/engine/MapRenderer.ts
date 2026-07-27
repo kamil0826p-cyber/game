@@ -35,17 +35,12 @@ export class MapRenderer {
   async load(map: LoadedMapDefinition): Promise<boolean> {
     const sequence = ++this.loadSequence;
     const textures = await gameAssetLoader.getTileTextures(map.key);
-    if (this.destroyed || sequence !== this.loadSequence) {
-      return false;
-    }
+    if (this.destroyed || sequence !== this.loadSequence) return false;
 
     this.destroyChildren();
     this.map = map;
-    if (textures) {
-      this.renderTexturedMap(map, textures);
-    } else {
-      this.renderPrimitiveMap(map);
-    }
+    if (textures) this.renderTexturedMap(map, textures);
+    else this.renderPrimitiveMap(map);
     this.renderPortals(map);
     return true;
   }
@@ -67,9 +62,7 @@ export class MapRenderer {
   }
 
   destroy(): void {
-    if (this.destroyed) {
-      return;
-    }
+    if (this.destroyed) return;
     this.destroyed = true;
     this.loadSequence += 1;
     this.destroyChildren();
@@ -93,8 +86,10 @@ export class MapRenderer {
           sprite.height = WORLD_TILE_SIZE;
           groundLayer.addChild(sprite);
         }
-        if (map.collision[index] === 1) {
-          const obstacleTexture = textures.get(2);
+
+        const obstacleGid = map.obstacles[index] ?? 0;
+        if (obstacleGid !== 0) {
+          const obstacleTexture = textures.get(obstacleGid);
           if (obstacleTexture) {
             const obstacle = new Sprite(obstacleTexture);
             obstacle.position.set(x * WORLD_TILE_SIZE, y * WORLD_TILE_SIZE);
@@ -152,14 +147,10 @@ export class MapRenderer {
   private destroyChildren(): void {
     const children = this.container.removeChildren();
     for (const child of children) {
-      if (child !== this.portalLayer) {
-        child.destroy({ children: true });
-      }
+      if (child !== this.portalLayer) child.destroy({ children: true });
     }
     this.portalLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.portalGraphics.length = 0;
-    if (!this.portalLayer.parent) {
-      this.container.addChild(this.portalLayer);
-    }
+    if (!this.portalLayer.parent) this.container.addChild(this.portalLayer);
   }
 }
