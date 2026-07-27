@@ -2,7 +2,7 @@ import type { Socket, Namespace } from 'socket.io';
 import type { AuthContext } from '../auth/auth-context.interface.js';
 import type { CharacterClass, CharacterStats, CombatState, CurrencyBalance, Direction, EquipmentSlot, ItemCategory, ZoneType } from '../common/domain/game.types.js';
 import type { SupportedLocale } from '../i18n/localization.service.js';
-import type { ChatSendPayload, CreateCharacterPayload, InventoryDiscardPayload, InventoryItemPayload as InventoryItemCommandPayload, InventoryMovePayload, InventoryRequestPayload, MoveStepPayload, MoveStopPayload, MoveTargetPayload, ViewportUpdatePayload } from './socket.schemas.js';
+import type { ChatSendPayload, CreateCharacterPayload, InventoryDiscardPayload, InventoryItemPayload as InventoryItemCommandPayload, InventoryMovePayload, InventoryRequestPayload, MerchantBuyPayload, MerchantSellPayload, MoveStepPayload, MoveStopPayload, MoveTargetPayload, ViewportUpdatePayload } from './socket.schemas.js';
 
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
@@ -15,8 +15,10 @@ export interface MovementRejectedPayload extends SocketErrorPayload { requestId?
 export interface SessionReadyPayload { realm: { id: string; slug: string; name: string }; requiresCharacter: boolean; serverTime: number; }
 export type ChatChannel = 'GLOBAL' | 'LOCAL';
 export interface ChatMessagePayload { id: string; channel: ChatChannel; characterId: string; author: string; text: string; mapId: string; sentAt: number; }
-export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; }
-export interface InventorySnapshot { capacity: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
+export interface InventoryItemPayload { id: string; definitionKey: string; name: string; description: string; category: ItemCategory; icon: string; quantity: number; stackLimit: number; slotIndex: number; equippedSlot?: EquipmentSlot; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; usable: boolean; buyPriceSilver: number; sellPriceSilver: number; sellable: boolean; }
+export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: { hp: number; maxHp: number; energy: number; maxEnergy: number }; }
+export interface MerchantItemPayload { definitionKey: string; name: string; description: string; icon: string; stackLimit: number; buyPriceSilver: number; sellPriceSilver: number; }
+export interface MerchantSnapshot { merchant: { id: string; key: string; name: string }; silver: number; items: MerchantItemPayload[]; inventory: InventorySnapshot; }
 
 export interface ClientToServerEvents {
   'character:create': (payload: CreateCharacterPayload, acknowledgement?: (response: SocketAck<WorldSpawnPayload>) => void) => void;
@@ -32,6 +34,9 @@ export interface ClientToServerEvents {
   'inventory:unequip': (payload: InventoryItemCommandPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:use': (payload: InventoryItemCommandPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:discard': (payload: InventoryDiscardPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
+  'merchant:get': (payload: InventoryRequestPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:buy': (payload: MerchantBuyPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:sell': (payload: MerchantSellPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
 }
 
 export interface ServerToClientEvents {
