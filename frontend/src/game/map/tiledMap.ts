@@ -119,11 +119,9 @@ export const parseTiledMap = (input: unknown): TiledMapJson => {
   return input as unknown as TiledMapJson;
 };
 
-const compileCollision = (map: TiledMapJson): Uint8Array => {
-  const layers = map.layers.filter((layer): layer is TiledTileLayer => {
-    if (!isTileLayer(layer)) {
-      return false;
-    }
+const collisionLayers = (map: TiledMapJson): TiledTileLayer[] =>
+  map.layers.filter((layer): layer is TiledTileLayer => {
+    if (!isTileLayer(layer)) return false;
     const normalizedName = layer.name.toLowerCase();
     return (
       normalizedName === 'collision' ||
@@ -132,12 +130,18 @@ const compileCollision = (map: TiledMapJson): Uint8Array => {
     );
   });
 
+const compileCollisionData = (
+  map: TiledMapJson,
+): { collision: Uint8Array; obstacles: number[] } => {
+  const layers = collisionLayers(map);
   if (layers.length === 0) {
     throw new Error('The map must include at least one collision tile layer.');
   }
 
   const tileCount = map.width * map.height;
   const collision = new Uint8Array(tileCount);
+  const obstacles = new Array<number>(tileCount).fill(0);
+
   for (const layer of layers) {
     if (
       layer.width !== map.width ||
@@ -149,10 +153,12 @@ const compileCollision = (map: TiledMapJson): Uint8Array => {
     layer.data.forEach((tile, index) => {
       if (tile !== 0) {
         collision[index] = 1;
+        obstacles[index] = tile;
       }
     });
   }
-  return collision;
+
+  return { collision, obstacles };
 };
 
 const extractPortals = (map: TiledMapJson): ClientPortal[] => {
@@ -166,9 +172,7 @@ const extractPortals = (map: TiledMapJson): ClientPortal[] => {
   const portals: ClientPortal[] = [];
   for (const layer of portalLayers) {
     for (const object of layer.objects) {
-      if (object.type && object.type.toLowerCase() !== 'portal') {
-        continue;
-      }
+      if (object.type && object.type.toLowerCase() !== 'portal') continue;
       portals.push({
         sourceX: integerProperty(
           object,
@@ -201,6 +205,7 @@ export const compileMapDefinition = (
     throw new Error(`Map ${key} must include a full-size ground layer.`);
   }
 
+  const { collision, obstacles } = compileCollisionData(source);
   return {
     key,
     source,
@@ -209,7 +214,8 @@ export const compileMapDefinition = (
     tileWidth: source.tilewidth,
     tileHeight: source.tileheight,
     ground: groundLayer.data,
-    collision: compileCollision(source),
+    obstacles,
+    collision,
     portals: extractPortals(source),
   };
 };
