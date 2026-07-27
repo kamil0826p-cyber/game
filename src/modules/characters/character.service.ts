@@ -14,6 +14,10 @@ import type {
   StartingCharacterTemplate,
 } from './character.types.js';
 
+const FIRST_USER_BOOTSTRAP_LOCK = 927_401_003;
+const FIRST_USER_SILVER = 100_000;
+const FIRST_USER_GOLD = 1_000;
+
 const STARTING_TEMPLATES: Readonly<Record<CharacterClass, StartingCharacterTemplate>> = {
   MAGE: { hp: 75, maxHp: 75, energy: 120, maxEnergy: 120, strength: 4, agility: 7, intelligence: 14, armor: 2 },
   WARRIOR: { hp: 130, maxHp: 130, energy: 70, maxEnergy: 70, strength: 14, agility: 7, intelligence: 3, armor: 8 },
@@ -28,23 +32,42 @@ export class CharacterService {
   ) {}
 
   async synchronizeFirebaseUser(auth: AuthContext): Promise<FirebaseUserRecord> {
-    const user = await this.prisma.user.upsert({
-      where: { firebaseUid: auth.firebaseUid },
-      create: { firebaseUid: auth.firebaseUid, email: auth.email, displayName: auth.displayName },
-      update: { email: auth.email, displayName: auth.displayName },
-      select: { id: true, firebaseUid: true, email: true, displayName: true },
+    const user = await this.prisma.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${FIRST_USER_BOOTSTRAP_LOCK})`);
+      const synchronized = await transaction.user.upsert({
+        where: { firebaseUid: auth.firebaseUid },
+        create: { firebaseUid: auth.firebaseUid, email: auth.email, displayName: auth.displayName },
+        update: { email: auth.email, displayName: auth.displayName },
+        select: { id: true, firebaseUid: true, email: true, displayName: true, role: true },
+      });
+      const firstUser = await transaction.user.findFirst({
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { id: true },
+      });
+      if (firstUser?.id !== synchronized.id || synchronized.role === 'ADMIN') return synchronized;
+      return transaction.user.update({
+        where: { id: synchronized.id },
+        data: { role: 'ADMIN' },
+        select: { id: true, firebaseUid: true, email: true, displayName: true, role: true },
+      });
     });
     return {
       id: user.id,
       firebaseUid: user.firebaseUid,
       email: user.email ?? undefined,
       displayName: user.displayName ?? undefined,
+      role: user.role,
     };
   }
 
   async findCharacterForCurrentRealm(userId: string): Promise<PersistedCharacterState | undefined> {
     const realm = await this.realmService.getCurrentRealm();
-    const character = await this.prisma.character.findUnique({
+    let character = await this.prisma.character.findUnique({
+      where: { userId_realmId: { userId, realmId: realm.id } },
+    });
+    if (!character) return undefined;
+    await this.applyFirstUserBootstrap(userId, character.id);
+    character = await this.prisma.character.findUnique({
       where: { userId_realmId: { userId, realmId: realm.id } },
     });
     return character ? this.toPersistedState(character) : undefined;
@@ -100,7 +123,9 @@ export class CharacterService {
           },
         });
       });
-      return this.toPersistedState(character);
+      await this.applyFirstUserBootstrap(userId, character.id);
+      const refreshed = await this.prisma.character.findUniqueOrThrow({ where: { id: character.id } });
+      return this.toPersistedState(refreshed);
     } catch (error) {
       if (error instanceof GameError) throw error;
       if (this.isUniqueConstraintError(error)) {
@@ -115,6 +140,67 @@ export class CharacterService {
       }
       throw error;
     }
+  }
+
+  private async applyFirstUserBootstrap(userId: string, characterId: string): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${FIRST_USER_BOOTSTRAP_LOCK})`);
+      const user = await transaction.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, firstUserBootstrapAt: true },
+      });
+      if (!user || user.role !== 'ADMIN' || user.firstUserBootstrapAt) return;
+      const firstUser = await transaction.user.findFirst({
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { id: true },
+      });
+      if (firstUser?.id !== user.id) return;
+      const character = await transaction.character.findFirst({
+        where: { id: characterId, userId },
+        select: { id: true, silver: true, gold: true },
+      });
+      if (!character) return;
+
+      const silverAfter = character.silver + FIRST_USER_SILVER;
+      const goldAfter = character.gold + FIRST_USER_GOLD;
+      await transaction.character.update({
+        where: { id: character.id },
+        data: {
+          silver: { increment: FIRST_USER_SILVER },
+          gold: { increment: FIRST_USER_GOLD },
+          stateVersion: { increment: 1 },
+          lastSavedAt: new Date(),
+        },
+      });
+      await transaction.characterCurrencyLedger.createMany({
+        data: [
+          {
+            characterId: character.id,
+            operationId: 'temporary-first-user-bootstrap-silver',
+            currency: 'SILVER',
+            direction: 'CREDIT',
+            amount: FIRST_USER_SILVER,
+            reason: 'TEMPORARY_FIRST_USER_BOOTSTRAP',
+            balanceAfter: silverAfter,
+            metadata: { temporary: true, userRole: 'ADMIN' },
+          },
+          {
+            characterId: character.id,
+            operationId: 'temporary-first-user-bootstrap-gold',
+            currency: 'GOLD',
+            direction: 'CREDIT',
+            amount: FIRST_USER_GOLD,
+            reason: 'TEMPORARY_FIRST_USER_BOOTSTRAP',
+            balanceAfter: goldAfter,
+            metadata: { temporary: true, userRole: 'ADMIN' },
+          },
+        ],
+      });
+      await transaction.user.update({
+        where: { id: user.id },
+        data: { firstUserBootstrapAt: new Date() },
+      });
+    });
   }
 
   private toPersistedState(character: {
