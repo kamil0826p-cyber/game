@@ -35,8 +35,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const parseTileset = (input: unknown, label: string): TiledTilesetJson => {
   if (
     !isRecord(input) ||
-    typeof input.image !== 'string' ||
-    input.image.trim().length === 0 ||
     !Number.isInteger(input.tilewidth) ||
     Number(input.tilewidth) <= 0 ||
     !Number.isInteger(input.tileheight) ||
@@ -44,9 +42,25 @@ const parseTileset = (input: unknown, label: string): TiledTilesetJson => {
     !Number.isInteger(input.tilecount) ||
     Number(input.tilecount) <= 0 ||
     !Number.isInteger(input.columns) ||
-    Number(input.columns) <= 0
+    Number(input.columns) < 0
   ) {
     throw new Error(`Tiled tileset ${label} is malformed.`);
+  }
+
+  const hasAtlas = typeof input.image === 'string' && input.image.trim().length > 0;
+  const hasImageCollection =
+    Array.isArray(input.tiles) &&
+    input.tiles.length > 0 &&
+    input.tiles.every(
+      (tile) =>
+        isRecord(tile) &&
+        Number.isInteger(tile.id) &&
+        Number(tile.id) >= 0 &&
+        typeof tile.image === 'string' &&
+        tile.image.trim().length > 0,
+    );
+  if (!hasAtlas && !hasImageCollection) {
+    throw new Error(`Tiled tileset ${label} must define an atlas image or tile images.`);
   }
   return input as unknown as TiledTilesetJson;
 };
@@ -108,6 +122,21 @@ class GameAssetLoader {
         const textures = new Map<number, Texture>();
         await Promise.all(
           tilesets.map(async ({ firstGid, definition, baseUrl }) => {
+            if (definition.tiles && definition.tiles.length > 0) {
+              await Promise.all(
+                definition.tiles.map(async (tile) => {
+                  const imageUrl = new URL(tile.image, baseUrl).toString();
+                  const texture = await Assets.load<Texture>(imageUrl);
+                  texture.source.scaleMode = 'nearest';
+                  textures.set(firstGid + tile.id, texture);
+                }),
+              );
+              return;
+            }
+
+            if (!definition.image || definition.columns <= 0) {
+              throw new Error('Atlas tileset is missing its image or columns.');
+            }
             const imageUrl = new URL(definition.image, baseUrl).toString();
             const baseTexture = await Assets.load<Texture>(imageUrl);
             baseTexture.source.scaleMode = 'nearest';
