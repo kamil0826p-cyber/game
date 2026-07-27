@@ -2,6 +2,8 @@
 
 Maps are authored in Tiled and committed as static JSON. The authoritative server copy lives in `prisma/maps`; the browser copy lives in `frontend/public/maps`. Keep both copies synchronized.
 
+Practical step-by-step instructions in Polish are available in [`TILED_WORKFLOW.md`](./TILED_WORKFLOW.md).
+
 ## Supported Tiled settings
 
 The runtime accepts finite orthogonal maps with positive dimensions. Supported layers are `tilelayer`, `objectgroup`, and `group`. Parent group visibility, opacity, `renderBand`, tile offsets (`x`, `y`), and pixel offsets (`offsetx`, `offsety`) are inherited by child layers.
