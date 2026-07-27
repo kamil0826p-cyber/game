@@ -99,7 +99,10 @@ W aktualnym drzewie działa to tak:
 - kafel korony nie ma `collides=true` ani obiektu kolizji,
 - dlatego postać może wejść pod koronę i zostaje przez nią częściowo zasłonięta,
 - kafel pnia ma footprint w edytorze kolizji kafla,
-- footprint obejmuje dwa pola wysokości, więc blokuje dolną i górną fizyczną część pnia.
+- footprint obejmuje tylko dolne pole podstawy,
+- górna część pnia jest celowo przechodnia, dzięki czemu postać może wejść wizualnie za pień i pod koronę.
+
+To jest wybór projektowy dla aktualnych drzew. Dla innego obiektu możesz narysować wyższy albo szerszy footprint, jeżeli cała jego fizyczna część ma blokować ruch.
 
 To jest zalecany model także dla budynków:
 
@@ -152,6 +155,8 @@ W panelu Tilesets:
 Kolizja jest automatycznie stosowana do każdej instancji tego kafla na mapie.
 
 Dla dużego obiektu zaznacz całą fizyczną część, przez którą postać nie może przejść. Nie zaznaczaj elementów czysto wizualnych, takich jak korona drzewa albo dach, jeżeli postać ma móc wejść pod nie.
+
+W przypadku aktualnego pnia drzewa footprint obejmuje tylko dolne `32×32` piksele podstawy. Górna część grafiki nie jest kolizją.
 
 ### Ważne: kolizja działa na siatce pól
 
