@@ -3,27 +3,17 @@ import { z } from 'zod';
 
 const booleanFromEnvironment = (defaultValue: boolean) =>
   z.preprocess((value: unknown) => {
-    if (value === undefined || value === '') {
-      return defaultValue;
-    }
-    if (typeof value === 'boolean') {
-      return value;
-    }
+    if (value === undefined || value === '') return defaultValue;
+    if (typeof value === 'boolean') return value;
     const normalized = String(value).toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-      return true;
-    }
-    if (['0', 'false', 'no', 'off'].includes(normalized)) {
-      return false;
-    }
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
     return value;
   }, z.boolean());
 
 const integerFromEnvironment = (defaultValue: number, minimum: number, maximum: number) =>
   z.preprocess((value: unknown) => {
-    if (value === undefined || value === '') {
-      return defaultValue;
-    }
+    if (value === undefined || value === '') return defaultValue;
     return Number(value);
   }, z.number().int().min(minimum).max(maximum));
 
@@ -43,8 +33,8 @@ const environmentSchema = z.object({
   MAX_FOV_HALF_WIDTH: integerFromEnvironment(24, 1, 128),
   MAX_FOV_HALF_HEIGHT: integerFromEnvironment(18, 1, 128),
   SPATIAL_BUCKET_SIZE: integerFromEnvironment(16, 4, 128),
-  MAX_PATH_STEPS: integerFromEnvironment(96, 1, 512),
-  MAX_PATH_NODES: integerFromEnvironment(4096, 64, 65536),
+  MAX_PATH_STEPS: integerFromEnvironment(192, 1, 512),
+  MAX_PATH_NODES: integerFromEnvironment(16_384, 64, 65_536),
   SOCKET_MAX_PAYLOAD_BYTES: integerFromEnvironment(65_536, 1024, 1_048_576),
   SOCKET_PING_INTERVAL_MS: integerFromEnvironment(25_000, 5000, 120_000),
   SOCKET_PING_TIMEOUT_MS: integerFromEnvironment(20_000, 5000, 120_000),
@@ -64,17 +54,11 @@ export class GameConfigService {
 
   constructor() {
     const parsed = environmentSchema.safeParse(process.env);
-    if (!parsed.success) {
-      throw new Error(`Invalid environment configuration: ${parsed.error.message}`);
-    }
+    if (!parsed.success) throw new Error(`Invalid environment configuration: ${parsed.error.message}`);
     this.environment = parsed.data;
 
-    if (this.environment.FOV_HALF_WIDTH > this.environment.MAX_FOV_HALF_WIDTH) {
-      throw new Error('FOV_HALF_WIDTH cannot exceed MAX_FOV_HALF_WIDTH.');
-    }
-    if (this.environment.FOV_HALF_HEIGHT > this.environment.MAX_FOV_HALF_HEIGHT) {
-      throw new Error('FOV_HALF_HEIGHT cannot exceed MAX_FOV_HALF_HEIGHT.');
-    }
+    if (this.environment.FOV_HALF_WIDTH > this.environment.MAX_FOV_HALF_WIDTH) throw new Error('FOV_HALF_WIDTH cannot exceed MAX_FOV_HALF_WIDTH.');
+    if (this.environment.FOV_HALF_HEIGHT > this.environment.MAX_FOV_HALF_HEIGHT) throw new Error('FOV_HALF_HEIGHT cannot exceed MAX_FOV_HALF_HEIGHT.');
   }
 
   get values(): Readonly<GameEnvironment> {
@@ -82,9 +66,7 @@ export class GameConfigService {
   }
 
   get corsOrigins(): string[] {
-    return this.environment.CORS_ORIGINS.split(',')
-      .map((origin: string) => origin.trim())
-      .filter(Boolean);
+    return this.environment.CORS_ORIGINS.split(',').map((origin: string) => origin.trim()).filter(Boolean);
   }
 
   get isProduction(): boolean {
