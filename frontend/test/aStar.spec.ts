@@ -4,6 +4,7 @@ import { findPath } from '../src/game/pathfinding/aStar';
 
 const map = (collision: number[], width = 5, height = 5): LoadedMapDefinition => ({
   key: 'test',
+  sourceUrl: '/maps/test.json',
   source: {
     type: 'map',
     orientation: 'orthogonal',
@@ -13,12 +14,13 @@ const map = (collision: number[], width = 5, height = 5): LoadedMapDefinition =>
     tilewidth: 32,
     tileheight: 32,
     layers: [],
+    tilesets: [{ firstgid: 1, source: 'tilesets/test.tsj' }],
   } satisfies TiledMapJson,
   width,
   height,
   tileWidth: 32,
   tileHeight: 32,
-  ground: new Array<number>(width * height).fill(1),
+  renderLayers: [],
   collision: Uint8Array.from(collision),
   portals: [],
 });
@@ -45,9 +47,12 @@ describe('findPath', () => {
 
   it('honors dynamic blockers', () => {
     const collision = new Array<number>(25).fill(0);
-    const path = findPath(map(collision), { x: 0, y: 0 }, { x: 2, y: 0 }, {
-      isDynamicallyBlocked: (x, y) => x === 1 && y === 0,
-    });
+    const path = findPath(
+      map(collision),
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+      (x, y) => x === 1 && y === 0,
+    );
     expect(path).toEqual([
       { x: 0, y: 1 },
       { x: 1, y: 1 },
