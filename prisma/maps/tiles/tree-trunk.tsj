@@ -19,7 +19,7 @@
         "name": "Collision",
         "objects": [
           {
-            "height": 32,
+            "height": 64,
             "id": 1,
             "name": "Footprint",
             "rotation": 0,
@@ -27,7 +27,7 @@
             "visible": true,
             "width": 32,
             "x": 0,
-            "y": 53
+            "y": 21
           }
         ],
         "opacity": 1,
