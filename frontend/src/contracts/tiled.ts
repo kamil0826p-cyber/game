@@ -13,6 +13,8 @@ export interface TiledTileLayer {
   width: number;
   height: number;
   data: number[];
+  encoding?: 'base64';
+  compression?: 'zlib' | 'gzip';
   visible?: boolean;
   opacity?: number;
   offsetx?: number;
