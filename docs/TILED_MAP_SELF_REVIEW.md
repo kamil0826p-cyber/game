@@ -3,44 +3,41 @@
 ## Scope reviewed
 
 - Frontend Tiled parsing and rendering.
-- External `.tsj` and tileset image resolution.
+- External `.tsj`, atlas, and collection-of-images resolution.
 - Backend collision, portal, and metadata compilation.
 - Prisma seed discovery and validation.
-- Canonical map ownership and removed duplicates.
 - Greenfields and Crystal Cave example content.
 
-## Findings fixed during review
+## Findings fixed
 
-1. **Collision layers could accidentally render.** The renderer excludes collision-marked layers even when an editor makes them visible.
-2. **Layer dimensions were assumed to match the map.** Finite smaller layers with `x`/`y` offsets are accepted and compiled correctly.
-3. **Nested Tiled groups were ignored.** Parsing, collision compilation, and rendering walk group layers recursively and preserve inherited visibility, opacity, and offsets.
-4. **Only legacy object `type` was recognized.** Portal extraction accepts modern Tiled `class` and legacy `type`.
-5. **Map metadata was duplicated in TypeScript.** Map key, name, zone, spawn, and default-map selection come from Tiled custom properties.
-6. **Backend and frontend map copies could drift.** Prisma seed imports the canonical files from `frontend/public/maps`.
-7. **The seeded merchant position was hardcoded.** The seed reads the `quartermaster` point object from the default map.
-8. **The first example tilesets were not real reusable tilesets.** They embedded one pre-rendered illustration and sliced it into arbitrary fragments. Both examples now use 8x4 semantic atlases with 32 independent 32x32 tiles.
-9. **The maps did not demonstrate normal Tiled authoring.** Greenfields is now painted from separate ground, road, river/bridge, building/nature, collision, portal, and entity layers. Crystal Cave uses separate floor, wall, prop, collision, and portal layers.
-10. **Tile purpose was opaque.** Every TSJ tile now has a `role` custom property such as `grass`, `bridge`, `tree`, `wall-top`, `crystal-cluster`, or `pit`.
+1. **The first version sliced a finished illustration into arbitrary tiles.** It was technically addressable by GID but unsuitable for normal map editing.
+2. **The second version still kept every tile in one atlas file.** Both example tilesets now use Tiled Collection of Images with one independent SVG file per tile ID.
+3. **Asset loading failures were hidden.** The loader previously caught every tileset/image error and the renderer silently drew a primitive checkerboard. Tile errors now propagate with a descriptive message.
+4. **Unknown GIDs were silently skipped.** The renderer now checks every non-zero visual GID before drawing and reports GIDs without graphics.
+5. **Tile purpose was opaque.** Every tile has a descriptive filename and a `role` custom property.
+6. **Layer and gameplay metadata remain separate.** Collision, portals, spawns, and entities are still authored independently from visual graphics.
 
-## Tileset usage verified
+## Final tileset structure
 
-- Greenfields uses distinct GIDs for grass variants, horizontal and vertical roads, a crossing, water, bridge, trees, bushes, rocks, buildings, cave entrance, flowers, lamp, crate, well, bench, and reeds.
-- Crystal Cave uses distinct GIDs for floor variants, side and top walls, exit, stalagmites, crystals, rocks, bridge, mushroom, spikes, pit, chest, and crystal spires.
-- All layer GIDs are within the declared 32-tile range.
-- Collision remains data-only and does not depend on the visual tile role.
+- `greenfields.tsj` has `columns: 0`, no top-level `image`, and 24 tile entries with 24 separate image paths.
+- `crystal-cave.tsj` has `columns: 0`, no top-level `image`, and 16 tile entries with 16 separate image paths.
+- The old `greenfields.svg` and `crystal-cave.svg` atlas files are removed.
+- Object and decoration graphics use transparent backgrounds where they are intended to be layered over terrain.
+- Map GIDs remain stable, so the existing authored layer placement continues to select the same semantic tiles.
 
 ## Remaining constraints
 
 - Infinite/chunked maps are not supported.
-- Base64 and compressed tile-layer data are not supported; save JSON layers as integer arrays.
+- Base64 and compressed tile-layer data are not supported.
 - Image layers, tile animations, wang sets, and object templates are not rendered.
-- Tile flip combinations are handled in the Pixi renderer, but screenshot regression tests would still be valuable.
-- Map data is imported during seeding; live hot reload is not implemented.
+- Live hot reload of seeded map data is not implemented.
 
 ## Validation performed
 
-- Parsed both map JSON files and both external TSJ files locally.
-- Checked dimensions, layer lengths, GID ranges, map metadata, spawn coordinates, portal coordinates, reciprocal destinations, and collision sources.
-- Verified Greenfields uses 18 visual tile GIDs across four visible tile layers.
-- Verified Crystal Cave uses 14 visual tile GIDs across three visible tile layers.
-- Reviewed the branch diff against the merged `main`; only the two maps, two TSJ files, two SVG atlases, and this review document are changed.
+- Checked both TSJ files contain no atlas image and use Collection of Images metadata.
+- Checked all declared tile IDs are unique and contiguous.
+- Checked all 40 referenced SVG paths exist on the branch.
+- Checked every individual SVG is a 32x32 standalone graphic.
+- Reviewed URL resolution relative to the external TSJ file.
+- Reviewed renderer coverage checks and removal of the silent primitive fallback.
+- Kept map JSON, portal coordinates, spawn coordinates, collision data, and layer GIDs unchanged.
