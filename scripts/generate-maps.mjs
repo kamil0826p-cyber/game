@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const WIDTH = 48;
-const HEIGHT = 30;
+const WIDTH = 96;
+const HEIGHT = 64;
 const TILE = 32;
 
 const property = (name, value) => ({
@@ -12,6 +12,7 @@ const property = (name, value) => ({
 });
 const properties = (values) => Object.entries(values).map(([name, value]) => property(name, value));
 const index = (x, y) => y * WIDTH + x;
+const inBounds = (x, y) => x >= 0 && y >= 0 && x < WIDTH && y < HEIGHT;
 const layer = (id, name, data, renderBand = 'below') => ({
   id,
   name,
@@ -22,6 +23,15 @@ const layer = (id, name, data, renderBand = 'below') => ({
   visible: true,
   opacity: 1,
   properties: properties({ renderBand }),
+});
+const objectLayer = (id, name, objects, values) => ({
+  id,
+  name,
+  type: 'objectgroup',
+  visible: name !== 'Collisions',
+  opacity: 1,
+  objects,
+  properties: properties(values),
 });
 const borderCollisions = () => [
   { id: 1, name: 'North wall', type: 'collision', x: 0, y: 0, width: WIDTH * TILE, height: TILE },
@@ -35,7 +45,7 @@ const root = (layers) => ({
   width: WIDTH,
   infinite: false,
   layers,
-  nextlayerid: 92,
+  nextlayerid: 100,
   nextobjectid: 1000,
   orientation: 'orthogonal',
   renderorder: 'right-down',
@@ -61,12 +71,17 @@ const root = (layers) => ({
   }],
 });
 
-const random = (seed) => {
-  let value = seed >>> 0;
-  return () => {
-    value = (value * 1664525 + 1013904223) >>> 0;
-    return value / 0x100000000;
-  };
+const paintRect = (data, x1, y1, x2, y2, gid) => {
+  for (let y = Math.max(0, y1); y <= Math.min(HEIGHT - 1, y2); y += 1) {
+    for (let x = Math.max(0, x1); x <= Math.min(WIDTH - 1, x2); x += 1) data[index(x, y)] = gid;
+  }
+};
+const paintHorizontal = (data, x1, x2, y, width, gid) => paintRect(data, x1, y, x2, y + width - 1, gid);
+const paintVertical = (data, x, y1, y2, width, gid) => paintRect(data, x, y1, x + width - 1, y2, gid);
+const hash = (x, y, seed) => {
+  let value = Math.imul(x + seed, 374761393) ^ Math.imul(y + seed * 3, 668265263);
+  value = Math.imul(value ^ (value >>> 13), 1274126177);
+  return (value ^ (value >>> 16)) >>> 0;
 };
 
 const generateGreenfields = () => {
@@ -75,49 +90,83 @@ const generateGreenfields = () => {
   const trunks = Array(WIDTH * HEIGHT).fill(0);
   const canopies = Array(WIDTH * HEIGHT).fill(0);
 
-  for (let y = 1; y < HEIGHT - 1; y += 1) for (const x of [23, 24]) paths[index(x, y)] = 2;
-  for (let x = 1; x < WIDTH - 1; x += 1) for (const y of [14, 15]) paths[index(x, y)] = 2;
-  for (let x = 5; x <= 18; x += 1) paths[index(x, 7)] = 2;
-  for (let y = 7; y <= 14; y += 1) paths[index(18, y)] = 2;
-  for (let x = 29; x <= 42; x += 1) paths[index(x, 22)] = 2;
-  for (let y = 15; y <= 22; y += 1) paths[index(29, y)] = 2;
+  paintHorizontal(paths, 1, WIDTH - 2, 31, 2, 2);
+  paintVertical(paths, 47, 1, HEIGHT - 2, 2, 2);
+  paintHorizontal(paths, 9, 47, 7, 2, 2);
+  paintVertical(paths, 8, 4, 8, 2, 2);
+  paintHorizontal(paths, 8, 20, 4, 2, 2);
+  paintHorizontal(paths, 37, 59, 23, 2, 2);
+  paintHorizontal(paths, 37, 59, 41, 2, 2);
+  paintVertical(paths, 37, 23, 42, 2, 2);
+  paintVertical(paths, 58, 23, 42, 2, 2);
+  paintHorizontal(paths, 48, 77, 14, 2, 2);
+  paintVertical(paths, 76, 14, 31, 2, 2);
+  paintHorizontal(paths, 18, 47, 51, 2, 2);
+  paintVertical(paths, 18, 32, 52, 2, 2);
 
-  const reserved = new Set(['9,7', '7,5', '46,15', '45,15']);
-  const treePositions = [];
+  const reserved = new Set();
+  const reserveRect = (x1, y1, x2, y2) => {
+    for (let y = y1; y <= y2; y += 1) for (let x = x1; x <= x2; x += 1) reserved.add(`${x},${y}`);
+  };
+  reserveRect(2, 2, 23, 12);
+  reserveRect(34, 20, 62, 44);
+  reserveRect(88, 27, 95, 37);
+  reserveRect(4, 28, 15, 38);
+  reserveRect(78, 46, 91, 58);
+
+  const canPlaceTree = (x, y) => {
+    if (!inBounds(x, y) || !inBounds(x, y - 1) || y < 2 || y >= HEIGHT - 1) return false;
+    if (reserved.has(`${x},${y}`) || reserved.has(`${x},${y - 1}`)) return false;
+    if (paths[index(x, y)] !== 0 || paths[index(x, y - 1)] !== 0) return false;
+    for (let yy = y - 2; yy <= y + 2; yy += 1) {
+      for (let xx = x - 2; xx <= x + 2; xx += 1) {
+        if (!inBounds(xx, yy)) continue;
+        if (trunks[index(xx, yy)] !== 0 || canopies[index(xx, yy)] !== 0) return false;
+      }
+    }
+    return true;
+  };
   const addTree = (x, y) => {
-    if (paths[index(x, y)] !== 0 || reserved.has(`${x},${y}`) || trunks[index(x, y)] !== 0) return;
+    if (!canPlaceTree(x, y)) return;
     trunks[index(x, y)] = 3;
     canopies[index(x, y - 1)] = 4;
-    treePositions.push([x, y]);
   };
-  const rng = random(8026);
-  for (let y = 3; y < HEIGHT - 3; y += 1) {
-    for (let x = 3; x < WIDTH - 3; x += 1) if (rng() < 0.075) addTree(x, y);
-  }
-  for (const [x, y] of [[4, 4], [6, 4], [13, 4], [16, 5], [33, 4], [36, 5], [40, 7], [5, 20], [9, 23], [15, 21], [35, 20], [40, 24]]) addTree(x, y);
+  const forestEllipse = (cx, cy, rx, ry, seed, density = 68) => {
+    for (let y = Math.max(2, cy - ry); y <= Math.min(HEIGHT - 2, cy + ry); y += 2) {
+      for (let x = Math.max(2, cx - rx); x <= Math.min(WIDTH - 3, cx + rx); x += 2) {
+        const dx = (x - cx) / rx;
+        const dy = (y - cy) / ry;
+        if (dx * dx + dy * dy > 1) continue;
+        if (hash(x, y, seed) % 100 < density) addTree(x, y);
+      }
+    }
+  };
 
-  const collisions = [
-    ...borderCollisions(),
-    ...treePositions.map(([x, y], offset) => ({ id: 100 + offset, name: 'Tree trunk', type: 'collision', x: x * TILE, y: y * TILE, width: TILE, height: TILE })),
-  ];
+  forestEllipse(24, 20, 20, 15, 11, 78);
+  forestEllipse(73, 19, 19, 14, 17, 76);
+  forestEllipse(26, 49, 20, 12, 23, 74);
+  forestEllipse(70, 50, 22, 12, 31, 76);
+  forestEllipse(8, 50, 7, 10, 37, 70);
+  forestEllipse(88, 12, 7, 10, 41, 72);
+
   const portal = {
     id: 500,
-    name: 'East passage',
+    name: 'Eastern cave road',
     type: 'portal',
     x: (WIDTH - 1) * TILE,
-    y: 15 * TILE,
+    y: 32 * TILE,
     width: TILE,
     height: TILE,
-    properties: properties({ destinationMapKey: 'crystal-cave', targetX: 1, targetY: 15 }),
+    properties: properties({ destinationMapKey: 'crystal-cave', targetX: 1, targetY: 32 }),
   };
 
   return root([
-    layer(1, 'Ground', ground),
-    layer(2, 'Paths and bridges', paths),
+    layer(1, 'Grassland', ground),
+    layer(2, 'Road Network', paths),
     layer(3, 'Tree Trunks', trunks),
     layer(4, 'Tree Canopies', canopies, 'above'),
-    { id: 90, name: 'Collisions', type: 'objectgroup', visible: false, opacity: 1, objects: collisions, properties: properties({ collision: true }) },
-    { id: 91, name: 'Portals', type: 'objectgroup', visible: true, opacity: 1, objects: [portal], properties: properties({ portals: true }) },
+    objectLayer(90, 'Collisions', borderCollisions(), { collision: true }),
+    objectLayer(91, 'Portals', [portal], { portals: true }),
   ]);
 };
 
@@ -125,46 +174,101 @@ const generateCrystalCave = () => {
   const ground = Array(WIDTH * HEIGHT).fill(5);
   const paths = Array(WIDTH * HEIGHT).fill(0);
   const rocks = Array(WIDTH * HEIGHT).fill(0);
+  const protectedTiles = new Set();
 
-  for (let x = 1; x < WIDTH - 1; x += 1) for (const y of [14, 15]) paths[index(x, y)] = 2;
-  for (let y = 3; y < HEIGHT - 3; y += 1) for (const x of [10, 11]) paths[index(x, y)] = 2;
-  for (let x = 11; x <= 34; x += 1) paths[index(x, 6)] = 2;
-  for (let y = 6; y <= 14; y += 1) paths[index(34, y)] = 2;
-
-  const reserved = new Set(['1,15', '2,15', '3,3']);
-  const rockPositions = [];
-  const addRock = (x, y) => {
-    if (paths[index(x, y)] !== 0 || reserved.has(`${x},${y}`) || rocks[index(x, y)] !== 0) return;
-    rocks[index(x, y)] = 6;
-    rockPositions.push([x, y]);
+  const protectRect = (x1, y1, x2, y2, pathGid = 0) => {
+    for (let y = Math.max(1, y1); y <= Math.min(HEIGHT - 2, y2); y += 1) {
+      for (let x = Math.max(1, x1); x <= Math.min(WIDTH - 2, x2); x += 1) {
+        protectedTiles.add(`${x},${y}`);
+        if (pathGid !== 0) paths[index(x, y)] = pathGid;
+      }
+    }
   };
-  const rng = random(4242);
-  for (let y = 2; y < HEIGHT - 2; y += 1) {
-    for (let x = 2; x < WIDTH - 2; x += 1) if (rng() < 0.065) addRock(x, y);
-  }
-  for (const [x, y] of [[5, 5], [6, 5], [7, 5], [19, 4], [21, 8], [29, 5], [38, 6], [41, 10], [5, 22], [16, 24], [31, 21], [40, 24]]) addRock(x, y);
+  const protectEllipse = (cx, cy, rx, ry) => {
+    for (let y = cy - ry; y <= cy + ry; y += 1) {
+      for (let x = cx - rx; x <= cx + rx; x += 1) {
+        if (!inBounds(x, y)) continue;
+        const dx = (x - cx) / rx;
+        const dy = (y - cy) / ry;
+        if (dx * dx + dy * dy <= 1) protectedTiles.add(`${x},${y}`);
+      }
+    }
+  };
 
-  const collisions = [
-    ...borderCollisions(),
-    ...rockPositions.map(([x, y], offset) => ({ id: 100 + offset, name: 'Crystal rock', type: 'collision', x: x * TILE, y: y * TILE, width: TILE, height: TILE })),
-  ];
+  protectRect(1, 30, 94, 34, 2);
+  protectRect(18, 5, 22, 32, 2);
+  protectRect(46, 31, 50, 59, 2);
+  protectRect(72, 14, 76, 50, 2);
+  protectRect(20, 12, 48, 16, 2);
+  protectRect(48, 48, 74, 52, 2);
+  protectRect(74, 18, 90, 22, 2);
+  protectRect(3, 3, 21, 7, 2);
+  protectEllipse(20, 16, 10, 8);
+  protectEllipse(48, 32, 13, 10);
+  protectEllipse(74, 18, 11, 8);
+  protectEllipse(74, 49, 12, 9);
+  protectEllipse(8, 5, 6, 4);
+
+  const canAddRock = (x, y) => inBounds(x, y) && x > 0 && y > 0 && x < WIDTH - 1 && y < HEIGHT - 1 && !protectedTiles.has(`${x},${y}`);
+  const addRock = (x, y) => { if (canAddRock(x, y)) rocks[index(x, y)] = 6; };
+  const rockEllipse = (cx, cy, rx, ry) => {
+    for (let y = cy - ry; y <= cy + ry; y += 1) {
+      for (let x = cx - rx; x <= cx + rx; x += 1) {
+        const dx = (x - cx) / rx;
+        const dy = (y - cy) / ry;
+        if (dx * dx + dy * dy <= 1) addRock(x, y);
+      }
+    }
+  };
+  const rockRing = (cx, cy, rx, ry, thickness = 2) => {
+    const innerRx = Math.max(1, rx - thickness);
+    const innerRy = Math.max(1, ry - thickness);
+    for (let y = cy - ry; y <= cy + ry; y += 1) {
+      for (let x = cx - rx; x <= cx + rx; x += 1) {
+        const outer = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2;
+        const inner = ((x - cx) / innerRx) ** 2 + ((y - cy) / innerRy) ** 2;
+        if (outer <= 1 && inner >= 1) addRock(x, y);
+      }
+    }
+  };
+
+  rockRing(20, 16, 13, 11, 3);
+  rockRing(48, 32, 17, 14, 3);
+  rockRing(74, 18, 14, 11, 3);
+  rockRing(74, 49, 16, 12, 3);
+  rockEllipse(34, 7, 9, 5);
+  rockEllipse(57, 9, 8, 6);
+  rockEllipse(88, 8, 6, 7);
+  rockEllipse(8, 20, 7, 8);
+  rockEllipse(34, 55, 10, 6);
+  rockEllipse(58, 58, 8, 4);
+  rockEllipse(90, 51, 5, 9);
+  rockEllipse(8, 52, 6, 8);
+  paintRect(rocks, 2, 58, 26, 61, 6);
+  paintRect(rocks, 81, 2, 93, 5, 6);
+
+  for (const tile of protectedTiles) {
+    const [x, y] = tile.split(',').map(Number);
+    rocks[index(x, y)] = 0;
+  }
+
   const portal = {
     id: 500,
-    name: 'West passage',
+    name: 'Western cave mouth',
     type: 'portal',
     x: 0,
-    y: 15 * TILE,
+    y: 32 * TILE,
     width: TILE,
     height: TILE,
-    properties: properties({ destinationMapKey: 'greenfields', targetX: WIDTH - 2, targetY: 15 }),
+    properties: properties({ destinationMapKey: 'greenfields', targetX: WIDTH - 2, targetY: 32 }),
   };
 
   return root([
-    layer(1, 'Ground', ground),
-    layer(2, 'Paths and bridges', paths),
-    layer(3, 'Rocks', rocks),
-    { id: 90, name: 'Collisions', type: 'objectgroup', visible: false, opacity: 1, objects: collisions, properties: properties({ collision: true }) },
-    { id: 91, name: 'Portals', type: 'objectgroup', visible: true, opacity: 1, objects: [portal], properties: properties({ portals: true }) },
+    layer(1, 'Cave Floor', ground),
+    layer(2, 'Cave Trails', paths),
+    layer(3, 'Rock Formations', rocks),
+    objectLayer(90, 'Collisions', borderCollisions(), { collision: true }),
+    objectLayer(91, 'Portals', [portal], { portals: true }),
   ]);
 };
 
