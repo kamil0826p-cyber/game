@@ -1,8 +1,8 @@
 # Tiled Map Workflow
 
-The canonical map sources live in `frontend/public/maps`. Open the `.json` files directly in Tiled. The Prisma seed imports those same files, so there is no second backend copy to keep synchronized.
+The canonical map sources live in `frontend/public/maps`. Open the `.json` files directly in Tiled. Prisma seed imports those same files, so there is no backend copy to synchronize.
 
-The current runtime supports finite orthogonal maps exported as JSON with uncompressed integer-array tile data. Infinite chunked maps, base64/compressed layer data, isometric orientation, image layers, and template objects are intentionally rejected with a clear startup error.
+The runtime supports finite orthogonal JSON maps with uncompressed integer-array tile data. Infinite maps, base64/compressed layers, isometric maps, image layers, and object templates are rejected.
 
 ## Files
 
@@ -15,56 +15,55 @@ frontend/public/maps/
     └── crystal-cave.tsj
 
 frontend/public/assets/tiles/
-├── greenfields.svg
-└── crystal-cave.svg
+├── greenfields/
+│   ├── 00-grass.svg
+│   ├── 01-grass-flowers.svg
+│   └── ... one file per tile
+└── crystal-cave/
+    ├── 00-floor.svg
+    ├── 01-floor-rough.svg
+    └── ... one file per tile
 ```
 
-Map JSON references an external `.tsj` tileset. The `.tsj` image path is relative to the tileset file, which works both in Tiled and in the browser.
+The example tilesets use Tiled's **Collection of Images** format. There is no tileset atlas image. Each tile entry in the external `.tsj` contains its own relative `image` path, so every graphic is independently editable and replaceable.
+
+The frontend also supports conventional atlas tilesets, but the included maps intentionally use collections of separate files.
 
 ## Required map properties
 
-Set these custom properties on the map root in Tiled:
+Set these custom properties on the map root:
 
 | Property | Type | Meaning |
 | --- | --- | --- |
-| `key` | string | Stable map key used by database rows and socket payloads |
+| `key` | string | Stable map key |
 | `name` | string | Display name imported by Prisma seed |
 | `zoneType` | string | `SAFE`, `OUTLAW`, or `PVP` |
 | `spawnX` | int | Default spawn tile X |
 | `spawnY` | int | Default spawn tile Y |
 | `default` | bool | Must be `true` on exactly one map |
 
-The seed scans every `.json` file in this directory, validates the properties, imports the map JSON, and normalizes embedded portals into database rows.
-
 ## Visual layers
 
-Every visible tile layer is rendered in Tiled order. Group layers are supported, including inherited visibility, opacity, and pixel offsets.
+Every visible tile layer is rendered in Tiled order. Group visibility, opacity, and offsets are inherited. Collision layers and layers with `render=false` are not rendered.
 
-A layer is omitted from rendering when any of these conditions applies:
+The loader supports:
 
-- The layer or a parent group is hidden.
-- Its effective opacity is zero.
-- It is a collision layer.
-- It has the boolean property `render=false`.
+- external and inline tilesets,
+- atlas tilesets with a top-level `image`,
+- collection-of-images tilesets with an `image` on each tile,
+- Tiled horizontal, vertical, and diagonal GID flags.
 
-External and inline tilesets are supported. Tiled horizontal, vertical, and diagonal GID flags are stripped before texture lookup; simple flip transforms are applied by the Pixi renderer.
+Tile asset failures are not hidden. Missing images, malformed TSJ data, or map GIDs without corresponding graphics now produce a descriptive error instead of silently drawing a primitive checkerboard.
 
 ## Collision
 
-At least one collision source is required. A tile layer or object layer is treated as collision data when:
+A tile or object layer is collision data when its name is `collision`, `collisions`, or `obstacles`, or it has `collision=true`.
 
-- Its name is `collision`, `collisions`, or `obstacles`, case-insensitive.
-- It has a boolean property `collision=true`.
-
-For tile layers, every non-zero cell blocks the corresponding map tile. Layer `x`/`y` offsets and tile-aligned group pixel offsets are respected. Non-aligned pixel offsets are rejected so the client and authoritative backend cannot disagree about collision.
-
-For object layers, axis-aligned rectangles block every tile they overlap. This is useful for large walls or water regions without painting a full tile layer.
-
-Multiple collision sources are combined with logical OR. Keep collision layers hidden in Tiled and add `render=false` for clarity.
+Every non-zero cell on a collision tile layer blocks that map tile. Axis-aligned rectangles on collision object layers block every overlapped tile. Keep collision layers hidden and set `render=false`.
 
 ## Portals
 
-Create an object layer named `Portals`, or set `portals=true` on an object layer. Portal objects should use class or legacy type `portal` and define:
+Create an object layer named `Portals`, or set `portals=true`. Portal objects use class/type `portal` and these properties:
 
 | Property | Type | Required |
 | --- | --- | --- |
@@ -74,17 +73,24 @@ Create an object layer named `Portals`, or set `portals=true` on an object layer
 | `sourceX` | int | no |
 | `sourceY` | int | no |
 
-When source coordinates are omitted, they are derived from the point object's pixel position. Place portal point objects exactly on the tile grid.
+When source coordinates are omitted they are derived from the point object's pixel position.
 
-The seed rejects missing destinations, blocked source tiles, blocked target tiles, and out-of-bounds coordinates. The default map also contains a point object named `quartermaster`; moving that marker in Tiled moves Borin during the next seed.
+## Replacing a tile graphic
+
+1. Open the `.tsj` in Tiled.
+2. Keep the tileset type as **Collection of Images**.
+3. Replace the corresponding file under `frontend/public/assets/tiles/<tileset>/`.
+4. Keep the tile ID stable when existing maps already use it.
+5. Save the map as JSON.
+6. Run `npm run prisma:seed` and frontend tests.
 
 ## Adding a map
 
 1. Create a finite orthogonal JSON map in `frontend/public/maps`.
-2. Create or reuse an external `.tsj` tileset under `frontend/public/maps/tilesets`.
-3. Add all required root properties.
-4. Add visible tile layers, collision data, and portal objects.
-5. Run `npm run prisma:seed` to import and validate the map set.
-6. Run backend and frontend map tests before committing.
+2. Create or reuse an external `.tsj` under `frontend/public/maps/tilesets`.
+3. Add required root properties.
+4. Add visible tile layers, collision data, and portals.
+5. Run `npm run prisma:seed`.
+6. Run backend and frontend map tests.
 
-No TypeScript map registry needs editing. The browser loads `/maps/<key>.json`, while the backend seed discovers map files automatically.
+No TypeScript map registry needs editing. The browser loads `/maps/<key>.json`; Prisma seed discovers map files automatically.
