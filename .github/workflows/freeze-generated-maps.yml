@@ -1,5 +1,5 @@
 name: Freeze generated maps once
-run-name: Freeze generated maps once - second trigger
+run-name: Freeze generated maps once - final trigger
 
 on:
   push:
