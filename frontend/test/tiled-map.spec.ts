@@ -90,6 +90,23 @@ describe('Tiled frontend map compiler', () => {
     expect(map.portals).toEqual([{ sourceX: 0, sourceY: 0, destinationMapKey: 'next-map', targetX: 1, targetY: 1 }]);
   });
 
+  it('aligns collision objects to the full tile image and tileoffset', () => {
+    const source: TiledMapJson = {
+      type: 'map', orientation: 'orthogonal', infinite: false, width: 3, height: 3, tilewidth: 32, tileheight: 32,
+      tilesets: [{
+        firstgid: 1, name: 'canopy-sized-object', tilewidth: 32, tileheight: 32, tileoffset: { x: -42, y: -26 },
+        tiles: [{ id: 0, imagewidth: 116, imageheight: 109, objectgroup: { name: 'Collision', type: 'objectgroup', objects: [{ x: 42, y: 103, width: 32, height: 32 }] } }],
+      }],
+      layers: [
+        { name: 'Props', type: 'tilelayer', width: 3, height: 3, data: [0, 0, 0, 0, 1, 0, 0, 0, 0] },
+        { name: 'Collisions', type: 'objectgroup', properties: [property('collision', true)], objects: [] },
+      ],
+    };
+    const map = compileMapDefinition('offset-map', source);
+    expect(map.collision[1 * map.width + 1]).toBe(1);
+    expect(map.collision[2 * map.width + 1]).toBe(0);
+  });
+
   it('clears every Tiled flip and rotation flag before resolving a tile', () => {
     expect(normalizedGid((TILED_ROTATED_HEXAGONAL_120_FLAG | TILED_FLIPPED_HORIZONTALLY_FLAG | 2) >>> 0)).toBe(2);
   });

@@ -1,6 +1,6 @@
 import { gunzipSync, inflateSync } from 'node:zlib';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
-import type { EmbeddedPortalDefinition, TiledGroupLayer, TiledLayer, TiledMapJson, TiledObject, TiledObjectLayer, TiledProperty, TiledTileLayer } from './tiled-map.types.js';
+import type { EmbeddedPortalDefinition, TiledGroupLayer, TiledLayer, TiledMapJson, TiledObject, TiledObjectLayer, TiledProperty, TiledTileLayer, TiledTilesetReference } from './tiled-map.types.js';
 
 const GID_MASK = 0x0fffffff;
 const invalid = (reason: string): never => { throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason }); };
@@ -83,10 +83,26 @@ const paint = (grid: Uint8Array, map: TiledMapJson, bounds: Bounds, value: 0 | 1
   for (let y = Math.max(0, top); y < Math.min(map.height, bottom); y += 1) for (let x = Math.max(0, left); x < Math.min(map.width, right); x += 1) grid[y * map.width + x] = value;
 };
 
+interface TileCollisionDefinition {
+  tile: NonNullable<NonNullable<TiledMapJson['tilesets']>[number]['tiles']>[number];
+  tileset: TiledTilesetReference;
+}
+
+const tileCollisionOrigin = (map: TiledMapJson, definition: TileCollisionDefinition, cellX: number, cellY: number): { x: number; y: number; width: number; height: number } => {
+  const width = definition.tile.imagewidth ?? definition.tileset.tilewidth ?? map.tilewidth;
+  const height = definition.tile.imageheight ?? definition.tileset.tileheight ?? map.tileheight;
+  return {
+    x: cellX + (definition.tileset.tileoffset?.x ?? 0),
+    y: cellY + map.tileheight - height + (definition.tileset.tileoffset?.y ?? 0),
+    width,
+    height,
+  };
+};
+
 export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
   const grid = new Uint8Array(map.width * map.height);
-  const tileDefinitions = new Map<number, NonNullable<NonNullable<TiledMapJson['tilesets']>[number]['tiles']>[number]>();
-  for (const tileset of map.tilesets ?? []) for (const tile of tileset.tiles ?? []) tileDefinitions.set(tileset.firstgid + tile.id, tile);
+  const tileDefinitions = new Map<number, TileCollisionDefinition>();
+  for (const tileset of map.tilesets ?? []) for (const tile of tileset.tiles ?? []) tileDefinitions.set(tileset.firstgid + tile.id, { tile, tileset });
   let sources = 0;
   walkLayers(map, (layer, context) => {
     if (isObjectLayer(layer) && (normalizedName(layer.name) === 'collisions' || propertyValue(layer.properties, 'collision') === true)) {
@@ -102,10 +118,12 @@ export const compileCollisionGrid = (map: TiledMapJson): Uint8Array => {
       if (!gid) return;
       const x = context.offsetX + (index % layer.width) * map.tilewidth;
       const y = context.offsetY + Math.floor(index / layer.width) * map.tileheight;
-      const tile = tileDefinitions.get(gid);
-      if (collisionLayer || propertyValue(tile?.properties, 'collides') === true) paint(grid, map, { left: x, top: y, right: x + map.tilewidth, bottom: y + map.tileheight }, 1);
-      if (propertyValue(tile?.properties, 'collides') === true) sources += 1;
-      for (const object of tile?.objectgroup?.objects ?? []) { sources += 1; paint(grid, map, objectBounds(object, x, y, map.tilewidth, map.tileheight), 1); }
+      const definition = tileDefinitions.get(gid);
+      if (collisionLayer || propertyValue(definition?.tile.properties, 'collides') === true) paint(grid, map, { left: x, top: y, right: x + map.tilewidth, bottom: y + map.tileheight }, 1);
+      if (propertyValue(definition?.tile.properties, 'collides') === true) sources += 1;
+      if (!definition) return;
+      const origin = tileCollisionOrigin(map, definition, x, y);
+      for (const object of definition.tile.objectgroup?.objects ?? []) { sources += 1; paint(grid, map, objectBounds(object, origin.x, origin.y, origin.width, origin.height), 1); }
     });
   });
   if (sources === 0) return invalid('At least one collision tile layer, object layer, collidable tile, or tile collision object is required.');

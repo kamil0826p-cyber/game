@@ -10,6 +10,7 @@ import type {
   TiledObjectLayer,
   TiledProperty,
   TiledTileLayer,
+  TiledTilesetReference,
 } from '../../contracts/tiled';
 
 export const TILED_FLIPPED_HORIZONTALLY_FLAG = 0x80000000;
@@ -153,10 +154,26 @@ const paint = (grid: Uint8Array, map: TiledMapJson, bounds: Bounds, value: 0 | 1
   for (let y = Math.max(0, top); y < Math.min(map.height, bottom); y += 1) for (let x = Math.max(0, left); x < Math.min(map.width, right); x += 1) grid[y * map.width + x] = value;
 };
 
+interface TileCollisionDefinition {
+  tile: NonNullable<TiledMapJson['tilesets'][number]['tiles']>[number];
+  tileset: TiledTilesetReference;
+}
+
+const tileCollisionOrigin = (map: TiledMapJson, definition: TileCollisionDefinition, cellX: number, cellY: number): { x: number; y: number; width: number; height: number } => {
+  const width = definition.tile.imagewidth ?? definition.tileset.tilewidth ?? map.tilewidth;
+  const height = definition.tile.imageheight ?? definition.tileset.tileheight ?? map.tileheight;
+  return {
+    x: cellX + (definition.tileset.tileoffset?.x ?? 0),
+    y: cellY + map.tileheight - height + (definition.tileset.tileoffset?.y ?? 0),
+    width,
+    height,
+  };
+};
+
 const compileCollision = (map: TiledMapJson): Uint8Array => {
   const grid = new Uint8Array(map.width * map.height);
-  const tileDefinitions = new Map<number, NonNullable<TiledMapJson['tilesets'][number]['tiles']>[number]>();
-  for (const tileset of map.tilesets) for (const tile of tileset.tiles ?? []) tileDefinitions.set(tileset.firstgid + tile.id, tile);
+  const tileDefinitions = new Map<number, TileCollisionDefinition>();
+  for (const tileset of map.tilesets) for (const tile of tileset.tiles ?? []) tileDefinitions.set(tileset.firstgid + tile.id, { tile, tileset });
   walkLayers(map, (layer, context) => {
     if (isObjectLayer(layer) && (normalizedName(layer.name) === 'collisions' || propertyValue(layer.properties, 'collision') === true)) {
       for (const object of layer.objects) paint(grid, map, objectBounds(object, context.offsetX, context.offsetY, map.tilewidth, map.tileheight), 1);
@@ -169,9 +186,11 @@ const compileCollision = (map: TiledMapJson): Uint8Array => {
       if (!gid) return;
       const x = context.offsetX + (index % layer.width) * map.tilewidth;
       const y = context.offsetY + Math.floor(index / layer.width) * map.tileheight;
-      const tile = tileDefinitions.get(gid);
-      if (collisionLayer || propertyValue(tile?.properties, 'collides') === true) paint(grid, map, { left: x, top: y, right: x + map.tilewidth, bottom: y + map.tileheight }, 1);
-      for (const object of tile?.objectgroup?.objects ?? []) paint(grid, map, objectBounds(object, x, y, map.tilewidth, map.tileheight), 1);
+      const definition = tileDefinitions.get(gid);
+      if (collisionLayer || propertyValue(definition?.tile.properties, 'collides') === true) paint(grid, map, { left: x, top: y, right: x + map.tilewidth, bottom: y + map.tileheight }, 1);
+      if (!definition) return;
+      const origin = tileCollisionOrigin(map, definition, x, y);
+      for (const object of definition.tile.objectgroup?.objects ?? []) paint(grid, map, objectBounds(object, origin.x, origin.y, origin.width, origin.height), 1);
     });
   });
   walkLayers(map, (layer, context) => {

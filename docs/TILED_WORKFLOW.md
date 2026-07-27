@@ -80,9 +80,9 @@ Typ właściwości: `string`.
 
 Właściwość można ustawić także na grupie warstw. Dzieci dziedziczą `renderBand`, widoczność, opacity i offset grupy.
 
-## 4. Dlaczego pod koroną można chodzić, a pod pniem nie
+`renderBand` dotyczy warstwy lub grupy, a nie pojedynczej instancji kafla. Aby jeden konkretny kafel był nad postacią, umieść go na warstwie z `renderBand=above`.
 
-**Renderowanie i kolizja są niezależne.**
+## 4. Renderowanie i kolizja są niezależne
 
 `renderBand=above` oznacza wyłącznie, że grafika jest rysowana nad postacią. Nie oznacza to kolizji.
 
@@ -99,14 +99,48 @@ W aktualnym drzewie działa to tak:
 - kafel korony nie ma `collides=true` ani obiektu kolizji,
 - dlatego postać może wejść pod koronę i zostaje przez nią częściowo zasłonięta,
 - kafel pnia ma footprint w edytorze kolizji kafla,
-- dlatego pola zajmowane przez pień i podstawę drzewa są zablokowane.
+- footprint obejmuje dwa pola wysokości, więc blokuje dolną i górną fizyczną część pnia.
 
 To jest zalecany model także dla budynków:
 
 - dach lub górna część budynku: `renderBand=above`, bez kolizji,
 - ściany, fundament albo wejście: osobny kafel z dokładnym footprintem kolizji.
 
-## 5. Dodawanie kolizji kafla
+## 5. Mechanizm jest generyczny, nie tylko dla drzew
+
+Silnik nie sprawdza nazw `tree`, `trunk`, `canopy` ani żadnego konkretnego typu obiektu.
+
+Ten sam mechanizm działa dla:
+
+- skał,
+- domów i dachów,
+- bram,
+- mostów,
+- pomników,
+- studni,
+- ruin,
+- skrzyń,
+- słupów,
+- dowolnych innych dużych lub przesuniętych elementów.
+
+Dla każdego obiektu gra odczytuje standardowe dane Tiled:
+
+- `imagewidth` i `imageheight`,
+- `tileoffset`,
+- `objectgroup` z **Edit Tile Collision**,
+- `collides=true`,
+- warstwowe `renderBand=above` lub `renderBand=below`.
+
+Przykład budynku:
+
+```text
+House Walls    renderBand=below, kolizja ścian
+House Roof     renderBand=above, brak kolizji
+```
+
+Postać nie przejdzie przez ściany, ale może zostać zasłonięta przez dach.
+
+## 6. Dodawanie kolizji kafla
 
 W panelu Tilesets:
 
@@ -117,7 +151,15 @@ W panelu Tilesets:
 
 Kolizja jest automatycznie stosowana do każdej instancji tego kafla na mapie.
 
-Dla dużego obiektu nie zaznaczaj całej grafiki jako kolizji. Zaznacz tylko fizyczną podstawę, po której postać nie może chodzić. Korona drzewa może być szeroka, ale footprint pnia powinien pozostać mały.
+Dla dużego obiektu zaznacz całą fizyczną część, przez którą postać nie może przejść. Nie zaznaczaj elementów czysto wizualnych, takich jak korona drzewa albo dach, jeżeli postać ma móc wejść pod nie.
+
+### Ważne: kolizja działa na siatce pól
+
+Gra zamienia kształty kolizji na siatkę pól mapy `32×32`.
+
+Jeżeli kształt kolizji dotknie danego pola, całe to pole zostanie zablokowane. Nie jest to kolizja pikselowa ani ciągła fizyka.
+
+Dlatego po zmianie footprintu sprawdź w grze wszystkie pola wokół obiektu. Zbyt szeroki kształt może zablokować sąsiednie pole, nawet gdy wizualnie dotyka go tylko nieznacznie.
 
 Alternatywnie dla prostego kafla można dodać właściwość:
 
@@ -127,9 +169,9 @@ collides = true
 
 Typ właściwości: `bool`.
 
-Ta opcja blokuje cały kafel mapy i jest odpowiednia np. dla ściany lub skały zajmującej pełne pole.
+Ta opcja blokuje całe pojedyncze pole mapy i jest odpowiednia np. dla ściany lub skały zajmującej pełny kafel.
 
-## 6. Osobna warstwa kolizji
+## 7. Osobna warstwa kolizji
 
 Dla ścian mapy, niewidzialnych barier albo nietypowych kształtów utwórz Object Layer o nazwie:
 
@@ -147,7 +189,7 @@ collision = true
 
 Typ właściwości: `bool`.
 
-## 7. Duże obiekty
+## 8. Duże obiekty
 
 Najbardziej przenośny wariant Tiled to tileset typu **Collection of Images**, gdzie każdy duży obiekt ma własny obraz o rzeczywistym rozmiarze i przezroczystym tle.
 
@@ -156,6 +198,8 @@ Dla dużych kafli gra domyślnie odczytuje:
 - `imagewidth` i `imageheight` kafla,
 - standardowy `tileoffset` tilesetu,
 - obiekty z edytora kolizji kafla.
+
+Aktualne pnie i korony drzew są już zapisane właśnie jako pełnowymiarowe obrazy w zewnętrznych tilesetach `.tsj`. Tiled pokazuje ich rzeczywisty rozmiar i położenie bez ukrytego skalowania wykonywanego dopiero przez grę.
 
 Silnik obsługuje także opcjonalne właściwości:
 
@@ -168,11 +212,11 @@ renderOffsetXTiles
 renderOffsetYTiles
 ```
 
-Są one potrzebne tylko wtedy, gdy standardowy rozmiar obrazu i `tileoffset` nie wystarczają.
+Są to opcjonalne rozszerzenia runtime. Dla nowych dużych obiektów preferuj standardowe `imagewidth`, `imageheight` i `tileoffset`, aby podgląd w Tiled był zgodny z grą.
 
 Nie umieszczaj grafiki wychodzącej poza komórkę atlasu bez odpowiedniego marginesu. Tiled i renderer wycinają kafel według granic komórki atlasu, więc piksele poza nią zostaną utracone. Dla koron, budynków i innych szerokich obiektów preferuj osobny pełnowymiarowy obraz albo atlas z odpowiednio dużą komórką.
 
-## 8. Portale
+## 9. Portale
 
 Utwórz Object Layer o nazwie:
 
@@ -204,7 +248,7 @@ Pozycja źródłowa jest liczona z położenia obiektu. Można ją nadpisać wł
 
 Cały prostokąt portalu jest traktowany jako przechodni, nawet gdy znajduje się na zablokowanej granicy mapy.
 
-## 9. Dodawanie nowej mapy do gry
+## 10. Dodawanie nowej mapy do gry
 
 Po utworzeniu pliku mapy:
 
@@ -223,7 +267,7 @@ Frontend automatycznie szuka nieznanej mapy pod adresem:
 
 Nie trzeba dodawać osobnego wpisu do asset manifestu, o ile grafiki są prawidłowo zadeklarowane w tilesecie Tiled.
 
-## 10. Walidacja przed commitem
+## 11. Walidacja przed commitem
 
 Uruchom:
 
@@ -245,7 +289,7 @@ Seed powinien zostać uruchomiony szczególnie po zmianie:
 
 Jeżeli zmieniła się grafika SVG lub inny asset pod tym samym URL-em, wykonaj twarde odświeżenie przeglądarki (`Ctrl+Shift+R` lub `Cmd+Shift+R`), aby nie oglądać starej wersji z cache.
 
-## 11. Lista kontrolna
+## 12. Lista kontrolna
 
 Przed zakończeniem pracy sprawdź:
 
@@ -254,8 +298,10 @@ Przed zakończeniem pracy sprawdź:
 - obie kopie mapy są identyczne,
 - ścieżki do grafik działają z poziomu pliku mapy lub `.tsj`,
 - warstwy nad postaciami mają `renderBand=above`,
-- kolizja znajduje się wyłącznie na fizycznych podstawach obiektów,
+- kolizja znajduje się wyłącznie na fizycznych częściach obiektów,
 - korony i dachy nie mają przypadkowego `collides=true`,
+- duży obiekt ma pełnowymiarowy obraz i prawidłowy `tileoffset`,
+- footprint nie blokuje przypadkowo sąsiednich pól,
 - portal prowadzi na istniejącą mapę i niezablokowane pole,
 - spawn nie znajduje się na kolizji,
 - testy i build przechodzą.
