@@ -9,26 +9,40 @@ const loadFixture = async (name: string) => {
 };
 
 describe('Tiled map compiler', () => {
-  it('compiles the village map collision and portal metadata', async () => {
+  it('keeps browser and authoritative map files byte-identical', async () => {
+    for (const name of ['greenfields.json', 'crystal-cave.json']) {
+      const browser = await readFile(resolve(process.cwd(), 'public/maps', name), 'utf8');
+      const authoritative = await readFile(resolve(process.cwd(), '..', 'prisma/maps', name), 'utf8');
+      expect(browser).toBe(authoritative);
+    }
+  });
+
+  it('compiles Greenfields with three tilesets and foreground layers', async () => {
     const map = await loadFixture('greenfields.json');
-    expect(map.width).toBe(32);
-    expect(map.height).toBe(24);
-    expect(map.collision.length).toBe(32 * 24);
+    expect([map.width, map.height]).toEqual([20, 15]);
+    expect(map.source.tilesets).toHaveLength(3);
+    expect(map.renderLayers.some((layer) => layer.plane === 'above-entities')).toBe(true);
     expect(map.portals).toEqual([
-      {
-        sourceX: 28,
-        sourceY: 20,
-        destinationMapKey: 'crystal-cave',
-        targetX: 2,
-        targetY: 2,
-      },
+      { sourceX: 18, sourceY: 7, destinationMapKey: 'crystal-cave', targetX: 1, targetY: 7 },
     ]);
   });
 
-  it('compiles the cave map and reciprocal portal', async () => {
+  it('blocks a tree trunk but not its canopy-only cells', async () => {
+    const map = await loadFixture('greenfields.json');
+    expect(map.collision[3 * map.width + 12]).toBe(1);
+    expect(map.collision[2 * map.width + 11]).toBe(0);
+    expect(map.collision[2 * map.width + 12]).toBe(0);
+  });
+
+  it('combines tile and object collisions in Crystal Cave', async () => {
     const map = await loadFixture('crystal-cave.json');
-    expect(map.width).toBe(24);
-    expect(map.height).toBe(18);
-    expect(map.portals[0]?.destinationMapKey).toBe('greenfields');
+    expect([map.width, map.height]).toEqual([18, 14]);
+    expect(map.source.tilesets).toHaveLength(2);
+    expect(map.collision[6 * map.width + 5]).toBe(1);
+    expect(map.collision[6 * map.width + 8]).toBe(1);
+    expect(map.collision[7 * map.width + 8]).toBe(0);
+    expect(map.portals).toEqual([
+      { sourceX: 1, sourceY: 7, destinationMapKey: 'greenfields', targetX: 17, targetY: 7 },
+    ]);
   });
 });
