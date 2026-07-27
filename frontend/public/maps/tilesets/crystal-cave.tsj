@@ -1,0 +1,15 @@
+{
+  "columns": 4,
+  "image": "../../assets/tiles/crystal-cave.svg",
+  "imageheight": 128,
+  "imagewidth": 128,
+  "margin": 0,
+  "name": "crystal-cave",
+  "spacing": 0,
+  "tilecount": 16,
+  "tileheight": 32,
+  "tilewidth": 32,
+  "tiledversion": "1.10.2",
+  "type": "tileset",
+  "version": "1.10"
+}
