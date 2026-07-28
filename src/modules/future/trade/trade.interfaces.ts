@@ -1,21 +1,11 @@
-export type TradeLifecycleStatus =
-  | 'REQUESTED'
-  | 'OPEN'
-  | 'LOCKED'
-  | 'COMPLETED'
-  | 'CANCELLED'
-  | 'EXPIRED';
-
-export interface TradeOfferEntry {
-  inventoryItemId: string;
-  itemKey: string;
-  quantity: number;
-}
+import type { InventorySnapshot, TradeLifecycleStatus, TradeOfferItemPayload } from '../../../contracts/socket.events.js';
 
 export interface TradeParticipantState {
   characterId: string;
+  name: string;
   accepted: boolean;
-  items: TradeOfferEntry[];
+  silver: number;
+  items: TradeOfferItemPayload[];
 }
 
 export interface TradeSessionState {
@@ -23,5 +13,6 @@ export interface TradeSessionState {
   status: TradeLifecycleStatus;
   initiator: TradeParticipantState;
   recipient: TradeParticipantState;
+  inventory: InventorySnapshot;
   expiresAt: number;
 }
