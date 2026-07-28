@@ -4,7 +4,7 @@ import type { CharacterCurrencyUpdatedPayload, InventorySnapshot, MovementCommit
 
 export type GamePhase = 'idle' | 'connecting' | 'character-required' | 'character-select' | 'in-world' | 'reconnecting' | 'fatal';
 export type PortalTransitionState = 'idle' | 'fade-out' | 'loading' | 'fade-in';
-export type ModalKey = 'character' | 'inventory' | 'merchant' | 'quests' | 'skills' | null;
+export type ModalKey = 'character' | 'inventory' | 'merchant' | 'trade' | 'quests' | 'skills' | null;
 export interface ClientNotification extends SocketErrorPayload { id: string; createdAt: number; }
 export interface GameState {
   phase: GamePhase; socketConnected: boolean; desiredInWorld: boolean; realm: RealmState | undefined;
@@ -38,16 +38,8 @@ class GameStore {
   upsertPlayer(player: PublicPlayerState): void { this.patch({ players: { ...this.state.players, [player.characterId]: player } }); }
   removePlayer(characterId: string): void { if (!this.state.players[characterId]) return; const players = { ...this.state.players }; delete players[characterId]; this.patch({ players }); }
   setActiveModal(activeModal: ModalKey): void { this.patch({ activeModal }); }
-  updateCurrency(payload: CharacterCurrencyUpdatedPayload): void {
-    const self = this.state.self;
-    if (!self || self.characterId !== payload.characterId) return;
-    this.patch({ self: payload.currency === 'SILVER' ? { ...self, silver: payload.balance } : { ...self, gold: payload.balance } });
-  }
-  updateInventoryState(snapshot: InventorySnapshot): void {
-    const self = this.state.self; if (!self) return;
-    const character = snapshot.character;
-    this.patch({ self: { ...self, silver: character?.silver ?? snapshot.silver, hp: character?.hp ?? self.hp, maxHp: character?.maxHp ?? self.maxHp, energy: character?.energy ?? self.energy, maxEnergy: character?.maxEnergy ?? self.maxEnergy, strength: character?.strength ?? self.strength, agility: character?.agility ?? self.agility, intelligence: character?.intelligence ?? self.intelligence, armor: character?.armor ?? self.armor } });
-  }
+  updateCurrency(payload: CharacterCurrencyUpdatedPayload): void { const self = this.state.self; if (!self || self.characterId !== payload.characterId) return; this.patch({ self: payload.currency === 'SILVER' ? { ...self, silver: payload.balance } : { ...self, gold: payload.balance } }); }
+  updateInventoryState(snapshot: InventorySnapshot): void { const self = this.state.self; if (!self) return; const character = snapshot.character; this.patch({ self: { ...self, silver: character?.silver ?? snapshot.silver, hp: character?.hp ?? self.hp, maxHp: character?.maxHp ?? self.maxHp, energy: character?.energy ?? self.energy, maxEnergy: character?.maxEnergy ?? self.maxEnergy, strength: character?.strength ?? self.strength, agility: character?.agility ?? self.agility, intelligence: character?.intelligence ?? self.intelligence, armor: character?.armor ?? self.armor } }); }
   addNotification(payload: SocketErrorPayload): void { if (payload.code === 'MOVE_COLLISION') return; const createdAt = Date.now(); const previous = this.state.notifications.at(-1); if (previous && previous.code === payload.code && previous.message === payload.message && createdAt - previous.createdAt < 500) return; const notification: ClientNotification = { ...payload, id: `${createdAt}-${Math.random().toString(36).slice(2)}`, createdAt }; this.patch({ notifications: [...this.state.notifications.slice(-5), notification] }); }
   dismissNotification(id: string): void { this.patch({ notifications: this.state.notifications.filter((item) => item.id !== id) }); }
   private consumePath(x: number, y: number): readonly Coordinates[] { const index = this.state.plannedPath.findIndex((coordinate) => coordinate.x === x && coordinate.y === y); return index >= 0 ? this.state.plannedPath.slice(index + 1) : this.state.plannedPath; }
