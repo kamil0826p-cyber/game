@@ -4,6 +4,7 @@ import { WORLD_TILE_SIZE } from './constants';
 import { gameAssetLoader, type OutfitFrames } from './GameAssetLoader';
 
 const classColors = { MAGE: 0x6d5bd0, WARRIOR: 0xb45454, ARCHER: 0x4f9467 } as const;
+export const PLAYER_CONTEXT_EVENT = 'game:player-interaction';
 export interface CharacterInteractionPoint { x: number; y: number; }
 
 export class CharacterView {
@@ -21,10 +22,15 @@ export class CharacterView {
 
   constructor(state: PublicPlayerState, private readonly localPlayer: boolean, onInteract?: (player: PublicPlayerState, point: CharacterInteractionPoint) => void) {
     this.state = state; this.container.sortableChildren = true;
-    if (!localPlayer && onInteract) {
+    if (!localPlayer) {
       this.container.eventMode = 'static'; this.container.cursor = 'pointer'; this.container.hitArea = new Rectangle(-24, -78, 48, 82);
       this.container.on('pointerdown', (event: FederatedPointerEvent) => event.stopPropagation());
-      this.container.on('pointertap', (event: FederatedPointerEvent) => { event.stopPropagation(); onInteract(this.state, { x: event.global.x, y: event.global.y }); });
+      this.container.on('pointertap', (event: FederatedPointerEvent) => {
+        event.stopPropagation();
+        const point = { x: event.global.x, y: event.global.y };
+        if (onInteract) onInteract(this.state, point);
+        else window.dispatchEvent(new CustomEvent(PLAYER_CONTEXT_EVENT, { detail: { player: this.state, ...point } }));
+      });
     }
     this.shadow = new Graphics().ellipse(0, -2, 17, 7).fill({ color: 0x03040a, alpha: 0.48 }); this.shadow.zIndex = 0;
     this.fallback = this.createFallback(state); this.fallback.zIndex = 1;
