@@ -23,6 +23,10 @@ import { MapRenderer } from './MapRenderer';
 import { NpcView } from './NpcView';
 
 export const LOCAL_PLAYER_SCREEN_EVENT = 'game:local-player-screen-position';
+const PLAYER_CONTEXT_EVENT = 'game:player-context';
+const PLAYER_HIT_HALF_WIDTH = 28;
+const PLAYER_HIT_TOP = 82;
+const PLAYER_HIT_BOTTOM = 6;
 
 export interface LocalPlayerScreenPosition {
   x: number;
@@ -250,6 +254,19 @@ export class GameEngine {
     if (state.phase !== 'in-world' || !state.socketConnected || state.portalTransition !== 'idle' || state.activeModal || !map || !self) return;
 
     const local = this.world.toLocal(event.global);
+    const clickedPlayer = this.findPlayerAtWorldPosition(Object.values(state.players), local.x, local.y);
+    if (clickedPlayer) {
+      const canvasRect = this.app.canvas.getBoundingClientRect();
+      window.dispatchEvent(new CustomEvent(PLAYER_CONTEXT_EVENT, {
+        detail: {
+          player: clickedPlayer,
+          clientX: canvasRect.left + event.global.x,
+          clientY: canvasRect.top + event.global.y,
+        },
+      }));
+      return;
+    }
+
     const target = { x: Math.floor(local.x / WORLD_TILE_SIZE), y: Math.floor(local.y / WORLD_TILE_SIZE) };
     const occupied = new Set<string>();
     if (state.map?.zoneType !== 'SAFE') {
@@ -271,6 +288,19 @@ export class GameEngine {
     gameStore.setPlannedPath(path);
     void this.client.requestTarget(target.x, target.y).catch(() => gameStore.clearPlannedPath());
   };
+
+  private findPlayerAtWorldPosition(players: PublicPlayerState[], worldX: number, worldY: number): PublicPlayerState | undefined {
+    for (let index = players.length - 1; index >= 0; index -= 1) {
+      const player = players[index];
+      if (!player) continue;
+      const playerX = (player.x + 0.5) * WORLD_TILE_SIZE;
+      const playerY = (player.y + 1) * WORLD_TILE_SIZE;
+      const insideX = worldX >= playerX - PLAYER_HIT_HALF_WIDTH && worldX <= playerX + PLAYER_HIT_HALF_WIDTH;
+      const insideY = worldY >= playerY - PLAYER_HIT_TOP && worldY <= playerY + PLAYER_HIT_BOTTOM;
+      if (insideX && insideY) return player;
+    }
+    return undefined;
+  }
 
   private readonly onContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
