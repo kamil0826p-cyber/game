@@ -30,22 +30,24 @@ export function ActorContextMenu({
   return (
     <div
       data-actor-context-menu
-      className="pointer-events-auto fixed z-40 w-44 overflow-hidden rounded-lg border border-amber-300/25 bg-slate-950/95 p-1 shadow-2xl"
+      className="actor-context-menu pointer-events-auto fixed z-40 w-44 overflow-hidden rounded-lg p-1"
       style={{ left, top }}
     >
-      <div className="border-b border-white/10 px-3 py-2">
-        <strong className="block truncate text-sm text-amber-100">{title}</strong>
-        {subtitle ? <span className="text-[11px] text-slate-400">{subtitle}</span> : null}
+      <div className="actor-context-menu-header px-3 py-2">
+        <strong className="actor-context-menu-title block truncate text-sm">{title}</strong>
+        {subtitle ? (
+          <span className="actor-context-menu-subtitle text-[11px]">{subtitle}</span>
+        ) : null}
       </div>
       {actions.map((action) => (
         <button
           key={action.key}
           type="button"
           disabled={action.disabled}
-          className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-amber-400/10 disabled:opacity-50"
+          className="actor-context-menu-action flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm disabled:opacity-50"
           onClick={() => void action.run()}
         >
-          <span className="text-amber-200">{action.icon}</span>
+          <span className="actor-context-menu-icon">{action.icon}</span>
           {action.label}
         </button>
       ))}

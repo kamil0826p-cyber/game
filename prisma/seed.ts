@@ -36,7 +36,6 @@ const mapDefinitions: MapSeedDefinition[] = [
 const borinStock = ['traveler-sword', 'apprentice-staff', 'field-bow', 'minor-health-potion', 'field-rations'] as const;
 const borinDialogue = {
   type: 'MERCHANT',
-  interactionRadius: 2,
   rootNodeId: 'welcome',
   nodes: {
     welcome: {

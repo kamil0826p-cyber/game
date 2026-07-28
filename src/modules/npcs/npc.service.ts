@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
+import { ACTOR_INTERACTION_RADIUS, isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 import type { NpcDialogueChoiceResult, NpcDialogueSnapshot, NpcStatePayload } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { SupportedLocale } from '../../i18n/localization.service.js';
@@ -7,8 +8,6 @@ import { localizeDialogueText, parseNpcDialogueDefinition, type NpcDialogueDefin
 
 interface NpcDialogue {
   type?: unknown;
-  interactionRadius?: unknown;
-  merchant?: { interactionRadius?: unknown };
 }
 
 interface NpcInteractionPosition { mapId: string; x: number; y: number; }
@@ -81,12 +80,6 @@ export class NpcService {
       const interactionType = dialogue?.type === 'MERCHANT' || dialogue?.type === 'QUEST'
         ? dialogue.type
         : 'DIALOGUE';
-      const configuredRadius = dialogue?.interactionRadius ?? (interactionType === 'MERCHANT'
-        ? dialogue?.merchant?.interactionRadius
-        : undefined);
-      const interactionRadius = typeof configuredRadius === 'number' && Number.isFinite(configuredRadius)
-        ? Math.min(8, Math.max(0, Math.trunc(configuredRadius)))
-        : 1;
 
       return {
         id: npc.id,
@@ -97,7 +90,7 @@ export class NpcService {
         y: npc.y,
         outfitKey: npc.outfitKey,
         interactionType,
-        interactionRadius,
+        interactionRadius: ACTOR_INTERACTION_RADIUS,
       };
     });
   }
@@ -107,8 +100,7 @@ export class NpcService {
     if (!npc || npc.mapId !== position.mapId) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
     const dialogue = parseNpcDialogueDefinition(npc.dialogue);
     if (!dialogue) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_UNAVAILABLE, 'errors.npcs.dialogueUnavailable', { npcId });
-    const distance = Math.max(Math.abs(npc.x - position.x), Math.abs(npc.y - position.y));
-    if (distance > dialogue.interactionRadius) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
+    if (!isActorWithinInteractionRange(npc, position)) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
     return { npc, dialogue };
   }
 

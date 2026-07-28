@@ -41,7 +41,7 @@ function createService(record: object = npc): NpcService {
 }
 
 describe('NpcService dialogue flow', () => {
-  it('publishes the shared interaction radius for merchant NPCs', async () => {
+  it('publishes the standardized adjacent-tile interaction radius for merchant NPCs', async () => {
     const service = new NpcService({
       npcDefinition: { findMany: vi.fn().mockResolvedValue([npc]) },
     } as unknown as PrismaService);
@@ -49,14 +49,14 @@ describe('NpcService dialogue flow', () => {
       expect.objectContaining({
         id: npc.id,
         interactionType: 'MERCHANT',
-        interactionRadius: 2,
+        interactionRadius: 1,
       }),
     ]);
   });
 
   it('starts at the configured root and resolves a branch', async () => {
     const service = createService();
-    const position = { mapId: 'map-a', x: 8, y: 9 };
+    const position = { mapId: 'map-a', x: 9, y: 9 };
     const started = await service.startDialogue(npc.id, position, 'pl');
     expect(started.node).toMatchObject({
       id: 'welcome',
@@ -111,7 +111,7 @@ describe('NpcService dialogue flow', () => {
     const service = createService(legacyNpc);
     const started = await service.startDialogue(
       legacyNpc.id,
-      { mapId: 'map-a', x: 8, y: 10 },
+      { mapId: 'map-a', x: 9, y: 10 },
       'pl',
     );
 
@@ -128,7 +128,7 @@ describe('NpcService dialogue flow', () => {
         legacyNpc.id,
         'welcome',
         'show-offer',
-        { mapId: 'map-a', x: 8, y: 10 },
+        { mapId: 'map-a', x: 9, y: 10 },
         'pl',
       ),
     ).resolves.toEqual({
@@ -140,7 +140,7 @@ describe('NpcService dialogue flow', () => {
   it('rejects distant players and invalid conversation state', async () => {
     const service = createService();
     await expect(
-      service.startDialogue(npc.id, { mapId: 'map-a', x: 13, y: 10 }, 'pl'),
+      service.startDialogue(npc.id, { mapId: 'map-a', x: 12, y: 10 }, 'pl'),
     ).rejects.toMatchObject({ code: GAME_ERROR_CODES.NPC_NOT_AVAILABLE });
     await expect(
       service.chooseDialogue(npc.id, 'welcome', 'unknown', { mapId: 'map-a', x: 10, y: 10 }, 'pl'),

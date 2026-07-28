@@ -54,16 +54,16 @@ const legacyMerchantDialogueSchema = z
     type: z.literal('MERCHANT'),
     merchant: merchantConfigurationSchema
       .extend({
-        interactionRadius: z.number().int().min(0).max(8).default(1),
+        interactionRadius: z.number().int().min(0).max(8).optional(),
       })
       .strict(),
   })
   .strict();
 
-export const npcDialogueDefinitionSchema = z
+const npcDialogueDefinitionInputSchema = z
   .object({
     type: z.enum(['DIALOGUE', 'MERCHANT', 'QUEST']).default('DIALOGUE'),
-    interactionRadius: z.number().int().min(0).max(8).default(1),
+    interactionRadius: z.number().int().min(0).max(8).optional(),
     rootNodeId: dialogueIdentifierSchema,
     nodes: z.record(dialogueIdentifierSchema, dialogueNodeSchema),
     merchant: merchantConfigurationSchema.optional(),
@@ -134,6 +134,10 @@ export const npcDialogueDefinitionSchema = z
     }
   });
 
+export const npcDialogueDefinitionSchema = npcDialogueDefinitionInputSchema.transform(
+  ({ interactionRadius: _legacyInteractionRadius, ...definition }) => definition,
+);
+
 export type LocalizedDialogueText = z.infer<typeof localizedTextSchema>;
 export type NpcDialogueDefinition = z.infer<typeof npcDialogueDefinitionSchema>;
 export type NpcDialogueChoice = NpcDialogueDefinition['nodes'][string]['choices'][number];
@@ -147,7 +151,6 @@ export function parseNpcDialogueDefinition(value: unknown): NpcDialogueDefinitio
 
   return npcDialogueDefinitionSchema.parse({
     type: 'MERCHANT',
-    interactionRadius: legacy.data.merchant.interactionRadius,
     rootNodeId: 'welcome',
     nodes: {
       welcome: {

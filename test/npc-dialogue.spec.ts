@@ -45,13 +45,13 @@ describe('NPC dialogue definition', () => {
 
     expect(dialogue).toMatchObject({
       type: 'MERCHANT',
-      interactionRadius: 2,
       rootNodeId: 'welcome',
       merchant: {
         itemKeys: ['field-rations', 'minor-health-potion'],
         infiniteStock: true,
       },
     });
+    expect(dialogue).not.toHaveProperty('interactionRadius');
     expect(dialogue?.nodes.welcome.choices).toEqual([
       expect.objectContaining({ id: 'show-offer', action: 'OPEN_MERCHANT' }),
       expect.objectContaining({ id: 'decline', action: 'CLOSE' }),
