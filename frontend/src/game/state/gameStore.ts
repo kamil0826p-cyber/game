@@ -1,19 +1,19 @@
 import { useSyncExternalStore } from 'react';
 import type { CharacterClass, Coordinates, MapStatePayload, PublicPlayerState, RealmState, SelfCharacterState } from '../../contracts/game';
-import type { CharacterCurrencyUpdatedPayload, InventorySnapshot, MovementCommittedPayload, MovementRejectedPayload, NpcStatePayload, SessionReadyPayload, SocketErrorPayload, WorldSpawnPayload } from '../../contracts/socket';
+import type { CharacterCurrencyUpdatedPayload, InventorySnapshot, MovementCommittedPayload, MovementRejectedPayload, NpcStatePayload, SessionReadyPayload, SocketErrorPayload, TradeSnapshot, WorldSpawnPayload } from '../../contracts/socket';
 
 export type GamePhase = 'idle' | 'connecting' | 'character-required' | 'character-select' | 'in-world' | 'reconnecting' | 'fatal';
 export type PortalTransitionState = 'idle' | 'fade-out' | 'loading' | 'fade-in';
-export type ModalKey = 'character' | 'inventory' | 'merchant' | 'quests' | 'skills' | null;
+export type ModalKey = 'character' | 'inventory' | 'merchant' | 'quests' | 'skills' | 'player' | 'trade-request' | 'trade' | null;
 export interface ClientNotification extends SocketErrorPayload { id: string; createdAt: number; }
 export interface GameState {
   phase: GamePhase; socketConnected: boolean; desiredInWorld: boolean; realm: RealmState | undefined;
   allowedClasses: CharacterClass[]; self: SelfCharacterState | undefined; map: MapStatePayload | undefined;
   npcs: readonly NpcStatePayload[]; players: Readonly<Record<string, PublicPlayerState>>; unlockedOutfits: Array<{ key: string; unlockLevel: number }>;
   movementStepMs: number; plannedPath: readonly Coordinates[]; portalTransition: PortalTransitionState;
-  activeModal: ModalKey; notifications: readonly ClientNotification[]; fatalError: string | undefined;
+  activeModal: ModalKey; selectedPlayerId: string | undefined; trade: TradeSnapshot | undefined; notifications: readonly ClientNotification[]; fatalError: string | undefined;
 }
-const initialState = (): GameState => ({ phase: 'idle', socketConnected: false, desiredInWorld: false, realm: undefined, allowedClasses: [], self: undefined, map: undefined, npcs: [], players: {}, unlockedOutfits: [], movementStepMs: 200, plannedPath: [], portalTransition: 'idle', activeModal: null, notifications: [], fatalError: undefined });
+const initialState = (): GameState => ({ phase: 'idle', socketConnected: false, desiredInWorld: false, realm: undefined, allowedClasses: [], self: undefined, map: undefined, npcs: [], players: {}, unlockedOutfits: [], movementStepMs: 200, plannedPath: [], portalTransition: 'idle', activeModal: null, selectedPlayerId: undefined, trade: undefined, notifications: [], fatalError: undefined });
 
 class GameStore {
   private state: GameState = initialState();
@@ -25,29 +25,30 @@ class GameStore {
   markConnected(): void { this.patch({ socketConnected: true }); }
   setSessionReady(payload: SessionReadyPayload): void { this.patch({ realm: payload.realm, phase: payload.requiresCharacter ? 'character-required' : 'connecting' }); }
   requireCharacter(allowedClasses: CharacterClass[]): void { this.patch({ phase: 'character-required', allowedClasses: [...allowedClasses] }); }
-  spawn(payload: WorldSpawnPayload): void { this.patch({ phase: this.state.desiredInWorld ? 'in-world' : 'character-select', socketConnected: true, self: payload.self, map: payload.map, npcs: [...payload.npcs], players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), unlockedOutfits: [...payload.unlockedOutfits], movementStepMs: payload.movementStepMs, plannedPath: [], portalTransition: 'idle', activeModal: null, fatalError: undefined }); }
+  spawn(payload: WorldSpawnPayload): void { this.patch({ phase: this.state.desiredInWorld ? 'in-world' : 'character-select', socketConnected: true, self: payload.self, map: payload.map, npcs: [...payload.npcs], players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), unlockedOutfits: [...payload.unlockedOutfits], movementStepMs: payload.movementStepMs, plannedPath: [], portalTransition: 'idle', activeModal: null, selectedPlayerId: undefined, trade: undefined, fatalError: undefined }); }
   enterWorld(): void { if (this.state.self && this.state.map) this.patch({ desiredInWorld: true, phase: 'in-world' }); }
-  markDisconnected(reason?: string): void { if (this.state.phase === 'idle') return; this.patch({ socketConnected: false, phase: this.state.desiredInWorld ? 'reconnecting' : 'connecting', plannedPath: [], activeModal: null }); if (reason && reason !== 'io client disconnect') this.addNotification({ code: 'SOCKET_DISCONNECTED', message: reason }); }
+  markDisconnected(reason?: string): void { if (this.state.phase === 'idle') return; this.patch({ socketConnected: false, phase: this.state.desiredInWorld ? 'reconnecting' : 'connecting', plannedPath: [], activeModal: null, selectedPlayerId: undefined, trade: undefined }); if (reason && reason !== 'io client disconnect') this.addNotification({ code: 'SOCKET_DISCONNECTED', message: reason }); }
   setFatalError(message: string): void { this.patch({ phase: 'fatal', socketConnected: false, fatalError: message }); }
   commitMovement(payload: MovementCommittedPayload): void { const self = this.state.self; if (!self) return; this.patch({ self: { ...self, mapId: payload.mapId, x: payload.x, y: payload.y, direction: payload.direction }, plannedPath: this.consumePath(payload.x, payload.y), portalTransition: payload.portalTransition ? 'fade-out' : this.state.portalTransition }); }
   rejectMovement(payload: MovementRejectedPayload): void { const self = this.state.self; this.patch({ self: self ? { ...self, mapId: payload.authoritative.mapId, x: payload.authoritative.x, y: payload.authoritative.y, direction: payload.authoritative.direction } : self, plannedPath: [] }); if (payload.code !== 'MOVE_TOO_FAST') this.addNotification(payload); }
-  changeMap(payload: { map: MapStatePayload; npcs: NpcStatePayload[]; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[] }): void { this.patch({ map: payload.map, npcs: [...payload.npcs], self: payload.self, players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), plannedPath: [], portalTransition: 'loading', activeModal: null }); }
+  changeMap(payload: { map: MapStatePayload; npcs: NpcStatePayload[]; self: SelfCharacterState; nearbyPlayers: PublicPlayerState[] }): void { this.patch({ map: payload.map, npcs: [...payload.npcs], self: payload.self, players: Object.fromEntries(payload.nearbyPlayers.map((player) => [player.characterId, player])), plannedPath: [], portalTransition: 'loading', activeModal: null, selectedPlayerId: undefined, trade: undefined }); }
   setPortalTransition(portalTransition: PortalTransitionState): void { this.patch({ portalTransition }); }
   setPlannedPath(path: readonly Coordinates[]): void { this.patch({ plannedPath: [...path] }); }
   clearPlannedPath(): void { if (this.state.plannedPath.length > 0) this.patch({ plannedPath: [] }); }
   upsertPlayer(player: PublicPlayerState): void { this.patch({ players: { ...this.state.players, [player.characterId]: player } }); }
-  removePlayer(characterId: string): void { if (!this.state.players[characterId]) return; const players = { ...this.state.players }; delete players[characterId]; this.patch({ players }); }
+  removePlayer(characterId: string): void { if (!this.state.players[characterId]) return; const players = { ...this.state.players }; delete players[characterId]; this.patch({ players, ...(this.state.selectedPlayerId === characterId ? { activeModal: null, selectedPlayerId: undefined } : {}) }); }
   setActiveModal(activeModal: ModalKey): void { this.patch({ activeModal }); }
-  updateCurrency(payload: CharacterCurrencyUpdatedPayload): void {
-    const self = this.state.self;
-    if (!self || self.characterId !== payload.characterId) return;
-    this.patch({ self: payload.currency === 'SILVER' ? { ...self, silver: payload.balance } : { ...self, gold: payload.balance } });
+  selectPlayer(characterId: string): void { if (this.state.players[characterId]) this.patch({ selectedPlayerId: characterId, activeModal: 'player' }); }
+  setTrade(trade: TradeSnapshot): void {
+    const selfId = this.state.self?.characterId;
+    const incoming = trade.status === 'REQUESTED' && trade.recipient.characterId === selfId;
+    const terminal = ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(trade.status);
+    this.patch({ trade, selectedPlayerId: undefined, activeModal: terminal ? null : incoming ? 'trade-request' : trade.status === 'OPEN' || trade.status === 'LOCKED' ? 'trade' : this.state.activeModal });
+    if (trade.status === 'COMPLETED') this.addNotification({ code: 'TRADE_COMPLETED', message: 'Handel został zakończony.' });
+    if (trade.status === 'CANCELLED' || trade.status === 'EXPIRED') this.addNotification({ code: 'TRADE_CANCELLED', message: 'Handel został anulowany lub wygasł.' });
   }
-  updateInventoryState(snapshot: InventorySnapshot): void {
-    const self = this.state.self; if (!self) return;
-    const character = snapshot.character;
-    this.patch({ self: { ...self, silver: character?.silver ?? snapshot.silver, hp: character?.hp ?? self.hp, maxHp: character?.maxHp ?? self.maxHp, energy: character?.energy ?? self.energy, maxEnergy: character?.maxEnergy ?? self.maxEnergy, strength: character?.strength ?? self.strength, agility: character?.agility ?? self.agility, intelligence: character?.intelligence ?? self.intelligence, armor: character?.armor ?? self.armor } });
-  }
+  updateCurrency(payload: CharacterCurrencyUpdatedPayload): void { const self = this.state.self; if (!self || self.characterId !== payload.characterId) return; this.patch({ self: payload.currency === 'SILVER' ? { ...self, silver: payload.balance } : { ...self, gold: payload.balance } }); }
+  updateInventoryState(snapshot: InventorySnapshot): void { const self = this.state.self; if (!self) return; const character = snapshot.character; this.patch({ self: { ...self, silver: character?.silver ?? snapshot.silver, hp: character?.hp ?? self.hp, maxHp: character?.maxHp ?? self.maxHp, energy: character?.energy ?? self.energy, maxEnergy: character?.maxEnergy ?? self.maxEnergy, strength: character?.strength ?? self.strength, agility: character?.agility ?? self.agility, intelligence: character?.intelligence ?? self.intelligence, armor: character?.armor ?? self.armor } }); }
   addNotification(payload: SocketErrorPayload): void { if (payload.code === 'MOVE_COLLISION') return; const createdAt = Date.now(); const previous = this.state.notifications.at(-1); if (previous && previous.code === payload.code && previous.message === payload.message && createdAt - previous.createdAt < 500) return; const notification: ClientNotification = { ...payload, id: `${createdAt}-${Math.random().toString(36).slice(2)}`, createdAt }; this.patch({ notifications: [...this.state.notifications.slice(-5), notification] }); }
   dismissNotification(id: string): void { this.patch({ notifications: this.state.notifications.filter((item) => item.id !== id) }); }
   private consumePath(x: number, y: number): readonly Coordinates[] { const index = this.state.plannedPath.findIndex((coordinate) => coordinate.x === x && coordinate.y === y); return index >= 0 ? this.state.plannedPath.slice(index + 1) : this.state.plannedPath; }
