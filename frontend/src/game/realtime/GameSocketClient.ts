@@ -5,7 +5,7 @@ import type { CharacterClass, Direction } from '../../contracts/game';
 import type {
   CharacterCreateResult, ChatChannel, ChatMessagePayload, ClientToServerEvents,
   InventorySnapshot, MerchantSnapshot, MovementCommittedPayload, MovementStopPayload, PathAcceptedPayload,
-  ServerToClientEvents, SocketAck, SocketErrorPayload, VisibilityViewportPayload, WorldSpawnPayload,
+  ServerToClientEvents, SocketAck, SocketErrorPayload, TradeSnapshot, VisibilityViewportPayload, WorldSpawnPayload,
 } from '../../contracts/socket';
 import type { Locale } from '../../i18n/dictionaries';
 import { createRequestId } from '../../utils/requestId';
@@ -98,6 +98,22 @@ export class GameSocketClient {
   async buyFromMerchant(itemKey: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:buy', { requestId: createRequestId('merchant-buy'), itemKey, quantity }, ack)); }
   async sellToMerchant(itemId: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:sell', { requestId: createRequestId('merchant-sell'), itemId, quantity }, ack)); }
 
+  async requestTrade(targetCharacterId: string): Promise<TradeSnapshot> {
+    return this.tradeCommand((socket, ack) => socket.emit('trade:request', { requestId: createRequestId('trade-request'), targetCharacterId }, ack));
+  }
+  async respondToTrade(tradeId: string, accept: boolean): Promise<TradeSnapshot> {
+    return this.tradeCommand((socket, ack) => socket.emit('trade:respond', { requestId: createRequestId('trade-respond'), tradeId, accept }, ack));
+  }
+  async updateTradeOffer(tradeId: string, silver: number, items: Array<{ itemId: string; quantity: number }>): Promise<TradeSnapshot> {
+    return this.tradeCommand((socket, ack) => socket.emit('trade:offer', { requestId: createRequestId('trade-offer'), tradeId, silver, items }, ack));
+  }
+  async confirmTrade(tradeId: string): Promise<TradeSnapshot> {
+    return this.tradeCommand((socket, ack) => socket.emit('trade:confirm', { requestId: createRequestId('trade-confirm'), tradeId }, ack));
+  }
+  async cancelTrade(tradeId: string): Promise<TradeSnapshot> {
+    return this.tradeCommand((socket, ack) => socket.emit('trade:cancel', { requestId: createRequestId('trade-cancel'), tradeId }, ack));
+  }
+
   async createCharacter(name: string, characterClass: CharacterClass): Promise<void> {
     const response = await this.withAck<CharacterCreateResult>((ack) => this.requireSocket().emit('character:create', { requestId: createRequestId('character'), name, characterClass }, ack));
     this.assertOk(response); gameStore.spawn(response.data);
@@ -135,6 +151,10 @@ export class GameSocketClient {
     const response = await this.withAck<MerchantSnapshot>((ack) => emit(this.requireSocket(), ack));
     this.assertOk(response); gameStore.updateInventoryState(response.data.inventory); return response.data;
   }
+  private async tradeCommand(emit: (socket: GameSocket, ack: (response: SocketAck<TradeSnapshot>) => void) => void): Promise<TradeSnapshot> {
+    const response = await this.withAck<TradeSnapshot>((ack) => emit(this.requireSocket(), ack));
+    this.assertOk(response); gameStore.setTrade(response.data); return response.data;
+  }
   private assertOk<T>(response: SocketAck<T>): asserts response is { ok: true; data: T } {
     if (!response.ok) { gameStore.addNotification(response.error); throw new Error(response.error.message); }
   }
@@ -155,6 +175,10 @@ export class GameSocketClient {
     socket.on('world:mapChanged', (payload) => gameStore.changeMap(payload));
     socket.on('character:currencyUpdated', (payload) => gameStore.updateCurrency(payload));
     socket.on('chat:message', (payload) => { for (const listener of this.chatListeners) listener(payload); });
+    socket.on('trade:requested', (payload) => gameStore.setTrade(payload));
+    socket.on('trade:updated', (payload) => gameStore.setTrade(payload));
+    socket.on('trade:completed', (payload) => gameStore.setTrade(payload));
+    socket.on('trade:cancelled', (payload) => gameStore.setTrade(payload));
     socket.on('notification', (payload) => gameStore.addNotification(payload));
   }
   private scheduleServerReconnect(socket: GameSocket): void {
