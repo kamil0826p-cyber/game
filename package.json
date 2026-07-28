@@ -10,9 +10,10 @@
   },
   "scripts": {
     "build": "npm run prisma:generate && nest build",
-    "start": "node dist/main.js",
-    "start:dev": "npm run prisma:generate && nest start --watch",
-    "start:debug": "npm run prisma:generate && nest start --debug --watch",
+    "db:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && prisma db seed",
+    "start": "npm run db:prepare && node dist/main.js",
+    "start:dev": "npm run db:prepare && nest start --watch",
+    "start:debug": "npm run db:prepare && nest start --debug --watch",
     "typecheck": "npm run prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "npm run prisma:generate && vitest run",
     "test:watch": "npm run prisma:generate && vitest",
