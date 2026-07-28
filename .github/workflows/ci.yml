@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/grid_mmorpg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - name: Install backend dependencies
+        run: npm ci
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install
+      - name: Validate Prisma schema
+        run: npm run prisma:validate
+      - name: Run full repository checks
+        run: npm run check:all
