@@ -394,6 +394,8 @@ model TradeSession {
   status               TradeStatus @default(REQUESTED)
   initiatorAccepted    Boolean     @default(false)
   recipientAccepted    Boolean     @default(false)
+  initiatorSilver      Int         @default(0)
+  recipientSilver      Int         @default(0)
   expiresAt            DateTime
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
