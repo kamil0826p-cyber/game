@@ -34,7 +34,7 @@ const npc = {
   },
 };
 
-function createService(record = npc): NpcService {
+function createService(record: object = npc): NpcService {
   return new NpcService({
     npcDefinition: { findUnique: vi.fn().mockResolvedValue(record) },
   } as unknown as PrismaService);
@@ -92,6 +92,48 @@ describe('NpcService dialogue flow', () => {
     expect(result).toEqual({
       type: 'ACTION',
       action: { type: 'OPEN_MERCHANT', npcId: npc.id },
+    });
+  });
+
+  it('starts a conversation from the previous persisted merchant format', async () => {
+    const legacyNpc = {
+      ...npc,
+      dialogue: {
+        type: 'MERCHANT',
+        merchant: {
+          itemKeys: ['field-rations'],
+          interactionRadius: 2,
+          infiniteStock: true,
+        },
+      },
+    };
+
+    const service = createService(legacyNpc);
+    const started = await service.startDialogue(
+      legacyNpc.id,
+      { mapId: 'map-a', x: 8, y: 10 },
+      'pl',
+    );
+
+    expect(started.node).toMatchObject({
+      id: 'welcome',
+      text: 'Witaj podróżniku, czy chcesz zobaczyć moje towary?',
+      choices: [
+        { id: 'show-offer', label: 'Pokaż mi co masz w ofercie!' },
+        { id: 'decline', label: 'Nie, dziękuję' },
+      ],
+    });
+    await expect(
+      service.chooseDialogue(
+        legacyNpc.id,
+        'welcome',
+        'show-offer',
+        { mapId: 'map-a', x: 8, y: 10 },
+        'pl',
+      ),
+    ).resolves.toEqual({
+      type: 'ACTION',
+      action: { type: 'OPEN_MERCHANT', npcId: legacyNpc.id },
     });
   });
 

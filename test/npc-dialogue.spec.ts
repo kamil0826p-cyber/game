@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   localizeDialogueText,
   npcDialogueDefinitionSchema,
+  parseNpcDialogueDefinition,
 } from '../src/modules/npcs/npc-dialogue.js';
 
 const validDialogue = {
@@ -30,6 +31,44 @@ describe('NPC dialogue definition', () => {
     expect(dialogue.nodes.welcome.choices[0]?.nextNodeId).toBe('details');
     expect(localizeDialogueText(dialogue.nodes.welcome.text, 'pl')).toBe('Witaj.');
     expect(localizeDialogueText(dialogue.nodes.welcome.text, 'en')).toBe('Welcome.');
+  });
+
+  it('upgrades the previous merchant format without losing its offer', () => {
+    const dialogue = parseNpcDialogueDefinition({
+      type: 'MERCHANT',
+      merchant: {
+        itemKeys: ['field-rations', 'minor-health-potion'],
+        interactionRadius: 2,
+        infiniteStock: true,
+      },
+    });
+
+    expect(dialogue).toMatchObject({
+      type: 'MERCHANT',
+      interactionRadius: 2,
+      rootNodeId: 'welcome',
+      merchant: {
+        itemKeys: ['field-rations', 'minor-health-potion'],
+        infiniteStock: true,
+      },
+    });
+    expect(dialogue?.nodes.welcome.choices).toEqual([
+      expect.objectContaining({ id: 'show-offer', action: 'OPEN_MERCHANT' }),
+      expect.objectContaining({ id: 'decline', action: 'CLOSE' }),
+    ]);
+  });
+
+  it('does not reinterpret malformed dialogue as a legacy merchant', () => {
+    expect(
+      parseNpcDialogueDefinition({
+        type: 'MERCHANT',
+        merchant: {
+          itemKeys: [],
+          interactionRadius: 999,
+          infiniteStock: true,
+        },
+      }),
+    ).toBeUndefined();
   });
 
   it('rejects a dangling branch', () => {

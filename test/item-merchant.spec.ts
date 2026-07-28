@@ -77,16 +77,9 @@ describe('ItemService merchant selection', () => {
           y: 10,
           dialogue: {
             type: 'MERCHANT',
-            interactionRadius: 2,
-            rootNodeId: 'root',
-            nodes: {
-              root: {
-                text: 'Welcome',
-                choices: [{ id: 'shop', label: 'Shop', action: 'OPEN_MERCHANT' }],
-              },
-            },
             merchant: {
               itemKeys: ['field-rations', 'minor-health-potion'],
+              interactionRadius: 2,
               infiniteStock: true,
             },
           },

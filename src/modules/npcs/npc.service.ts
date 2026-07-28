@@ -3,7 +3,7 @@ import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { NpcDialogueChoiceResult, NpcDialogueSnapshot, NpcStatePayload } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { SupportedLocale } from '../../i18n/localization.service.js';
-import { localizeDialogueText, npcDialogueDefinitionSchema, type NpcDialogueDefinition } from './npc-dialogue.js';
+import { localizeDialogueText, parseNpcDialogueDefinition, type NpcDialogueDefinition } from './npc-dialogue.js';
 
 interface NpcDialogue {
   type?: unknown;
@@ -105,11 +105,11 @@ export class NpcService {
   private async requireAvailableNpc(npcId: string, position: NpcInteractionPosition) {
     const npc = await this.prisma.npcDefinition.findUnique({ where: { id: npcId } });
     if (!npc || npc.mapId !== position.mapId) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
-    const parsed = npcDialogueDefinitionSchema.safeParse(npc.dialogue);
-    if (!parsed.success) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_UNAVAILABLE, 'errors.npcs.dialogueUnavailable', { npcId });
+    const dialogue = parseNpcDialogueDefinition(npc.dialogue);
+    if (!dialogue) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_UNAVAILABLE, 'errors.npcs.dialogueUnavailable', { npcId });
     const distance = Math.max(Math.abs(npc.x - position.x), Math.abs(npc.y - position.y));
-    if (distance > parsed.data.interactionRadius) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
-    return { npc, dialogue: parsed.data };
+    if (distance > dialogue.interactionRadius) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
+    return { npc, dialogue };
   }
 
   private toDialogueSnapshot(npc: { id: string; key: string; name: string }, dialogue: NpcDialogueDefinition, nodeId: string, locale: SupportedLocale): NpcDialogueSnapshot {

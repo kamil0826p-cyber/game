@@ -49,6 +49,17 @@ const merchantConfigurationSchema = z
   })
   .strict();
 
+const legacyMerchantDialogueSchema = z
+  .object({
+    type: z.literal('MERCHANT'),
+    merchant: merchantConfigurationSchema
+      .extend({
+        interactionRadius: z.number().int().min(0).max(8).default(1),
+      })
+      .strict(),
+  })
+  .strict();
+
 export const npcDialogueDefinitionSchema = z
   .object({
     type: z.enum(['DIALOGUE', 'MERCHANT', 'QUEST']).default('DIALOGUE'),
@@ -126,6 +137,47 @@ export const npcDialogueDefinitionSchema = z
 export type LocalizedDialogueText = z.infer<typeof localizedTextSchema>;
 export type NpcDialogueDefinition = z.infer<typeof npcDialogueDefinitionSchema>;
 export type NpcDialogueChoice = NpcDialogueDefinition['nodes'][string]['choices'][number];
+
+export function parseNpcDialogueDefinition(value: unknown): NpcDialogueDefinition | undefined {
+  const current = npcDialogueDefinitionSchema.safeParse(value);
+  if (current.success) return current.data;
+
+  const legacy = legacyMerchantDialogueSchema.safeParse(value);
+  if (!legacy.success) return undefined;
+
+  return npcDialogueDefinitionSchema.parse({
+    type: 'MERCHANT',
+    interactionRadius: legacy.data.merchant.interactionRadius,
+    rootNodeId: 'welcome',
+    nodes: {
+      welcome: {
+        text: {
+          pl: 'Witaj podróżniku, czy chcesz zobaczyć moje towary?',
+          en: 'Welcome, traveler. Would you like to see my wares?',
+        },
+        choices: [
+          {
+            id: 'show-offer',
+            label: {
+              pl: 'Pokaż mi co masz w ofercie!',
+              en: 'Show me what you have for sale!',
+            },
+            action: 'OPEN_MERCHANT',
+          },
+          {
+            id: 'decline',
+            label: { pl: 'Nie, dziękuję', en: 'No, thank you' },
+            action: 'CLOSE',
+          },
+        ],
+      },
+    },
+    merchant: {
+      itemKeys: legacy.data.merchant.itemKeys,
+      infiniteStock: legacy.data.merchant.infiniteStock,
+    },
+  });
+}
 
 export function localizeDialogueText(
   value: LocalizedDialogueText,

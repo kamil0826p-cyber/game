@@ -4,7 +4,7 @@ import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { InventorySnapshot, ItemRarity, MerchantSnapshot } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
-import { npcDialogueDefinitionSchema } from '../npcs/npc-dialogue.js';
+import { parseNpcDialogueDefinition } from '../npcs/npc-dialogue.js';
 
 export const INVENTORY_CAPACITY = 40;
 
@@ -245,10 +245,10 @@ export class ItemService {
 
   private async requireMerchant(tx: Pick<Prisma.TransactionClient, 'npcDefinition'>, character: { mapId: string; x: number; y: number }, npcId: string) {
     const npc = await tx.npcDefinition.findUnique({ where: { id: npcId } });
-    const dialogue = npc ? npcDialogueDefinitionSchema.safeParse(npc.dialogue) : undefined;
-    if (npc && npc.mapId === character.mapId && dialogue?.success && dialogue.data.merchant) {
+    const dialogue = npc ? parseNpcDialogueDefinition(npc.dialogue) : undefined;
+    if (npc && npc.mapId === character.mapId && dialogue?.merchant) {
       const distance = Math.max(Math.abs(npc.x - character.x), Math.abs(npc.y - character.y));
-      if (distance <= dialogue.data.interactionRadius) return { ...npc, itemKeys: dialogue.data.merchant.itemKeys };
+      if (distance <= dialogue.interactionRadius) return { ...npc, itemKeys: dialogue.merchant.itemKeys };
     }
     throw new GameError(GAME_ERROR_CODES.MERCHANT_NOT_AVAILABLE, 'errors.items.merchantUnavailable');
   }
