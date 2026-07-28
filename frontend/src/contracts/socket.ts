@@ -30,6 +30,9 @@ export interface VisibilityViewportPayload { halfWidth: number; halfHeight: numb
 export interface MovementCommittedPayload { requestId?: string; source: 'DIRECT' | 'PATH'; mapId: string; x: number; y: number; direction: Direction; serverTime: number; portalTransition?: { sourceMapId: string; destinationMapId: string; targetX: number; targetY: number; }; }
 export interface MovementRejectedPayload extends SocketErrorPayload { requestId?: string; retryAfterMs?: number; authoritative: { mapId: string; x: number; y: number; direction: Direction; }; }
 export interface SessionReadyPayload { realm: RealmState; requiresCharacter: boolean; serverTime: number; }
+export interface TradeParticipantSnapshot { characterId: string; name: string; silver: number; accepted: boolean; }
+export interface TradeItemSnapshot { itemId: string; offeredByCharacterId: string; definitionKey: string; name: string; quantity: number; }
+export interface TradeSnapshot { id: string; status: 'REQUESTED' | 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED'; expiresAt: number; selfCharacterId: string; initiator: TradeParticipantSnapshot; recipient: TradeParticipantSnapshot; items: TradeItemSnapshot[]; }
 
 export interface ClientToServerEvents {
   'character:create': (payload: CreateCharacterPayload, acknowledgement: (response: SocketAck<WorldSpawnPayload>) => void) => void;
@@ -48,6 +51,11 @@ export interface ClientToServerEvents {
   'merchant:get': (payload: { requestId: string }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:buy': (payload: { requestId: string; itemKey: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:sell': (payload: { requestId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'trade:request': (payload: { requestId: string; targetCharacterId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:respond': (payload: { requestId: string; tradeId: string; accept: boolean }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:offer': (payload: { requestId: string; tradeId: string; silver: number; items: Array<{ itemId: string; quantity: number }> }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:confirm': (payload: { requestId: string; tradeId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:cancel': (payload: { requestId: string; tradeId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
 }
 
 export interface ServerToClientEvents {
@@ -62,5 +70,9 @@ export interface ServerToClientEvents {
   'movement:rejected': (payload: MovementRejectedPayload) => void;
   'character:currencyUpdated': (payload: CharacterCurrencyUpdatedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
+  'trade:requested': (payload: TradeSnapshot) => void;
+  'trade:updated': (payload: TradeSnapshot) => void;
+  'trade:completed': (payload: TradeSnapshot) => void;
+  'trade:cancelled': (payload: TradeSnapshot) => void;
   notification: (payload: SocketErrorPayload) => void;
 }
