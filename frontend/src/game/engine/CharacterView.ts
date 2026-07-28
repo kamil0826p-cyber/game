@@ -49,12 +49,12 @@ export class CharacterView {
     this.nameplate.position.set(0, -72);
     this.nameplate.zIndex = 4;
 
-    this.clickTarget.rect(-24, -78, 48, 78).fill({ color: 0xffffff, alpha: 0.001 });
+    this.clickTarget.rect(-28, -82, 56, 86).fill({ color: 0xffffff, alpha: 0.001 });
     this.clickTarget.zIndex = 10;
     if (!localPlayer) {
       this.clickTarget.eventMode = 'static';
       this.clickTarget.cursor = 'pointer';
-      this.clickTarget.on('pointerdown', this.onPlayerPointerDown);
+      this.clickTarget.on('pointertap', this.onPlayerTap);
     }
 
     this.container.addChild(this.shadow, this.fallback, this.sprite, this.nameplate, this.clickTarget);
@@ -107,18 +107,19 @@ export class CharacterView {
 
   destroy(): void {
     this.destroyed = true;
-    this.clickTarget.off('pointerdown', this.onPlayerPointerDown);
+    this.clickTarget.off('pointertap', this.onPlayerTap);
     this.container.destroy({ children: true });
   }
 
-  private readonly onPlayerPointerDown = (event: FederatedPointerEvent): void => {
+  private readonly onPlayerTap = (event: FederatedPointerEvent): void => {
     if (event.button !== 0) return;
     event.stopPropagation();
+    const nativeEvent = event.nativeEvent;
     window.dispatchEvent(new CustomEvent(PLAYER_CONTEXT_EVENT, {
       detail: {
         player: this.state,
-        clientX: event.clientX,
-        clientY: event.clientY,
+        clientX: nativeEvent.clientX,
+        clientY: nativeEvent.clientY,
       },
     }));
   };
