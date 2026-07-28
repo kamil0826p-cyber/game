@@ -1,4 +1,13 @@
 import { Module } from '@nestjs/common';
+import { ItemModule } from '../../items/item.module.js';
+import { MovementModule } from '../../movement/movement.module.js';
+import { WorldModule } from '../../world/world.module.js';
+import { TradeGateway } from './trade.gateway.js';
+import { TradeService } from './trade.service.js';
 
-@Module({})
+@Module({
+  imports: [ItemModule, MovementModule, WorldModule],
+  providers: [TradeService, TradeGateway],
+  exports: [TradeService],
+})
 export class TradeModule {}
