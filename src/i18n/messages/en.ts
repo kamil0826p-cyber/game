@@ -22,6 +22,11 @@ export const englishMessages = {
   'errors.items.equipped': 'Unequip this item first.',
   'errors.items.effectNotNeeded': 'This consumable would not restore anything right now.',
   'errors.items.merchantUnavailable': 'Move closer to a merchant to trade.',
+  'errors.trade.notFound': 'The trade session does not exist.',
+  'errors.trade.busy': 'One of the players is already trading.',
+  'errors.trade.tooFar': 'Both players must stay close to trade.',
+  'errors.trade.invalidState': 'The trade is no longer available.',
+  'errors.trade.expired': 'The trade request expired.',
   'errors.internal': 'An internal server error occurred.',
   'notifications.sessionReplaced': 'This character connected from another session.',
 } as const;
