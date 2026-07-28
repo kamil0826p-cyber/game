@@ -5,6 +5,10 @@ const requestId = z.string().min(1).max(64);
 const itemId = z.string().uuid();
 const itemKey = z.string().trim().min(1).max(96);
 const quantity = z.number().int().min(1).max(9999);
+const tradeQuantity = z.number().int().min(0).max(9999);
+const tradeId = z.string().uuid();
+const characterId = z.string().uuid();
+const silver = z.number().int().min(0).max(2_147_483_647);
 
 export const createCharacterSchema = z.object({
   requestId,
@@ -22,6 +26,12 @@ export const inventoryMoveSchema = z.object({ requestId, itemId, targetSlotIndex
 export const inventoryDiscardSchema = z.object({ requestId, itemId, quantity });
 export const merchantBuySchema = z.object({ requestId, itemKey, quantity });
 export const merchantSellSchema = z.object({ requestId, itemId, quantity });
+export const tradeRequestSchema = z.object({ requestId, targetCharacterId: characterId }).strict();
+export const tradeGetActiveSchema = z.object({ requestId }).strict();
+export const tradeRespondSchema = z.object({ requestId, tradeId, accept: z.boolean() }).strict();
+export const tradeSetItemSchema = z.object({ requestId, tradeId, itemId, quantity: tradeQuantity }).strict();
+export const tradeSetSilverSchema = z.object({ requestId, tradeId, silver }).strict();
+export const tradeActionSchema = z.object({ requestId, tradeId }).strict();
 
 export type CreateCharacterPayload = z.infer<typeof createCharacterSchema>;
 export type MoveStepPayload = z.infer<typeof moveStepSchema>;
@@ -35,3 +45,9 @@ export type InventoryMovePayload = z.infer<typeof inventoryMoveSchema>;
 export type InventoryDiscardPayload = z.infer<typeof inventoryDiscardSchema>;
 export type MerchantBuyPayload = z.infer<typeof merchantBuySchema>;
 export type MerchantSellPayload = z.infer<typeof merchantSellSchema>;
+export type TradeRequestPayload = z.infer<typeof tradeRequestSchema>;
+export type TradeGetActivePayload = z.infer<typeof tradeGetActiveSchema>;
+export type TradeRespondPayload = z.infer<typeof tradeRespondSchema>;
+export type TradeSetItemPayload = z.infer<typeof tradeSetItemSchema>;
+export type TradeSetSilverPayload = z.infer<typeof tradeSetSilverSchema>;
+export type TradeActionPayload = z.infer<typeof tradeActionSchema>;
