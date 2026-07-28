@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { PublicPlayerState } from '../../contracts/game';
 import type { InventorySnapshot, TradeSnapshot } from '../../contracts/socket';
@@ -23,6 +23,7 @@ function clampPosition(clientX: number, clientY: number): PanelPosition {
 
 export function PlayerTradeOverlay(): React.JSX.Element | null {
   const client = useGameConnection();
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const [context, setContext] = useState<PlayerContextDetail | null>(null);
   const [position, setPosition] = useState<PanelPosition>({ left: 16, top: 80 });
   const [trade, setTrade] = useState<TradeSnapshot | null>(null);
@@ -34,12 +35,37 @@ export function PlayerTradeOverlay(): React.JSX.Element | null {
   useEffect(() => {
     const onContext = (event: Event) => {
       const detail = (event as CustomEvent<PlayerContextDetail>).detail;
+      if (!detail?.player) return;
       setPosition(clampPosition(detail.clientX, detail.clientY));
       setContext(detail);
     };
     window.addEventListener(PLAYER_CONTEXT_EVENT, onContext);
     return () => window.removeEventListener(PLAYER_CONTEXT_EVENT, onContext);
   }, []);
+
+  useEffect(() => {
+    if (!context) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent): void => {
+      const target = event.target;
+      if (target instanceof Node && contextMenuRef.current?.contains(target)) return;
+      setContext(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setContext(null);
+    };
+
+    const frame = window.requestAnimationFrame(() => {
+      document.addEventListener('pointerdown', closeOnOutsidePointer, true);
+      document.addEventListener('keydown', closeOnEscape);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [context]);
 
   useEffect(() => client.subscribeTrade((next) => {
     setTrade(next);
@@ -76,13 +102,10 @@ export function PlayerTradeOverlay(): React.JSX.Element | null {
 
   if (context) {
     return createPortal(
-      <>
-        <button aria-label="Zamknij menu gracza" type="button" className="fixed inset-0 z-[79] cursor-default bg-transparent" onClick={() => setContext(null)} />
-        <div className="fantasy-panel fixed z-[80] w-48 p-2 text-slate-100 shadow-2xl" style={position}>
-          <div className="truncate border-b border-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-300">{context.player.name}</div>
-          <button type="button" className="retro-button mt-2 w-full px-3 py-2 text-left text-sm" disabled={busy} onClick={() => void run(() => client.requestTrade(context.player.characterId))}>Handluj</button>
-        </div>
-      </>,
+      <div ref={contextMenuRef} className="fantasy-panel fixed z-[80] w-48 p-2 text-slate-100 shadow-2xl" style={position}>
+        <div className="truncate border-b border-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-300">{context.player.name}</div>
+        <button type="button" className="retro-button mt-2 w-full px-3 py-2 text-left text-sm" disabled={busy} onClick={() => void run(() => client.requestTrade(context.player.characterId))}>Handluj</button>
+      </div>,
       document.body,
     );
   }
