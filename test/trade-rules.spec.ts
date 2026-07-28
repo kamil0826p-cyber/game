@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTradeLockKeys, isMutableTradeStatus, isTradeDistanceAllowed, MAX_TRADE_OFFER_ITEMS, MAX_TRADE_SILVER } from '../src/modules/future/trade/trade.rules.js';
+import { buildTradeLockKeys, isMutableTradeStatus, isTradeDistanceAllowed, MAX_TRADE_OFFER_ITEMS, MAX_TRADE_SILVER } from '../src/modules/player/trade/trade.rules.js';
 
 describe('trade rules', () => {
   it('allows nearby players on the same map', () => { expect(isTradeDistanceAllowed({ mapId: 'map-a', x: 10, y: 10 }, { mapId: 'map-a', x: 12, y: 8 })).toBe(true); });
