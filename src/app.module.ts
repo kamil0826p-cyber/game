@@ -12,9 +12,10 @@ import { MovementModule } from './modules/movement/movement.module.js';
 import { PersistenceModule } from './modules/persistence/persistence.module.js';
 import { RealmModule } from './modules/realm/realm.module.js';
 import { RealtimeModule } from './modules/realtime/realtime.module.js';
+import { TradeModule } from './modules/trade/trade.module.js';
 import { WorldModule } from './modules/world/world.module.js';
 
 @Module({
-  imports: [GameConfigModule, DatabaseModule, LocalizationModule, AuthModule, RealmModule, MapModule, CharacterModule, WorldModule, PersistenceModule, MovementModule, RealtimeModule, ItemModule, FutureFeaturesModule, HealthModule],
+  imports: [GameConfigModule, DatabaseModule, LocalizationModule, AuthModule, RealmModule, MapModule, CharacterModule, WorldModule, PersistenceModule, MovementModule, RealtimeModule, ItemModule, TradeModule, FutureFeaturesModule, HealthModule],
 })
 export class AppModule {}
