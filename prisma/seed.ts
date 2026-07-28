@@ -33,7 +33,25 @@ const mapDefinitions: MapSeedDefinition[] = [
   { key: 'crystal-cave', name: 'Crystal Cave', fileName: 'crystal-cave.json', zoneType: 'OUTLAW', spawnX: 3, spawnY: 3 },
 ];
 
-const merchantStock = ['traveler-sword', 'apprentice-staff', 'field-bow', 'minor-health-potion', 'field-rations'] as const;
+const borinStock = ['traveler-sword', 'apprentice-staff', 'field-bow', 'minor-health-potion', 'field-rations'] as const;
+const borinDialogue = {
+  type: 'MERCHANT',
+  interactionRadius: 2,
+  rootNodeId: 'welcome',
+  nodes: {
+    welcome: {
+      text: {
+        pl: 'Witaj podróżniku, czy chcesz zobaczyć moje towary?',
+        en: 'Welcome, traveler. Would you like to see my wares?',
+      },
+      choices: [
+        { id: 'show-offer', label: { pl: 'Pokaż mi co masz w ofercie!', en: 'Show me what you have for sale!' }, action: 'OPEN_MERCHANT' },
+        { id: 'decline', label: { pl: 'Nie, dziękuję', en: 'No, thank you' }, action: 'CLOSE' },
+      ],
+    },
+  },
+  merchant: { itemKeys: borinStock, infiniteStock: true },
+} as const;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 async function resolveExternalTilesets(input: unknown, mapPath: string): Promise<unknown> {
@@ -153,14 +171,14 @@ async function main(): Promise<void> {
         x: 16,
         y: 6,
         outfitKey: 'npc-warrior-merchant',
-        dialogue: { type: 'MERCHANT', merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true } },
+        dialogue: borinDialogue,
       },
       update: {
         name: 'Borin Żelazna Dłoń',
         x: 16,
         y: 6,
         outfitKey: 'npc-warrior-merchant',
-        dialogue: { type: 'MERCHANT', merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true } },
+        dialogue: borinDialogue,
       },
     });
 

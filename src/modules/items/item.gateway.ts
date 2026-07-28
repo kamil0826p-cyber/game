@@ -9,12 +9,14 @@ import {
   inventoryMoveSchema,
   inventoryRequestSchema,
   merchantBuySchema,
+  merchantRequestSchema,
   merchantSellSchema,
   type InventoryDiscardPayload,
   type InventoryItemPayload,
   type InventoryMovePayload,
   type InventoryRequestPayload,
   type MerchantBuyPayload,
+  type MerchantRequestPayload,
   type MerchantSellPayload,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
@@ -66,8 +68,9 @@ export class ItemGateway {
 
   @SubscribeMessage('merchant:get')
   getMerchant(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<MerchantSnapshot>> {
-    return this.handle(client, inventoryRequestSchema, raw, async (session) => {
-      const snapshot = await this.items.getMerchant(session.userId, session.characterId);
+    return this.handle(client, merchantRequestSchema, raw, async (session, payload) => {
+      this.assertMerchantAccess(client, payload.npcId);
+      const snapshot = await this.items.getMerchant(session.userId, session.characterId, payload.npcId);
       this.syncSession(session, snapshot.inventory);
       return snapshot;
     });
@@ -76,7 +79,8 @@ export class ItemGateway {
   @SubscribeMessage('merchant:buy')
   buy(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<MerchantSnapshot>> {
     return this.handle(client, merchantBuySchema, raw, async (session, payload) => {
-      const snapshot = await this.items.buy(session.userId, session.characterId, payload.itemKey, payload.quantity, payload.requestId);
+      this.assertMerchantAccess(client, payload.npcId);
+      const snapshot = await this.items.buy(session.userId, session.characterId, payload.npcId, payload.itemKey, payload.quantity, payload.requestId);
       this.syncSession(session, snapshot.inventory);
       return snapshot;
     });
@@ -85,10 +89,15 @@ export class ItemGateway {
   @SubscribeMessage('merchant:sell')
   sell(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<MerchantSnapshot>> {
     return this.handle(client, merchantSellSchema, raw, async (session, payload) => {
-      const snapshot = await this.items.sell(session.userId, session.characterId, payload.itemId, payload.quantity, payload.requestId);
+      this.assertMerchantAccess(client, payload.npcId);
+      const snapshot = await this.items.sell(session.userId, session.characterId, payload.npcId, payload.itemId, payload.quantity, payload.requestId);
       this.syncSession(session, snapshot.inventory);
       return snapshot;
     });
+  }
+
+  private assertMerchantAccess(client: GameSocket, npcId: MerchantRequestPayload['npcId']): void {
+    if (client.data.merchantNpcId !== npcId) throw new GameError(GAME_ERROR_CODES.MERCHANT_NOT_AVAILABLE, 'errors.items.merchantUnavailable');
   }
 
   private syncSession(session: PlayerSession, snapshot: InventorySnapshot): InventorySnapshot {

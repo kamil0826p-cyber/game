@@ -9,6 +9,7 @@ import type { NpcStatePayload } from '../../contracts/socket';
 import type { LoadedMapDefinition } from '../../contracts/tiled';
 import { KeyboardMovementController } from '../input/KeyboardMovementController';
 import { mapRepository } from '../map/MapRepository';
+import { canInteractWithNpc } from '../npc/npcInteraction';
 import { findPath } from '../pathfinding/aStar';
 import { GameSocketClient } from '../realtime/GameSocketClient';
 import { gameStore, type GameState } from '../state/gameStore';
@@ -20,7 +21,7 @@ import {
 } from './constants';
 import { CharacterView } from './CharacterView';
 import { MapRenderer } from './MapRenderer';
-import { NpcView } from './NpcView';
+import { NPC_CONTEXT_EVENT, NpcView, type NpcInteractionPoint } from './NpcView';
 
 export const LOCAL_PLAYER_SCREEN_EVENT = 'game:local-player-screen-position';
 
@@ -166,19 +167,18 @@ export class GameEngine {
     }
   }
 
-  private readonly interactWithNpc = (npc: NpcStatePayload): void => {
+  private readonly interactWithNpc = (npc: NpcStatePayload, point: NpcInteractionPoint): void => {
     const state = gameStore.getSnapshot();
     const self = state.self;
     if (!self || state.phase !== 'in-world' || !state.socketConnected || state.portalTransition !== 'idle') return;
-    const distance = Math.max(Math.abs(npc.x - self.x), Math.abs(npc.y - self.y));
-    if (distance > npc.interactionRadius) {
+    if (!canInteractWithNpc(self, npc)) {
       gameStore.addNotification({
         code: 'NPC_TOO_FAR',
         message: 'Podejdź bliżej do NPC, aby rozpocząć interakcję.',
       });
       return;
     }
-    if (npc.interactionType === 'MERCHANT') gameStore.setActiveModal('merchant');
+    window.dispatchEvent(new CustomEvent(NPC_CONTEXT_EVENT, { detail: { npc, ...point } }));
   };
 
   private syncCharacters(state: GameState, immediate = false): void {
