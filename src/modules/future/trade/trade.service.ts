@@ -145,8 +145,15 @@ export class TradeService {
     for (const offer of trade.offers) {
       const item = await tx.inventoryItem.findUnique({ where: { id: offer.inventoryItemId }, include: { itemDefinition: true } });
       if (!item || item.characterId !== offer.offeredByCharacterId || item.equippedSlot || offer.quantity < 1 || offer.quantity > item.quantity) this.fail('TRADE_CHANGED', 'errors.trade.changed');
-      transfers.push({ item, quantity: offer.quantity, targetCharacterId: offer.offeredByCharacterId === trade.initiatorCharacterId ? trade.recipientCharacterId : trade.initiatorCharacterId });
+      transfers.push({
+        item,
+        quantity: offer.quantity,
+        targetCharacterId: offer.offeredByCharacterId === trade.initiatorCharacterId ? trade.recipientCharacterId : trade.initiatorCharacterId,
+      });
     }
+    // Remove offer references before deleting fully transferred inventory rows.
+    // TradeOfferItem.inventoryItem uses ON DELETE RESTRICT.
+    await tx.tradeOfferItem.deleteMany({ where: { tradeSessionId: trade.id } });
     for (const transfer of transfers) {
       if (transfer.quantity === transfer.item.quantity) await tx.inventoryItem.delete({ where: { id: transfer.item.id } });
       else await tx.inventoryItem.update({ where: { id: transfer.item.id }, data: { quantity: { decrement: transfer.quantity } } });
@@ -154,7 +161,6 @@ export class TradeService {
     for (const transfer of transfers) {
       await this.addItem(tx, transfer.targetCharacterId, transfer.item.itemDefinitionId, transfer.item.itemDefinition.stackLimit, transfer.quantity, transfer.item.instanceData);
     }
-    await tx.tradeOfferItem.deleteMany({ where: { tradeSessionId: trade.id } });
     await tx.character.update({ where: { id: trade.initiatorCharacterId }, data: { silver: nextA } });
     await tx.character.update({ where: { id: trade.recipientCharacterId }, data: { silver: nextB } });
     for (const [characterId, sent, received, before, after, counterparty] of [[trade.initiatorCharacterId, trade.initiatorSilver, trade.recipientSilver, a, nextA, trade.recipientCharacterId], [trade.recipientCharacterId, trade.recipientSilver, trade.initiatorSilver, b, nextB, trade.initiatorCharacterId]] as const) {
@@ -189,7 +195,16 @@ export class TradeService {
   private online(characterId: string, userId?: string) { const session = this.world.getByCharacterId(characterId); if (!session?.activeInWorld || (userId && session.userId !== userId)) this.fail('TRADE_PARTICIPANT_UNAVAILABLE', 'errors.trade.participantUnavailable'); return session; }
   private near(a: { realmId: string; mapId: string; x: number; y: number }, b: { realmId: string; mapId: string; x: number; y: number }): void { if (a.realmId !== b.realmId || !isTradeDistanceAllowed(a, b)) this.fail('TRADE_TOO_FAR', 'errors.trade.tooFar'); }
   private async reset(tx: Prisma.TransactionClient, tradeId: string): Promise<void> { await tx.tradeSession.update({ where: { id: tradeId }, data: { status: 'OPEN', initiatorAccepted: false, recipientAccepted: false, expiresAt: new Date(Date.now() + TRADE_OPEN_TTL_MS) } }); }
-  private async lockPlayers(tx: Prisma.TransactionClient, a: string, b: string): Promise<void> { for (const key of buildTradeLockKeys(a, b)) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`; }
+  private async lockPlayers(tx: Prisma.TransactionClient, a: string, b: string): Promise<void> {
+    for (const key of buildTradeLockKeys(a, b)) {
+      // pg_advisory_xact_lock returns PostgreSQL void, which Prisma cannot deserialize.
+      // Invoke it as a FROM function and expose only a supported integer column.
+      await tx.$queryRaw<Array<{ locked: number }>>`
+        SELECT 1::int AS "locked"
+        FROM pg_advisory_xact_lock(hashtext(${key}))
+      `;
+    }
+  }
   private syncOnlineBalances(tradeId: string): void { void this.prisma.tradeSession.findUnique({ where: { id: tradeId }, include: { initiator: { select: { id: true, silver: true } }, recipient: { select: { id: true, silver: true } } } }).then((trade) => { if (!trade) return; for (const character of [trade.initiator, trade.recipient]) { const session = this.world.getByCharacterId(character.id); if (session) { session.silver = character.silver; session.stateRevision += 1; session.dirty = true; } } }); }
   private fail(code: keyof typeof GAME_ERROR_CODES, key: string): never { throw new GameError(GAME_ERROR_CODES[code], key); }
 }
