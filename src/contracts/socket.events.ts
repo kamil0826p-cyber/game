@@ -2,7 +2,7 @@ import type { Socket, Namespace } from 'socket.io';
 import type { AuthContext } from '../auth/auth-context.interface.js';
 import type { CharacterClass, CharacterStats, CombatState, CurrencyBalance, Direction, EquipmentSlot, ItemCategory, ZoneType } from '../common/domain/game.types.js';
 import type { SupportedLocale } from '../i18n/localization.service.js';
-import type { ChatSendPayload, CreateCharacterPayload, InventoryDiscardPayload, InventoryItemPayload as InventoryItemCommandPayload, InventoryMovePayload, InventoryRequestPayload, MerchantBuyPayload, MerchantSellPayload, MoveStepPayload, MoveStopPayload, MoveTargetPayload, ViewportUpdatePayload } from './socket.schemas.js';
+import type { ChatSendPayload, CreateCharacterPayload, InventoryDiscardPayload, InventoryItemPayload as InventoryItemCommandPayload, InventoryMovePayload, InventoryRequestPayload, MerchantBuyPayload, MerchantSellPayload, MoveStepPayload, MoveStopPayload, MoveTargetPayload, TradeCancelPayload, TradeConfirmPayload, TradeOfferPayload, TradeRequestPayload, TradeRespondPayload, ViewportUpdatePayload } from './socket.schemas.js';
 
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
@@ -25,6 +25,9 @@ export interface InventoryCharacterSnapshot extends CharacterStats { silver: num
 export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: InventoryCharacterSnapshot; }
 export interface MerchantItemPayload { definitionKey: string; name: string; description: string; category: ItemCategory; rarity: ItemRarity; icon: string; stackLimit: number; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; statBonuses: ItemStatBonuses; effect?: { hp?: number; energy?: number }; buyPriceSilver: number; sellPriceSilver: number; }
 export interface MerchantSnapshot { merchant: { id: string; key: string; name: string }; silver: number; items: MerchantItemPayload[]; inventory: InventorySnapshot; }
+export interface TradeParticipantSnapshot { characterId: string; name: string; silver: number; accepted: boolean; }
+export interface TradeItemSnapshot { itemId: string; offeredByCharacterId: string; definitionKey: string; name: string; quantity: number; }
+export interface TradeSnapshot { id: string; status: 'REQUESTED' | 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED'; expiresAt: number; selfCharacterId: string; initiator: TradeParticipantSnapshot; recipient: TradeParticipantSnapshot; items: TradeItemSnapshot[]; }
 
 export interface ClientToServerEvents {
   'character:create': (payload: CreateCharacterPayload, acknowledgement?: (response: SocketAck<WorldSpawnPayload>) => void) => void;
@@ -43,6 +46,11 @@ export interface ClientToServerEvents {
   'merchant:get': (payload: InventoryRequestPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:buy': (payload: MerchantBuyPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:sell': (payload: MerchantSellPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'trade:request': (payload: TradeRequestPayload, acknowledgement?: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:respond': (payload: TradeRespondPayload, acknowledgement?: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:offer': (payload: TradeOfferPayload, acknowledgement?: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:confirm': (payload: TradeConfirmPayload, acknowledgement?: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:cancel': (payload: TradeCancelPayload, acknowledgement?: (response: SocketAck<TradeSnapshot>) => void) => void;
 }
 
 export interface ServerToClientEvents {
@@ -57,6 +65,10 @@ export interface ServerToClientEvents {
   'movement:rejected': (payload: MovementRejectedPayload) => void;
   'character:currencyUpdated': (payload: CharacterCurrencyUpdatedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
+  'trade:requested': (payload: TradeSnapshot) => void;
+  'trade:updated': (payload: TradeSnapshot) => void;
+  'trade:completed': (payload: TradeSnapshot) => void;
+  'trade:cancelled': (payload: TradeSnapshot) => void;
   notification: (payload: SocketErrorPayload) => void;
 }
 
