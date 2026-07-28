@@ -5,7 +5,7 @@ import type { CharacterClass, Direction } from '../../contracts/game';
 import type {
   CharacterCreateResult, ChatChannel, ChatMessagePayload, ClientToServerEvents,
   InventorySnapshot, MerchantSnapshot, MovementCommittedPayload, MovementStopPayload, PathAcceptedPayload,
-  ServerToClientEvents, SocketAck, SocketErrorPayload, VisibilityViewportPayload, WorldSpawnPayload,
+  ServerToClientEvents, SocketAck, SocketErrorPayload, TradeSnapshot, VisibilityViewportPayload, WorldSpawnPayload,
 } from '../../contracts/socket';
 import type { Locale } from '../../i18n/dictionaries';
 import { createRequestId } from '../../utils/requestId';
@@ -15,6 +15,7 @@ const ACK_TIMEOUT_MS = 8_000;
 const SERVER_RECONNECT_DELAY_MS = 1_200;
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type ChatListener = (message: ChatMessagePayload) => void;
+type TradeListener = (trade: TradeSnapshot) => void;
 type AdminCommandAck = SocketAck<{ message: string }>;
 
 export class GameSocketClient {
@@ -24,6 +25,7 @@ export class GameSocketClient {
   private manualDisconnect = false;
   private serverReconnectTimer: number | undefined;
   private readonly chatListeners = new Set<ChatListener>();
+  private readonly tradeListeners = new Set<TradeListener>();
   private readonly pageHideHandler = () => this.socket?.disconnect();
   private readonly pageShowHandler = () => {
     if (!this.manualDisconnect && this.socket && !this.socket.connected) {
@@ -68,11 +70,13 @@ export class GameSocketClient {
     this.socket?.disconnect();
     this.socket = undefined;
     this.chatListeners.clear();
+    this.tradeListeners.clear();
     gameStore.reset();
   }
 
   setLocale(locale: Locale): void { this.locale = locale; }
   subscribeChat(listener: ChatListener): () => void { this.chatListeners.add(listener); return () => this.chatListeners.delete(listener); }
+  subscribeTrade(listener: TradeListener): () => void { this.tradeListeners.add(listener); return () => this.tradeListeners.delete(listener); }
 
   async sendChat(channel: ChatChannel, text: string): Promise<void> {
     if (text.trimStart().startsWith('/')) {
@@ -97,6 +101,12 @@ export class GameSocketClient {
   async getMerchant(): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:get', { requestId: createRequestId('merchant') }, ack)); }
   async buyFromMerchant(itemKey: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:buy', { requestId: createRequestId('merchant-buy'), itemKey, quantity }, ack)); }
   async sellToMerchant(itemId: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:sell', { requestId: createRequestId('merchant-sell'), itemId, quantity }, ack)); }
+
+  async requestTrade(targetCharacterId: string): Promise<TradeSnapshot> { return this.tradeCommand((socket, ack) => socket.emit('trade:request', { requestId: createRequestId('trade-request'), targetCharacterId }, ack)); }
+  async respondTrade(tradeId: string, accept: boolean): Promise<TradeSnapshot> { return this.tradeCommand((socket, ack) => socket.emit('trade:respond', { requestId: createRequestId('trade-respond'), tradeId, accept }, ack)); }
+  async updateTradeOffer(tradeId: string, items: Array<{ itemId: string; quantity: number }>, silver: number): Promise<TradeSnapshot> { return this.tradeCommand((socket, ack) => socket.emit('trade:offer', { requestId: createRequestId('trade-offer'), tradeId, items, silver }, ack)); }
+  async acceptTrade(tradeId: string): Promise<TradeSnapshot> { return this.tradeCommand((socket, ack) => socket.emit('trade:accept', { requestId: createRequestId('trade-accept'), tradeId }, ack)); }
+  async cancelTrade(tradeId: string): Promise<TradeSnapshot> { return this.tradeCommand((socket, ack) => socket.emit('trade:cancel', { requestId: createRequestId('trade-cancel'), tradeId }, ack)); }
 
   async createCharacter(name: string, characterClass: CharacterClass): Promise<void> {
     const response = await this.withAck<CharacterCreateResult>((ack) => this.requireSocket().emit('character:create', { requestId: createRequestId('character'), name, characterClass }, ack));
@@ -135,6 +145,10 @@ export class GameSocketClient {
     const response = await this.withAck<MerchantSnapshot>((ack) => emit(this.requireSocket(), ack));
     this.assertOk(response); gameStore.updateInventoryState(response.data.inventory); return response.data;
   }
+  private async tradeCommand(emit: (socket: GameSocket, ack: (response: SocketAck<TradeSnapshot>) => void) => void): Promise<TradeSnapshot> {
+    const response = await this.withAck<TradeSnapshot>((ack) => emit(this.requireSocket(), ack));
+    this.assertOk(response); return response.data;
+  }
   private assertOk<T>(response: SocketAck<T>): asserts response is { ok: true; data: T } {
     if (!response.ok) { gameStore.addNotification(response.error); throw new Error(response.error.message); }
   }
@@ -155,6 +169,7 @@ export class GameSocketClient {
     socket.on('world:mapChanged', (payload) => gameStore.changeMap(payload));
     socket.on('character:currencyUpdated', (payload) => gameStore.updateCurrency(payload));
     socket.on('chat:message', (payload) => { for (const listener of this.chatListeners) listener(payload); });
+    socket.on('trade:updated', (payload) => { for (const listener of this.tradeListeners) listener(payload); });
     socket.on('notification', (payload) => gameStore.addNotification(payload));
   }
   private scheduleServerReconnect(socket: GameSocket): void {
