@@ -10,10 +10,6 @@ const slotLabels: Record<EquipmentSlot, { en: string; pl: string }> = {
   HEAD: { en: 'Head', pl: 'Głowa' }, CHEST: { en: 'Chest', pl: 'Napierśnik' }, LEGS: { en: 'Legs', pl: 'Nogi' }, FEET: { en: 'Feet', pl: 'Buty' },
   MAIN_HAND: { en: 'Main hand', pl: 'Główna ręka' }, OFF_HAND: { en: 'Off hand', pl: 'Druga ręka' }, AMULET: { en: 'Amulet', pl: 'Amulet' }, RING: { en: 'Ring', pl: 'Pierścień' },
 };
-const localizedNames: Record<string, string> = {
-  'traveler-sword': 'Miecz podróżnika', 'apprentice-staff': 'Kostur adepta', 'field-bow': 'Łuk polowy',
-  'minor-health-potion': 'Mała mikstura zdrowia', 'field-rations': 'Prowiant polowy', 'town-scroll': 'Zwój miejski',
-};
 
 export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const { t, locale } = useI18n();
@@ -35,8 +31,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
     setBusy(true);
     try { setInventory(await operation()); } catch { /* notification is emitted by the socket client */ } finally { setBusy(false); }
   };
-  const name = (item: InventoryItemPayload) => locale === 'pl' ? (localizedNames[item.definitionKey] ?? item.name) : item.name;
-  const tooltipItem = (item: InventoryItemPayload) => ({ ...item, name: name(item) });
+  const tooltipItem = (item: InventoryItemPayload) => item;
   const startDrag = (event: React.DragEvent, item: InventoryItemPayload) => event.dataTransfer.setData('text/item-id', item.id);
   const droppedItem = (event: React.DragEvent) => inventory?.items.find((item) => item.id === event.dataTransfer.getData('text/item-id'));
 
@@ -77,7 +72,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => { event.preventDefault(); const dropped = droppedItem(event); if (dropped) void mutate(async () => { if (dropped.equippedSlot) await connection.unequipInventoryItem(dropped.id); return connection.moveInventoryItem(dropped.id, index); }); }}
                 onClick={() => setSelectedId(item?.id)} className={`inventory-slot ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''}`}
-                aria-label={item ? `${name(item)}, ${item.quantity}` : t('common.emptySlot')}>{item ? <><span className="text-xl">{item.icon}</span><small>{item.quantity}</small>{item.equippedSlot ? <i className="absolute left-1 top-1 text-[8px] text-emerald-300">E</i> : null}</> : null}</button>;
+                aria-label={item ? `${item.name}, ${item.quantity}` : t('common.emptySlot')}>{item ? <><span className="text-xl">{item.icon}</span><small>{item.quantity}</small>{item.equippedSlot ? <i className="absolute left-1 top-1 text-[8px] text-emerald-300">E</i> : null}</> : null}</button>;
               return item ? <ItemTooltip key={index} item={tooltipItem(item)}>{button}</ItemTooltip> : button;
             })}
           </div>
@@ -85,7 +80,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
       </div>
       <section className={`sticky -bottom-5 z-20 -mx-5 -mb-5 mt-5 min-h-[76px] border-t bg-slate-950/[0.98] px-5 py-3 shadow-[0_-12px_24px_rgba(2,6,23,0.75)] ${selected ? rarityClasses(selected.rarity) : 'border-white/10'}`}>
         {selected ? <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><span className="text-2xl">{selected.icon}</span><div><strong className="block">{name(selected)}</strong><span className="text-[11px] text-slate-400">{locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
+          <div className="flex items-center gap-3"><span className="text-2xl">{selected.icon}</span><div><strong className="block">{selected.name}</strong><span className="text-[11px] text-slate-400">{locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
           <div className="flex flex-wrap gap-2">
             {selected.usable ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.useInventoryItem(selected.id))}>{locale === 'pl' ? 'Użyj' : 'Use'}</button> : null}
             {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.equipInventoryItem(selected.id))}>{locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
