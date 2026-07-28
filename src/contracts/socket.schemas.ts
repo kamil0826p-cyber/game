@@ -5,6 +5,7 @@ const requestId = z.string().min(1).max(64);
 const itemId = z.string().uuid();
 const itemKey = z.string().trim().min(1).max(96);
 const quantity = z.number().int().min(1).max(9999);
+const tradeId = z.string().uuid();
 
 export const createCharacterSchema = z.object({
   requestId,
@@ -22,6 +23,12 @@ export const inventoryMoveSchema = z.object({ requestId, itemId, targetSlotIndex
 export const inventoryDiscardSchema = z.object({ requestId, itemId, quantity });
 export const merchantBuySchema = z.object({ requestId, itemKey, quantity });
 export const merchantSellSchema = z.object({ requestId, itemId, quantity });
+export const tradeRequestSchema = z.object({ requestId, targetCharacterId: z.string().uuid() });
+export const tradeRespondSchema = z.object({ requestId, tradeId, accept: z.boolean() });
+export const tradeOfferSchema = z.object({ requestId, tradeId, silver: z.number().int().min(0).max(2_000_000_000), items: z.array(z.object({ itemId, quantity })).max(40) });
+export const tradeAcceptSchema = z.object({ requestId, tradeId });
+export const tradeCancelSchema = z.object({ requestId, tradeId });
+export const tradeGetSchema = z.object({ requestId, tradeId });
 
 export type CreateCharacterPayload = z.infer<typeof createCharacterSchema>;
 export type MoveStepPayload = z.infer<typeof moveStepSchema>;
@@ -35,3 +42,9 @@ export type InventoryMovePayload = z.infer<typeof inventoryMoveSchema>;
 export type InventoryDiscardPayload = z.infer<typeof inventoryDiscardSchema>;
 export type MerchantBuyPayload = z.infer<typeof merchantBuySchema>;
 export type MerchantSellPayload = z.infer<typeof merchantSellSchema>;
+export type TradeRequestPayload = z.infer<typeof tradeRequestSchema>;
+export type TradeRespondPayload = z.infer<typeof tradeRespondSchema>;
+export type TradeOfferPayload = z.infer<typeof tradeOfferSchema>;
+export type TradeAcceptPayload = z.infer<typeof tradeAcceptSchema>;
+export type TradeCancelPayload = z.infer<typeof tradeCancelSchema>;
+export type TradeGetPayload = z.infer<typeof tradeGetSchema>;
