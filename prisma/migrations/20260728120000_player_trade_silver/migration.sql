@@ -6,3 +6,8 @@ ALTER TABLE "TradeSession"
 ADD CONSTRAINT "TradeSession_initiatorSilver_nonnegative" CHECK ("initiatorSilver" >= 0),
 ADD CONSTRAINT "TradeSession_recipientSilver_nonnegative" CHECK ("recipientSilver" >= 0),
 ADD CONSTRAINT "TradeSession_distinct_characters" CHECK ("initiatorCharacterId" <> "recipientCharacterId");
+
+ALTER TABLE "TradeOfferItem"
+DROP CONSTRAINT "TradeOfferItem_inventoryItemId_fkey",
+ADD CONSTRAINT "TradeOfferItem_inventoryItemId_fkey"
+FOREIGN KEY ("inventoryItemId") REFERENCES "InventoryItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
