@@ -3,6 +3,8 @@ import type { Direction, PublicPlayerState } from '../../contracts/game';
 import { WORLD_TILE_SIZE } from './constants';
 import { gameAssetLoader, type OutfitFrames } from './GameAssetLoader';
 
+export const REMOTE_PLAYER_INTERACTION_EVENT = 'game:remote-player-interaction';
+
 const classColors = {
   MAGE: 0x6d5bd0,
   WARRIOR: 0xb45454,
@@ -28,27 +30,19 @@ export class CharacterView {
   private moving = false;
   private lastOutfitKey = '';
 
-  constructor(
-    state: PublicPlayerState,
-    private readonly localPlayer: boolean,
-    private readonly onInteract?: (player: PublicPlayerState) => void,
-  ) {
+  constructor(state: PublicPlayerState, private readonly localPlayer: boolean) {
     this.state = state;
     this.container.sortableChildren = true;
-    if (!localPlayer && onInteract) {
+    if (!localPlayer) {
       this.container.eventMode = 'static';
       this.container.cursor = 'pointer';
       this.container.on('pointertap', this.handlePointerTap);
     }
 
-    this.shadow = new Graphics()
-      .ellipse(0, -2, 17, 7)
-      .fill({ color: 0x03040a, alpha: 0.48 });
+    this.shadow = new Graphics().ellipse(0, -2, 17, 7).fill({ color: 0x03040a, alpha: 0.48 });
     this.shadow.zIndex = 0;
-
     this.fallback = this.createFallback(state);
     this.fallback.zIndex = 1;
-
     this.sprite.anchor.set(0.5, 1);
     this.sprite.scale.set(1.5);
     this.sprite.zIndex = 2;
@@ -56,23 +50,13 @@ export class CharacterView {
 
     this.nameText = new Text({
       text: `${state.name}  Lv. ${state.level}`,
-      style: {
-        fontFamily: 'Inter, system-ui, sans-serif',
-        fontSize: 12,
-        fontWeight: '700',
-        fill: localPlayer ? 0xfef3c7 : 0xf8fafc,
-        stroke: { color: 0x05070d, width: 3 },
-      },
+      style: { fontFamily: 'Inter, system-ui, sans-serif', fontSize: 12, fontWeight: '700', fill: localPlayer ? 0xfef3c7 : 0xf8fafc, stroke: { color: 0x05070d, width: 3 } },
     });
     this.nameText.anchor.set(0.5, 1);
-    const badge = new Graphics()
-      .roundRect(-58, -19, 116, 20, 6)
-      .fill({ color: localPlayer ? 0x4c3412 : 0x111827, alpha: 0.82 })
-      .stroke({ color: localPlayer ? 0xfbbf24 : 0x475569, width: 1, alpha: 0.8 });
+    const badge = new Graphics().roundRect(-58, -19, 116, 20, 6).fill({ color: localPlayer ? 0x4c3412 : 0x111827, alpha: 0.82 }).stroke({ color: localPlayer ? 0xfbbf24 : 0x475569, width: 1, alpha: 0.8 });
     this.nameplate.addChild(badge, this.nameText);
     this.nameplate.position.set(0, -72);
     this.nameplate.zIndex = 4;
-
     this.container.addChild(this.shadow, this.fallback, this.sprite, this.nameplate);
     const x = (state.x + 0.5) * WORLD_TILE_SIZE;
     const y = (state.y + 1) * WORLD_TILE_SIZE;
@@ -88,7 +72,6 @@ export class CharacterView {
     const distance = Math.hypot(nextX - this.targetX, nextY - this.targetY);
     this.state = state;
     this.nameText.text = `${state.name}  Lv. ${state.level}`;
-
     if (state.outfitKey !== this.lastOutfitKey) this.loadOutfit(state.outfitKey);
     if (immediate || distance > WORLD_TILE_SIZE * 1.6) {
       this.startX = this.targetX = nextX;
@@ -130,7 +113,7 @@ export class CharacterView {
 
   private readonly handlePointerTap = (event: FederatedPointerEvent): void => {
     event.stopPropagation();
-    this.onInteract?.(this.state);
+    window.dispatchEvent(new CustomEvent<string>(REMOTE_PLAYER_INTERACTION_EVENT, { detail: this.state.characterId }));
   };
 
   private updateFrame(now: number): void {
