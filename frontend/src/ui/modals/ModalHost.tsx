@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react';
+import { REMOTE_PLAYER_INTERACTION_EVENT } from '../../game/engine/CharacterView';
 import { gameStore, useGameState, type ModalKey } from '../../game/state/gameStore';
 import { CharacterModal } from './CharacterModal';
 import { InventoryModal } from './InventoryModal';
@@ -15,10 +16,7 @@ const modalByKey: Readonly<Record<string, ModalKey | undefined>> = {
   q: 'quests', Q: 'quests',
   k: 'skills', K: 'skills',
 };
-
-const editable = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement &&
-  (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+const editable = (target: EventTarget | null): boolean => target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 
 export function ModalHost(): React.JSX.Element | null {
   const state = useGameState();
@@ -40,6 +38,24 @@ export function ModalHost(): React.JSX.Element | null {
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
   }, [state.activeModal, state.trade]);
+
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const characterId = (event as CustomEvent<string>).detail;
+      const snapshot = gameStore.getSnapshot();
+      const player = snapshot.players[characterId];
+      const self = snapshot.self;
+      if (!player || !self || snapshot.activeModal || snapshot.trade) return;
+      const distance = Math.max(Math.abs(player.x - self.x), Math.abs(player.y - self.y));
+      if (distance > 2) {
+        gameStore.addNotification({ code: 'PLAYER_TOO_FAR', message: 'Podejdź bliżej do gracza.' });
+        return;
+      }
+      gameStore.selectPlayer(characterId);
+    };
+    window.addEventListener(REMOTE_PLAYER_INTERACTION_EVENT, listener);
+    return () => window.removeEventListener(REMOTE_PLAYER_INTERACTION_EVENT, listener);
+  }, []);
 
   const close = useCallback(() => gameStore.setActiveModal(null), []);
   if (!state.self || !state.activeModal) return null;
