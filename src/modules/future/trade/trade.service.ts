@@ -141,13 +141,18 @@ export class TradeService {
     if (a === undefined || b === undefined || a < trade.initiatorSilver || b < trade.recipientSilver) this.fail('INSUFFICIENT_SILVER', 'errors.items.insufficientSilver');
     const nextA = a - trade.initiatorSilver + trade.recipientSilver; const nextB = b - trade.recipientSilver + trade.initiatorSilver;
     if (nextA > MAX_TRADE_SILVER || nextB > MAX_TRADE_SILVER) this.fail('TRADE_CHANGED', 'errors.trade.changed');
+    const transfers = [];
     for (const offer of trade.offers) {
       const item = await tx.inventoryItem.findUnique({ where: { id: offer.inventoryItemId }, include: { itemDefinition: true } });
       if (!item || item.characterId !== offer.offeredByCharacterId || item.equippedSlot || offer.quantity < 1 || offer.quantity > item.quantity) this.fail('TRADE_CHANGED', 'errors.trade.changed');
-      const target = offer.offeredByCharacterId === trade.initiatorCharacterId ? trade.recipientCharacterId : trade.initiatorCharacterId;
-      await this.addItem(tx, target, item.itemDefinitionId, item.itemDefinition.stackLimit, offer.quantity, item.instanceData);
-      if (offer.quantity === item.quantity) await tx.inventoryItem.delete({ where: { id: item.id } });
-      else await tx.inventoryItem.update({ where: { id: item.id }, data: { quantity: { decrement: offer.quantity } } });
+      transfers.push({ item, quantity: offer.quantity, targetCharacterId: offer.offeredByCharacterId === trade.initiatorCharacterId ? trade.recipientCharacterId : trade.initiatorCharacterId });
+    }
+    for (const transfer of transfers) {
+      if (transfer.quantity === transfer.item.quantity) await tx.inventoryItem.delete({ where: { id: transfer.item.id } });
+      else await tx.inventoryItem.update({ where: { id: transfer.item.id }, data: { quantity: { decrement: transfer.quantity } } });
+    }
+    for (const transfer of transfers) {
+      await this.addItem(tx, transfer.targetCharacterId, transfer.item.itemDefinitionId, transfer.item.itemDefinition.stackLimit, transfer.quantity, transfer.item.instanceData);
     }
     await tx.tradeOfferItem.deleteMany({ where: { tradeSessionId: trade.id } });
     await tx.character.update({ where: { id: trade.initiatorCharacterId }, data: { silver: nextA } });
