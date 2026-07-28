@@ -12,161 +12,85 @@ datasource db {
   provider = "postgresql"
 }
 
-enum CharacterClass {
-  MAGE
-  WARRIOR
-  ARCHER
-}
-
-enum UserRole {
-  USER
-  MOD
-  ADMIN
-}
-
-enum Direction {
-  NORTH
-  EAST
-  SOUTH
-  WEST
-}
-
-enum ZoneType {
-  SAFE
-  OUTLAW
-  PVP
-}
-
-enum CombatState {
-  IDLE
-  IN_BATTLE
-}
-
-enum EquipmentSlot {
-  HEAD
-  CHEST
-  LEGS
-  FEET
-  MAIN_HAND
-  OFF_HAND
-  AMULET
-  RING
-}
-
-enum QuestProgressStatus {
-  NOT_STARTED
-  ACTIVE
-  COMPLETED
-  REWARDED
-  FAILED
-}
-
-enum ChatChannelType {
-  GLOBAL
-  REALM
-  MAP
-  PARTY
-  GUILD
-  PRIVATE
-  SYSTEM
-}
-
-enum TradeStatus {
-  REQUESTED
-  OPEN
-  LOCKED
-  COMPLETED
-  CANCELLED
-  EXPIRED
-}
-
-enum CurrencyType {
-  SILVER
-  GOLD
-}
-
-enum CurrencyDirection {
-  CREDIT
-  DEBIT
-}
+enum CharacterClass { MAGE WARRIOR ARCHER }
+enum UserRole { USER MOD ADMIN }
+enum Direction { NORTH EAST SOUTH WEST }
+enum ZoneType { SAFE OUTLAW PVP }
+enum CombatState { IDLE IN_BATTLE }
+enum EquipmentSlot { HEAD CHEST LEGS FEET MAIN_HAND OFF_HAND AMULET RING }
+enum QuestProgressStatus { NOT_STARTED ACTIVE COMPLETED REWARDED FAILED }
+enum ChatChannelType { GLOBAL REALM MAP PARTY GUILD PRIVATE SYSTEM }
+enum TradeStatus { REQUESTED OPEN LOCKED COMPLETED CANCELLED EXPIRED }
+enum CurrencyType { SILVER GOLD }
+enum CurrencyDirection { CREDIT DEBIT }
 
 model Realm {
-  id           String   @id @default(uuid()) @db.Uuid
-  slug         String   @unique @db.VarChar(64)
-  name         String   @db.VarChar(120)
-  isActive     Boolean  @default(true)
-  defaultMapId String?  @db.Uuid
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  defaultMap   Map?          @relation("RealmDefaultMap", fields: [defaultMapId], references: [id], onDelete: SetNull)
-  maps         Map[]         @relation("RealmMaps")
-  characters   Character[]
+  id String @id @default(uuid()) @db.Uuid
+  slug String @unique @db.VarChar(64)
+  name String @db.VarChar(120)
+  isActive Boolean @default(true)
+  defaultMapId String? @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  defaultMap Map? @relation("RealmDefaultMap", fields: [defaultMapId], references: [id], onDelete: SetNull)
+  maps Map[] @relation("RealmMaps")
+  characters Character[]
   chatMessages ChatMessage[]
-
   @@index([isActive])
 }
 
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
-  firebaseUid String   @unique @db.VarChar(128)
-  email       String?  @unique @db.VarChar(320)
-  displayName String?  @db.VarChar(120)
-  role        UserRole @default(USER)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
+  id String @id @default(uuid()) @db.Uuid
+  firebaseUid String @unique @db.VarChar(128)
+  email String? @unique @db.VarChar(320)
+  displayName String? @db.VarChar(120)
+  role UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   characters Character[]
-
   @@index([role])
 }
 
 model Character {
-  id          String         @id @default(uuid()) @db.Uuid
-  userId      String         @db.Uuid
-  realmId     String         @db.Uuid
-  name        String         @db.VarChar(24)
-  class       CharacterClass
-  level       Int            @default(1)
-  experience  Int            @default(0)
-  outfitKey   String         @db.VarChar(64)
-
-  mapId       String      @db.Uuid
-  x           Int
-  y           Int
-  direction   Direction   @default(SOUTH)
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  realmId String @db.Uuid
+  name String @db.VarChar(24)
+  class CharacterClass
+  level Int @default(1)
+  experience Int @default(0)
+  outfitKey String @db.VarChar(64)
+  mapId String @db.Uuid
+  x Int
+  y Int
+  direction Direction @default(SOUTH)
   combatState CombatState @default(IDLE)
-
-  hp           Int
-  maxHp        Int
-  energy       Int
-  maxEnergy    Int
-  strength     Int
-  agility      Int
+  hp Int
+  maxHp Int
+  energy Int
+  maxEnergy Int
+  strength Int
+  agility Int
   intelligence Int
-  armor        Int
-  silver       Int @default(0)
-  gold         Int @default(0)
-
-  stateVersion Int      @default(0)
-  lastSavedAt  DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  armor Int
+  silver Int @default(0)
+  gold Int @default(0)
+  stateVersion Int @default(0)
+  lastSavedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Restrict)
-  map   Map   @relation(fields: [mapId], references: [id], onDelete: Restrict)
-
-  skills             CharacterSkill[]
-  inventoryItems     InventoryItem[]
-  quests             CharacterQuest[]
-  currencyLedger     CharacterCurrencyLedger[]
-  sentChatMessages   ChatMessage[] @relation("ChatSender")
-  receivedWhispers   ChatMessage[] @relation("ChatTarget")
-  initiatedTrades    TradeSession[] @relation("TradeInitiator")
-  receivedTrades     TradeSession[] @relation("TradeRecipient")
-  tradeOffers         TradeOfferItem[]
-
+  map Map @relation(fields: [mapId], references: [id], onDelete: Restrict)
+  skills CharacterSkill[]
+  inventoryItems InventoryItem[]
+  quests CharacterQuest[]
+  currencyLedger CharacterCurrencyLedger[]
+  sentChatMessages ChatMessage[] @relation("ChatSender")
+  receivedWhispers ChatMessage[] @relation("ChatTarget")
+  initiatedTrades TradeSession[] @relation("TradeInitiator")
+  receivedTrades TradeSession[] @relation("TradeRecipient")
+  tradeOffers TradeOfferItem[]
   @@unique([userId, realmId])
   @@unique([realmId, name])
   @@index([realmId, mapId])
@@ -174,250 +98,228 @@ model Character {
 }
 
 model CharacterCurrencyLedger {
-  id           String            @id @default(uuid()) @db.Uuid
-  characterId  String            @db.Uuid
-  operationId  String            @db.VarChar(128)
-  currency     CurrencyType
-  direction    CurrencyDirection
-  amount       Int
-  reason       String            @db.VarChar(96)
+  id String @id @default(uuid()) @db.Uuid
+  characterId String @db.Uuid
+  operationId String @db.VarChar(128)
+  currency CurrencyType
+  direction CurrencyDirection
+  amount Int
+  reason String @db.VarChar(96)
   balanceAfter Int
-  metadata     Json              @default("{}") @db.JsonB
-  createdAt    DateTime          @default(now())
-
+  metadata Json @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
-
   @@unique([characterId, operationId])
   @@index([characterId, createdAt])
 }
 
 model Map {
-  id        String   @id @default(uuid()) @db.Uuid
-  realmId   String   @db.Uuid
-  key       String   @db.VarChar(96)
-  name      String   @db.VarChar(160)
-  width     Int
-  height    Int
-  zoneType  ZoneType @default(SAFE)
-  spawnX    Int
-  spawnY    Int
-  tiledData Json     @db.JsonB
-  version   Int      @default(1)
+  id String @id @default(uuid()) @db.Uuid
+  realmId String @db.Uuid
+  key String @db.VarChar(96)
+  name String @db.VarChar(160)
+  width Int
+  height Int
+  zoneType ZoneType @default(SAFE)
+  spawnX Int
+  spawnY Int
+  tiledData Json @db.JsonB
+  version Int @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  realm              Realm           @relation("RealmMaps", fields: [realmId], references: [id], onDelete: Cascade)
-  defaultForRealms   Realm[]         @relation("RealmDefaultMap")
-  characters         Character[]
-  sourcePortals      Portal[]        @relation("SourceMap")
-  destinationPortals Portal[]        @relation("DestinationMap")
-  npcDefinitions     NpcDefinition[]
-  mobDefinitions     MobDefinition[]
-
+  realm Realm @relation("RealmMaps", fields: [realmId], references: [id], onDelete: Cascade)
+  defaultForRealms Realm[] @relation("RealmDefaultMap")
+  characters Character[]
+  sourcePortals Portal[] @relation("SourceMap")
+  destinationPortals Portal[] @relation("DestinationMap")
+  npcDefinitions NpcDefinition[]
+  mobDefinitions MobDefinition[]
   @@unique([realmId, key])
   @@index([realmId, zoneType])
 }
 
 model Portal {
-  id               String   @id @default(uuid()) @db.Uuid
-  sourceMapId      String   @db.Uuid
-  sourceX          Int
-  sourceY          Int
-  destinationMapId String   @db.Uuid
-  targetX          Int
-  targetY          Int
-  enabled          Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  sourceMap      Map @relation("SourceMap", fields: [sourceMapId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid()) @db.Uuid
+  sourceMapId String @db.Uuid
+  sourceX Int
+  sourceY Int
+  destinationMapId String @db.Uuid
+  targetX Int
+  targetY Int
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sourceMap Map @relation("SourceMap", fields: [sourceMapId], references: [id], onDelete: Cascade)
   destinationMap Map @relation("DestinationMap", fields: [destinationMapId], references: [id], onDelete: Restrict)
-
   @@unique([sourceMapId, sourceX, sourceY])
   @@index([destinationMapId])
 }
 
 model SkillDefinition {
-  id            String          @id @default(uuid()) @db.Uuid
-  key           String          @unique @db.VarChar(96)
-  name          String          @db.VarChar(120)
-  description   String          @db.Text
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique @db.VarChar(96)
+  name String @db.VarChar(120)
+  description String @db.Text
   requiredClass CharacterClass?
-  minimumLevel  Int             @default(1)
-  energyCost    Int             @default(0)
-  metadata      Json            @default("{}") @db.JsonB
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-
+  minimumLevel Int @default(1)
+  energyCost Int @default(0)
+  metadata Json @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   characterSkills CharacterSkill[]
 }
 
 model CharacterSkill {
-  id                String   @id @default(uuid()) @db.Uuid
-  characterId       String   @db.Uuid
-  skillDefinitionId String   @db.Uuid
-  rank              Int      @default(1)
-  cooldownEndsAt    DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid()) @db.Uuid
+  characterId String @db.Uuid
+  skillDefinitionId String @db.Uuid
+  rank Int @default(1)
+  cooldownEndsAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   skillDefinition SkillDefinition @relation(fields: [skillDefinitionId], references: [id], onDelete: Restrict)
-
   @@unique([characterId, skillDefinitionId])
 }
 
 model ItemDefinition {
-  id          String   @id @default(uuid()) @db.Uuid
-  key         String   @unique @db.VarChar(96)
-  name        String   @db.VarChar(120)
-  description String   @db.Text
-  stackLimit  Int      @default(1)
-  metadata    Json     @default("{}") @db.JsonB
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique @db.VarChar(96)
+  name String @db.VarChar(120)
+  description String @db.Text
+  stackLimit Int @default(1)
+  metadata Json @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   inventoryItems InventoryItem[]
 }
 
 model InventoryItem {
-  id               String         @id @default(uuid()) @db.Uuid
-  characterId      String         @db.Uuid
-  itemDefinitionId String         @db.Uuid
-  quantity         Int            @default(1)
-  slotIndex        Int
-  equippedSlot     EquipmentSlot?
-  instanceData     Json           @default("{}") @db.JsonB
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  itemDefinition  ItemDefinition  @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
+  id String @id @default(uuid()) @db.Uuid
+  characterId String @db.Uuid
+  itemDefinitionId String @db.Uuid
+  quantity Int @default(1)
+  slotIndex Int
+  equippedSlot EquipmentSlot?
+  instanceData Json @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  itemDefinition ItemDefinition @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
   tradeOfferItems TradeOfferItem[]
-
   @@unique([characterId, slotIndex])
   @@index([characterId, equippedSlot])
 }
 
 model QuestDefinition {
-  id           String   @id @default(uuid()) @db.Uuid
-  key          String   @unique @db.VarChar(96)
-  name         String   @db.VarChar(160)
-  description  String   @db.Text
-  minimumLevel Int      @default(1)
-  steps        Json     @default("[]") @db.JsonB
-  rewards      Json     @default("{}") @db.JsonB
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique @db.VarChar(96)
+  name String @db.VarChar(160)
+  description String @db.Text
+  minimumLevel Int @default(1)
+  steps Json @default("[]") @db.JsonB
+  rewards Json @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   characterQuests CharacterQuest[]
 }
 
 model CharacterQuest {
-  id                String              @id @default(uuid()) @db.Uuid
-  characterId       String              @db.Uuid
-  questDefinitionId String              @db.Uuid
-  status            QuestProgressStatus @default(NOT_STARTED)
-  progress          Json                @default("{}") @db.JsonB
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid()) @db.Uuid
+  characterId String @db.Uuid
+  questDefinitionId String @db.Uuid
+  status QuestProgressStatus @default(NOT_STARTED)
+  progress Json @default("{}") @db.JsonB
+  startedAt DateTime?
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   questDefinition QuestDefinition @relation(fields: [questDefinitionId], references: [id], onDelete: Restrict)
-
   @@unique([characterId, questDefinitionId])
 }
 
 model NpcDefinition {
-  id        String   @id @default(uuid()) @db.Uuid
-  mapId     String   @db.Uuid
-  key       String   @db.VarChar(96)
-  name      String   @db.VarChar(120)
-  x         Int
-  y         Int
-  outfitKey String   @db.VarChar(64)
-  dialogue  Json     @default("{}") @db.JsonB
+  id String @id @default(uuid()) @db.Uuid
+  mapId String @db.Uuid
+  key String @db.VarChar(96)
+  name String @db.VarChar(120)
+  x Int
+  y Int
+  outfitKey String @db.VarChar(64)
+  dialogue Json @default("{}") @db.JsonB
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
-
   @@unique([mapId, key])
   @@index([mapId, x, y])
 }
 
 model MobDefinition {
-  id        String   @id @default(uuid()) @db.Uuid
-  mapId     String   @db.Uuid
-  key       String   @db.VarChar(96)
-  name      String   @db.VarChar(120)
-  x         Int
-  y         Int
-  level     Int
-  outfitKey String   @db.VarChar(64)
-  stats     Json     @default("{}") @db.JsonB
-  lootTable Json     @default("[]") @db.JsonB
-  respawnMs Int      @default(30000)
+  id String @id @default(uuid()) @db.Uuid
+  mapId String @db.Uuid
+  key String @db.VarChar(96)
+  name String @db.VarChar(120)
+  x Int
+  y Int
+  level Int
+  outfitKey String @db.VarChar(64)
+  stats Json @default("{}") @db.JsonB
+  lootTable Json @default("[]") @db.JsonB
+  respawnMs Int @default(30000)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
-
   @@unique([mapId, key])
   @@index([mapId, x, y])
 }
 
 model ChatMessage {
-  id                String          @id @default(uuid()) @db.Uuid
-  realmId           String          @db.Uuid
-  senderCharacterId String?         @db.Uuid
-  targetCharacterId String?         @db.Uuid
-  channel           ChatChannelType
-  content           String          @db.VarChar(500)
-  metadata          Json            @default("{}") @db.JsonB
-  createdAt         DateTime        @default(now())
-
-  realm           Realm      @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid()) @db.Uuid
+  realmId String @db.Uuid
+  senderCharacterId String? @db.Uuid
+  targetCharacterId String? @db.Uuid
+  channel ChatChannelType
+  content String @db.VarChar(500)
+  metadata Json @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
   senderCharacter Character? @relation("ChatSender", fields: [senderCharacterId], references: [id], onDelete: SetNull)
   targetCharacter Character? @relation("ChatTarget", fields: [targetCharacterId], references: [id], onDelete: SetNull)
-
   @@index([realmId, channel, createdAt])
   @@index([targetCharacterId, createdAt])
 }
 
 model TradeSession {
-  id                   String      @id @default(uuid()) @db.Uuid
-  initiatorCharacterId String      @db.Uuid
-  recipientCharacterId String      @db.Uuid
-  status               TradeStatus @default(REQUESTED)
-  initiatorAccepted    Boolean     @default(false)
-  recipientAccepted    Boolean     @default(false)
-  expiresAt            DateTime
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-
-  initiator Character        @relation("TradeInitiator", fields: [initiatorCharacterId], references: [id], onDelete: Cascade)
-  recipient Character        @relation("TradeRecipient", fields: [recipientCharacterId], references: [id], onDelete: Cascade)
-  offers    TradeOfferItem[]
-
+  id String @id @default(uuid()) @db.Uuid
+  initiatorCharacterId String @db.Uuid
+  recipientCharacterId String @db.Uuid
+  status TradeStatus @default(REQUESTED)
+  initiatorAccepted Boolean @default(false)
+  recipientAccepted Boolean @default(false)
+  initiatorSilver Int @default(0)
+  recipientSilver Int @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  initiator Character @relation("TradeInitiator", fields: [initiatorCharacterId], references: [id], onDelete: Cascade)
+  recipient Character @relation("TradeRecipient", fields: [recipientCharacterId], references: [id], onDelete: Cascade)
+  offers TradeOfferItem[]
   @@index([initiatorCharacterId, status])
   @@index([recipientCharacterId, status])
+  @@index([status, expiresAt])
 }
 
 model TradeOfferItem {
-  id                   String   @id @default(uuid()) @db.Uuid
-  tradeSessionId       String   @db.Uuid
-  offeredByCharacterId String   @db.Uuid
-  inventoryItemId      String   @db.Uuid
-  quantity             Int
-  createdAt            DateTime @default(now())
-
-  tradeSession  TradeSession  @relation(fields: [tradeSessionId], references: [id], onDelete: Cascade)
-  offeredBy     Character     @relation(fields: [offeredByCharacterId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid()) @db.Uuid
+  tradeSessionId String @db.Uuid
+  offeredByCharacterId String @db.Uuid
+  inventoryItemId String @db.Uuid
+  quantity Int
+  createdAt DateTime @default(now())
+  tradeSession TradeSession @relation(fields: [tradeSessionId], references: [id], onDelete: Cascade)
+  offeredBy Character @relation(fields: [offeredByCharacterId], references: [id], onDelete: Cascade)
   inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
-
   @@unique([tradeSessionId, inventoryItemId])
   @@index([offeredByCharacterId])
 }
