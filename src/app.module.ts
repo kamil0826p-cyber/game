@@ -5,7 +5,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { LocalizationModule } from './i18n/localization.module.js';
 import { CharacterModule } from './modules/characters/character.module.js';
-import { FutureFeaturesModule } from './modules/future/future-features.module.js';
+import { TradeModule } from './modules/future/trade/trade.module.js';
 import { ItemModule } from './modules/items/item.module.js';
 import { MapModule } from './modules/maps/map.module.js';
 import { MovementModule } from './modules/movement/movement.module.js';
@@ -15,6 +15,6 @@ import { RealtimeModule } from './modules/realtime/realtime.module.js';
 import { WorldModule } from './modules/world/world.module.js';
 
 @Module({
-  imports: [GameConfigModule, DatabaseModule, LocalizationModule, AuthModule, RealmModule, MapModule, CharacterModule, WorldModule, PersistenceModule, MovementModule, RealtimeModule, ItemModule, FutureFeaturesModule, HealthModule],
+  imports: [GameConfigModule, DatabaseModule, LocalizationModule, AuthModule, RealmModule, MapModule, CharacterModule, WorldModule, PersistenceModule, MovementModule, RealtimeModule, ItemModule, TradeModule, HealthModule],
 })
 export class AppModule {}
