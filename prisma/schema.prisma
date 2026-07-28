@@ -303,7 +303,7 @@ model QuestDefinition {
   id           String   @id @default(uuid()) @db.Uuid
   key          String   @unique @db.VarChar(96)
   name         String   @db.VarChar(160)
-  description  String   @db.Text
+  description String   @db.Text
   minimumLevel Int      @default(1)
   steps        Json     @default("[]") @db.JsonB
   rewards      Json     @default("{}") @db.JsonB
@@ -418,7 +418,7 @@ model TradeOfferItem {
 
   tradeSession  TradeSession  @relation(fields: [tradeSessionId], references: [id], onDelete: Cascade)
   offeredBy     Character     @relation(fields: [offeredByCharacterId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
 
   @@unique([tradeSessionId, inventoryItemId])
   @@index([offeredByCharacterId])
