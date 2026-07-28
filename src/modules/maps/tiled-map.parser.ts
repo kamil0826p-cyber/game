@@ -7,6 +7,15 @@ const invalid = (reason: string): never => { throw new GameError(GAME_ERROR_CODE
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const normalizedName = (value: string): string => value.trim().toLowerCase();
 const validProperties = (value: unknown): value is TiledProperty[] | undefined => value === undefined || (Array.isArray(value) && value.every((property) => isRecord(property) && typeof property.name === 'string' && Object.hasOwn(property, 'value')));
+const validOptionalNumber = (value: unknown): boolean => value === undefined || (typeof value === 'number' && Number.isFinite(value));
+const validObject = (value: unknown): boolean =>
+  isRecord(value) &&
+  validProperties(value.properties) &&
+  validOptionalNumber(value.x) &&
+  validOptionalNumber(value.y) &&
+  validOptionalNumber(value.width) &&
+  validOptionalNumber(value.height) &&
+  validOptionalNumber(value.rotation);
 const propertyValue = (properties: TiledProperty[] | undefined, name: string): unknown => properties?.find((property) => normalizedName(property.name) === normalizedName(name))?.value;
 const isTileLayer = (layer: TiledLayer): layer is TiledTileLayer => layer.type === 'tilelayer';
 const isObjectLayer = (layer: TiledLayer): layer is TiledObjectLayer => layer.type === 'objectgroup';
@@ -32,7 +41,7 @@ const validateLayer = (layer: unknown): void => {
     return;
   }
   if (layer.type === 'objectgroup') {
-    if (!Array.isArray(layer.objects) || !layer.objects.every((object) => isRecord(object) && validProperties(object.properties))) return invalid(`Object layer ${layer.name} is malformed.`);
+    if (!Array.isArray(layer.objects) || !layer.objects.every(validObject)) return invalid(`Object layer ${layer.name} is malformed.`);
     return;
   }
   if (layer.type === 'group') {
@@ -47,7 +56,7 @@ export const parseTiledMap = (input: unknown): TiledMapJson => {
   const decoded = isRecord(input) && Array.isArray(input.layers) ? { ...input, layers: input.layers.map(decodeLayer) } : input;
   if (!isRecord(decoded)) return invalid('The Tiled map root must be an object.');
   const { type, orientation, infinite, width, height, tilewidth, tileheight, layers, tilesets } = decoded;
-  if (type !== 'map' || orientation !== 'orthogonal' || infinite !== false || !Number.isInteger(width) || !Number.isInteger(height) || !Number.isInteger(tilewidth) || !Number.isInteger(tileheight) || Number(width) <= 0 || Number(height) <= 0 || Number(tilewidth) <= 0 || Number(tileheight) <= 0 || !Array.isArray(layers) || !Array.isArray(tilesets)) return invalid('The Tiled map must be finite, orthogonal, and have positive dimensions.');
+  if (type !== 'map' || orientation !== 'orthogonal' || infinite !== false || !Number.isInteger(width) || !Number.isInteger(height) || !Number.isInteger(tilewidth) || !Number.isInteger(tileheight) || Number(width) <= 0 || Number(height) <= 0 || Number(tilewidth) <= 0 || Number(tileheight) <= 0 || !Array.isArray(layers) || !Array.isArray(tilesets) || !validProperties(decoded.properties)) return invalid('The Tiled map must be finite, orthogonal, and have positive dimensions.');
   layers.forEach(validateLayer);
   return decoded as unknown as TiledMapJson;
 };

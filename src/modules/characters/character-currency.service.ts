@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { CurrencyBalance, CurrencyType } from '../../common/domain/game.types.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -126,8 +127,9 @@ export class CharacterCurrencyService {
     if (existing) return { silver: existing.silver, gold: existing.gold };
 
     const delta = direction === 'CREDIT' ? input.amount : -input.amount;
-    const rows = input.currency === 'SILVER'
-      ? await transaction.$queryRaw<CurrencyRow[]>`
+    const rows =
+      input.currency === 'SILVER'
+        ? await transaction.$queryRaw<CurrencyRow[]>`
           UPDATE "Character"
           SET "silver" = "silver" + ${delta}
           WHERE "id" = ${input.characterId}::uuid
@@ -135,7 +137,7 @@ export class CharacterCurrencyService {
             AND "silver" + ${delta} BETWEEN 0 AND ${MAX_CURRENCY_AMOUNT}
           RETURNING "silver", "gold"
         `
-      : await transaction.$queryRaw<CurrencyRow[]>`
+        : await transaction.$queryRaw<CurrencyRow[]>`
           UPDATE "Character"
           SET "gold" = "gold" + ${delta}
           WHERE "id" = ${input.characterId}::uuid
@@ -160,11 +162,12 @@ export class CharacterCurrencyService {
 
     const balanceAfter = input.currency === 'SILVER' ? balance.silver : balance.gold;
     const metadataJson = JSON.stringify(input.metadata ?? {});
+    const ledgerId = randomUUID();
     await transaction.$executeRaw`
       INSERT INTO "CharacterCurrencyLedger"
-        ("characterId", "operationId", "currency", "direction", "amount", "reason", "balanceAfter", "metadata")
+        ("id", "characterId", "operationId", "currency", "direction", "amount", "reason", "balanceAfter", "metadata")
       VALUES
-        (${input.characterId}::uuid, ${input.operationId}, ${input.currency}::"CurrencyType", ${direction}::"CurrencyDirection", ${input.amount}, ${input.reason}, ${balanceAfter}, ${metadataJson}::jsonb)
+        (${ledgerId}::uuid, ${input.characterId}::uuid, ${input.operationId}, ${input.currency}::"CurrencyType", ${direction}::"CurrencyDirection", ${input.amount}, ${input.reason}, ${balanceAfter}, ${metadataJson}::jsonb)
     `;
 
     return balance;
@@ -203,8 +206,14 @@ export class CharacterCurrencyService {
     if (input.currency !== 'SILVER' && input.currency !== 'GOLD') {
       throw new TypeError('Unsupported currency type');
     }
-    if (!Number.isInteger(input.amount) || input.amount <= 0 || input.amount > MAX_CURRENCY_AMOUNT) {
-      throw new RangeError(`Currency amount must be an integer between 1 and ${MAX_CURRENCY_AMOUNT}`);
+    if (
+      !Number.isInteger(input.amount) ||
+      input.amount <= 0 ||
+      input.amount > MAX_CURRENCY_AMOUNT
+    ) {
+      throw new RangeError(
+        `Currency amount must be an integer between 1 and ${MAX_CURRENCY_AMOUNT}`,
+      );
     }
     if (!OPERATION_ID_PATTERN.test(input.operationId)) {
       throw new TypeError('Invalid currency operationId');
@@ -231,6 +240,11 @@ export class CharacterCurrencyService {
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
-    return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'P2002'
+    );
   }
 }

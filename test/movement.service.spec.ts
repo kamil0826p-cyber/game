@@ -3,6 +3,7 @@ import type { GameConfigService } from '../src/config/game-config.service.js';
 import type { LocalizationService } from '../src/i18n/localization.service.js';
 import type { MapService } from '../src/modules/maps/map.service.js';
 import { MovementService } from '../src/modules/movement/movement.service.js';
+import type { NpcService } from '../src/modules/npcs/npc.service.js';
 import type { PlayerPersistenceService } from '../src/modules/persistence/player-persistence.service.js';
 import { capturePlayerState } from '../src/modules/persistence/player-state-snapshot.js';
 import type { PlayerSession } from '../src/modules/world/player-session.types.js';
@@ -70,6 +71,7 @@ describe('MovementService', () => {
         isCollision: collision,
         getPortalAt: () => undefined,
       } as unknown as MapService,
+      { isTileOccupied: async () => false } as unknown as NpcService,
       {
         getByCharacterId: () => session,
         isOccupied: () => false,
@@ -151,6 +153,10 @@ describe('MovementService', () => {
         getPortalAt: (_map: unknown, x: number, y: number) =>
           x === portal.sourceX && y === portal.sourceY ? portal : undefined,
       } as unknown as MapService,
+      {
+        isTileOccupied: async () => false,
+        getMapNpcs: async () => [],
+      } as unknown as NpcService,
       worldState,
       { afterMovement: () => [] } as unknown as VisibilityService,
       {

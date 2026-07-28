@@ -4,6 +4,9 @@ coverage/
 .env
 .env.*
 !.env.example
+firebase_key.json
+service-account*.json
+*-firebase-adminsdk-*.json
 src/generated/prisma/
 *.log
 .DS_Store

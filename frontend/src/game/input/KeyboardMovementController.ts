@@ -6,10 +6,18 @@ import { GameSocketClient } from '../realtime/GameSocketClient';
 import { gameStore } from '../state/gameStore';
 
 const directionByKey: Readonly<Record<string, Direction | undefined>> = {
-  w: 'NORTH', W: 'NORTH', ArrowUp: 'NORTH',
-  d: 'EAST', D: 'EAST', ArrowRight: 'EAST',
-  s: 'SOUTH', S: 'SOUTH', ArrowDown: 'SOUTH',
-  a: 'WEST', A: 'WEST', ArrowLeft: 'WEST',
+  w: 'NORTH',
+  W: 'NORTH',
+  ArrowUp: 'NORTH',
+  d: 'EAST',
+  D: 'EAST',
+  ArrowRight: 'EAST',
+  s: 'SOUTH',
+  S: 'SOUTH',
+  ArrowDown: 'SOUTH',
+  a: 'WEST',
+  A: 'WEST',
+  ArrowLeft: 'WEST',
 };
 
 const directionDelta: Readonly<Record<Direction, { x: number; y: number }>> = {
@@ -21,14 +29,19 @@ const directionDelta: Readonly<Record<Direction, { x: number; y: number }>> = {
 
 const isEditableTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+  return (
+    target.isContentEditable ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT'
+  );
 };
 
 export class KeyboardMovementController {
   private readonly pressed = new Map<string, number>();
   private nextAllowedAt = 0;
   private requestInFlight = false;
-  private currentMap?: LoadedMapDefinition;
+  private currentMap: LoadedMapDefinition | undefined;
   private currentMapIdentity = '';
   private mapLoadSequence = 0;
 
@@ -48,7 +61,8 @@ export class KeyboardMovementController {
       state.activeModal ||
       this.requestInFlight ||
       now < this.nextAllowedAt
-    ) return;
+    )
+      return;
 
     const direction = this.activeDirection();
     const self = state.self;
@@ -59,7 +73,15 @@ export class KeyboardMovementController {
     const targetX = self.x + delta.x;
     const targetY = self.y + delta.y;
     const occupiedByNpc = state.npcs.some((npc) => npc.x === targetX && npc.y === targetY);
-    const occupiedByPlayer = state.map.zoneType !== 'SAFE' && Object.values(state.players).some((player) => player.characterId !== self.characterId && player.mapId === self.mapId && player.x === targetX && player.y === targetY);
+    const occupiedByPlayer =
+      state.map.zoneType !== 'SAFE' &&
+      Object.values(state.players).some(
+        (player) =>
+          player.characterId !== self.characterId &&
+          player.mapId === self.mapId &&
+          player.x === targetX &&
+          player.y === targetY,
+      );
 
     gameStore.clearPlannedPath();
     this.nextAllowedAt = now + state.movementStepMs;
@@ -84,11 +106,15 @@ export class KeyboardMovementController {
     this.currentMapIdentity = identity;
     this.currentMap = undefined;
     const sequence = ++this.mapLoadSequence;
-    void mapRepository.load(key, version).then((map) => {
-      if (sequence === this.mapLoadSequence && this.currentMapIdentity === identity) this.currentMap = map;
-    }).catch(() => {
-      if (sequence === this.mapLoadSequence) this.currentMapIdentity = '';
-    });
+    void mapRepository
+      .load(key, version)
+      .then((map) => {
+        if (sequence === this.mapLoadSequence && this.currentMapIdentity === identity)
+          this.currentMap = map;
+      })
+      .catch(() => {
+        if (sequence === this.mapLoadSequence) this.currentMapIdentity = '';
+      });
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
