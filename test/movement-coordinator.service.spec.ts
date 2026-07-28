@@ -16,10 +16,15 @@ describe('MovementCoordinatorService', () => {
     const stepGate = new Promise<void>((resolve) => {
       releaseStep = resolve;
     });
+    let signalStepStarted!: () => void;
+    const stepStarted = new Promise<void>((resolve) => {
+      signalStepStarted = resolve;
+    });
 
     const movement = {
       performStep: vi.fn(async () => {
         order.push('step-start');
+        signalStepStarted();
         await stepGate;
         order.push('step-end');
         return {
@@ -46,7 +51,7 @@ describe('MovementCoordinatorService', () => {
     );
 
     const directStep = coordinator.requestDirectStep(session, 'EAST', 'request-1');
-    await Promise.resolve();
+    await stepStarted;
     const cleanup = coordinator.quiesce(session, () => {
       order.push('cleanup');
       return 'snapshot';

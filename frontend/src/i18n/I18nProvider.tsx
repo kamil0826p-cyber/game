@@ -19,11 +19,12 @@ const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 const STORAGE_KEY = 'elderglen.locale';
 const supportedLocales = Object.keys(dictionaries) as Locale[];
 
-const isLocale = (value: string | null): value is Locale =>
-  value !== null && supportedLocales.includes(value as Locale);
+const isLocale = (value: string | null | undefined): value is Locale =>
+  value !== null && value !== undefined && supportedLocales.includes(value as Locale);
 
 const localeFromBrowser = (): Locale => {
-  const candidates = navigator.languages.length > 0 ? navigator.languages : [navigator.language];
+  const candidates =
+    navigator.languages.length > 0 ? navigator.languages : [navigator.language];
   for (const candidate of candidates) {
     const language = candidate.toLowerCase().split('-')[0];
     if (isLocale(language)) {

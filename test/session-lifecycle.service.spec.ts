@@ -8,6 +8,7 @@ import type { CharacterService } from '../src/modules/characters/character.servi
 import type { MapService } from '../src/modules/maps/map.service.js';
 import type { MovementCoordinatorService } from '../src/modules/movement/movement-coordinator.service.js';
 import type { MovementService } from '../src/modules/movement/movement.service.js';
+import type { NpcService } from '../src/modules/npcs/npc.service.js';
 import type { PlayerPersistenceService } from '../src/modules/persistence/player-persistence.service.js';
 import type { RealmService } from '../src/modules/realm/realm.service.js';
 import { SessionClaimExecutor } from '../src/modules/realtime/session-claim.executor.js';
@@ -87,6 +88,7 @@ describe('SessionLifecycleService', () => {
         }),
       } as unknown as RealmService,
       {} as MapService,
+      {} as NpcService,
       {} as MovementCoordinatorService,
       {} as MovementService,
       {} as PlayerPersistenceService,
@@ -193,6 +195,7 @@ describe('SessionLifecycleService', () => {
         getMap: async () => map,
         findNearestWalkable: (_map: unknown, requested: { x: number; y: number }) => requested,
       } as unknown as MapService,
+      { getMapNpcs: async () => [] } as unknown as NpcService,
       movement,
       {
         toMapState: () => ({
@@ -313,6 +316,7 @@ describe('SessionLifecycleService', () => {
         getMap: async () => map,
         findNearestWalkable: (_map: unknown, requested: { x: number; y: number }) => requested,
       } as unknown as MapService,
+      { getMapNpcs: async () => [] } as unknown as NpcService,
       movement,
       {
         toMapState: () => ({
@@ -376,5 +380,4 @@ describe('SessionLifecycleService', () => {
     expect(persistence.queueDetachedSnapshot).toHaveBeenCalledTimes(2);
     expect(publisher.disconnect).toHaveBeenCalledWith('socket-first');
   });
-
 });

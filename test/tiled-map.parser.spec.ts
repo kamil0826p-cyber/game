@@ -8,10 +8,13 @@ import {
 
 const validMap = {
   type: 'map',
+  orientation: 'orthogonal',
+  infinite: false,
   width: 3,
   height: 2,
   tilewidth: 32,
   tileheight: 32,
+  tilesets: [],
   layers: [
     {
       name: 'ground',
@@ -47,9 +50,9 @@ const validMap = {
 } as const;
 
 describe('Tiled map parsing', () => {
-  it('compiles every non-zero collision tile', () => {
+  it('compiles collision tiles and keeps portal rectangles walkable', () => {
     const parsed = parseTiledMap(validMap);
-    expect([...compileCollisionGrid(parsed)]).toEqual([0, 1, 0, 0, 0, 1]);
+    expect([...compileCollisionGrid(parsed)]).toEqual([0, 1, 0, 0, 0, 0]);
   });
 
   it('extracts portal coordinates and destination properties', () => {
