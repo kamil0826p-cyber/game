@@ -25,7 +25,13 @@ export const merchantBuySchema = z.object({ requestId, itemKey, quantity });
 export const merchantSellSchema = z.object({ requestId, itemId, quantity });
 export const tradeRequestSchema = z.object({ requestId, targetCharacterId: z.string().uuid() });
 export const tradeRespondSchema = z.object({ requestId, tradeId, accept: z.boolean() });
-export const tradeOfferSchema = z.object({ requestId, tradeId, silver: z.number().int().min(0).max(2_000_000_000), items: z.array(z.object({ itemId, quantity })).max(40) });
+export const tradeOfferSchema = z.object({ requestId, tradeId, silver: z.number().int().min(0).max(2_000_000_000), items: z.array(z.object({ itemId, quantity })).max(40) }).superRefine((value, context) => {
+  const ids = new Set<string>();
+  value.items.forEach((item, index) => {
+    if (ids.has(item.itemId)) context.addIssue({ code: 'custom', path: ['items', index, 'itemId'], message: 'Duplicate item id.' });
+    ids.add(item.itemId);
+  });
+});
 export const tradeAcceptSchema = z.object({ requestId, tradeId });
 export const tradeCancelSchema = z.object({ requestId, tradeId });
 export const tradeGetSchema = z.object({ requestId, tradeId });
