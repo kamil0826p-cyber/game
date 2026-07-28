@@ -81,7 +81,7 @@ async function prepareMaps(): Promise<PreparedMap[]> {
   }
 
   const greenfields = mapsByKey.get('greenfields');
-  if (!greenfields || greenfields.collision[4 * greenfields.tiledMap.width + 6] === 1) throw new Error('Borin merchant must be placed on a walkable Greenfields tile.');
+  if (!greenfields || greenfields.collision[6 * greenfields.tiledMap.width + 16] === 1) throw new Error('Borin merchant must be placed on a walkable Greenfields tile.');
   return prepared;
 }
 
@@ -150,15 +150,15 @@ async function main(): Promise<void> {
         mapId: defaultMapId,
         key: 'quartermaster',
         name: 'Borin Żelazna Dłoń',
-        x: 6,
-        y: 4,
+        x: 16,
+        y: 6,
         outfitKey: 'npc-warrior-merchant',
         dialogue: { type: 'MERCHANT', merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true } },
       },
       update: {
         name: 'Borin Żelazna Dłoń',
-        x: 6,
-        y: 4,
+        x: 16,
+        y: 6,
         outfitKey: 'npc-warrior-merchant',
         dialogue: { type: 'MERCHANT', merchant: { itemKeys: merchantStock, interactionRadius: 2, infiniteStock: true } },
       },
