@@ -7,6 +7,7 @@ import type { InventoryItemPayload, TradeSnapshot } from '../../contracts/socket
 const REQUEST_TTL_MS = 30_000;
 const OPEN_TTL_MS = 5 * 60_000;
 const INVENTORY_CAPACITY = 40;
+const ACTIVE_TRADE_STATUSES = ['REQUESTED', 'OPEN', 'LOCKED'] as const;
 
 export class TradeError extends Error {
   constructor(public readonly code: string, message: string, public readonly details?: Record<string, unknown>) {
@@ -29,18 +30,47 @@ export class TradeService {
     if (source.mapId !== target.mapId || Math.max(Math.abs(source.x - target.x), Math.abs(source.y - target.y)) > 1) {
       throw new TradeError('TRADE_TOO_FAR', 'Podejdź bliżej do gracza, aby rozpocząć handel.');
     }
+
     await this.expireOldTrades();
-    const active = await this.prisma.tradeSession.findFirst({
+    const activeTrades = await this.prisma.tradeSession.findMany({
       where: {
-        status: { in: ['REQUESTED', 'OPEN', 'LOCKED'] },
+        status: { in: [...ACTIVE_TRADE_STATUSES] },
         OR: [
           { initiatorCharacterId: { in: [characterId, targetCharacterId] } },
           { recipientCharacterId: { in: [characterId, targetCharacterId] } },
         ],
       },
-      select: { id: true },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, initiatorCharacterId: true, recipientCharacterId: true },
     });
-    if (active) throw new TradeError('TRADE_BUSY', 'Jeden z graczy prowadzi już handel.');
+
+    const liveTrades = [] as typeof activeTrades;
+    const abandonedIds: string[] = [];
+    for (const trade of activeTrades) {
+      if (this.participantsCanTrade(trade.initiatorCharacterId, trade.recipientCharacterId)) liveTrades.push(trade);
+      else abandonedIds.push(trade.id);
+    }
+    if (abandonedIds.length > 0) {
+      await this.prisma.tradeSession.updateMany({
+        where: { id: { in: abandonedIds }, status: { in: [...ACTIVE_TRADE_STATUSES] } },
+        data: { status: 'CANCELLED' },
+      });
+    }
+
+    const samePair = liveTrades.filter((trade) => this.isSamePair(trade.initiatorCharacterId, trade.recipientCharacterId, characterId, targetCharacterId));
+    if (samePair.length > 0) {
+      const [current, ...duplicates] = samePair;
+      if (duplicates.length > 0) {
+        await this.prisma.tradeSession.updateMany({
+          where: { id: { in: duplicates.map((trade) => trade.id) }, status: { in: [...ACTIVE_TRADE_STATUSES] } },
+          data: { status: 'CANCELLED' },
+        });
+      }
+      return this.snapshot(current.id, characterId);
+    }
+
+    if (liveTrades.length > 0) throw new TradeError('TRADE_BUSY', 'Jeden z graczy prowadzi już handel.');
+
     const trade = await this.prisma.tradeSession.create({
       data: { initiatorCharacterId: characterId, recipientCharacterId: targetCharacterId, expiresAt: new Date(Date.now() + REQUEST_TTL_MS) },
       select: { id: true },
@@ -55,6 +85,7 @@ export class TradeService {
       await this.prisma.tradeSession.update({ where: { id: tradeId }, data: { status: 'EXPIRED' } });
       throw new TradeError('TRADE_EXPIRED', 'Prośba o handel wygasła.');
     }
+    if (accept) this.assertParticipantsNearby(trade.initiatorCharacterId, trade.recipientCharacterId);
     const next = await this.prisma.tradeSession.update({
       where: { id: tradeId },
       data: accept ? { status: 'OPEN', expiresAt: new Date(Date.now() + OPEN_TTL_MS) } : { status: 'CANCELLED' },
@@ -74,6 +105,7 @@ export class TradeService {
     await this.prisma.$transaction(async (tx) => {
       const trade = await this.requireParticipantTx(tx, tradeId, characterId);
       this.assertOpen(trade.status, trade.expiresAt);
+      this.assertParticipantsNearby(trade.initiatorCharacterId, trade.recipientCharacterId);
       const character = await tx.character.findUnique({ where: { id: characterId }, select: { silver: true } });
       if (!character || character.silver < silver) throw new TradeError('INSUFFICIENT_SILVER', 'Nie masz wystarczającej ilości srebra.');
       const owned = await tx.inventoryItem.findMany({ where: { id: { in: [...ids] }, characterId }, select: { id: true, quantity: true, equippedSlot: true } });
@@ -95,6 +127,7 @@ export class TradeService {
     await this.prisma.$transaction(async (tx) => {
       const trade = await this.requireParticipantTx(tx, tradeId, characterId);
       this.assertOpen(trade.status, trade.expiresAt);
+      this.assertParticipantsNearby(trade.initiatorCharacterId, trade.recipientCharacterId);
       const acceptedField = trade.initiatorCharacterId === characterId ? 'initiatorAccepted' : 'recipientAccepted';
       await tx.$executeRawUnsafe(`UPDATE "TradeSession" SET "${acceptedField}" = true, "updatedAt" = NOW() WHERE id = $1::uuid`, tradeId);
       const refreshed = await tx.tradeSession.findUnique({ where: { id: tradeId } });
@@ -110,7 +143,7 @@ export class TradeService {
 
   async cancel(characterId: string, tradeId: string): Promise<TradeSnapshot> {
     const trade = await this.requireParticipant(tradeId, characterId);
-    if (!['REQUESTED', 'OPEN', 'LOCKED'].includes(trade.status)) return this.snapshot(tradeId, characterId);
+    if (!ACTIVE_TRADE_STATUSES.includes(trade.status as (typeof ACTIVE_TRADE_STATUSES)[number])) return this.snapshot(tradeId, characterId);
     await this.prisma.tradeSession.update({ where: { id: tradeId }, data: { status: 'CANCELLED' } });
     return this.snapshot(tradeId, characterId);
   }
@@ -220,8 +253,27 @@ export class TradeService {
     return session;
   }
 
+  private participantsCanTrade(initiatorId: string, recipientId: string): boolean {
+    const initiator = this.world.getByCharacterId(initiatorId);
+    const recipient = this.world.getByCharacterId(recipientId);
+    return Boolean(
+      initiator?.activeInWorld &&
+      recipient?.activeInWorld &&
+      initiator.mapId === recipient.mapId &&
+      Math.max(Math.abs(initiator.x - recipient.x), Math.abs(initiator.y - recipient.y)) <= 1,
+    );
+  }
+
+  private assertParticipantsNearby(initiatorId: string, recipientId: string): void {
+    if (!this.participantsCanTrade(initiatorId, recipientId)) throw new TradeError('TRADE_TOO_FAR', 'Gracze muszą pozostać obok siebie podczas handlu.');
+  }
+
+  private isSamePair(initiatorId: string, recipientId: string, firstId: string, secondId: string): boolean {
+    return (initiatorId === firstId && recipientId === secondId) || (initiatorId === secondId && recipientId === firstId);
+  }
+
   private assertOpen(status: string, expiresAt: Date): void {
-    if (!['OPEN', 'LOCKED'].includes(status)) throw new TradeError('TRADE_INVALID_STATE', 'Handel nie jest otwarty.');
+    if (!ACTIVE_TRADE_STATUSES.slice(1).includes(status as 'OPEN' | 'LOCKED')) throw new TradeError('TRADE_INVALID_STATE', 'Handel nie jest otwarty.');
     if (expiresAt.getTime() <= Date.now()) throw new TradeError('TRADE_EXPIRED', 'Handel wygasł.');
   }
 
@@ -230,7 +282,7 @@ export class TradeService {
   }
 
   private async expireOldTrades(): Promise<void> {
-    await this.prisma.tradeSession.updateMany({ where: { status: { in: ['REQUESTED', 'OPEN', 'LOCKED'] }, expiresAt: { lt: new Date() } }, data: { status: 'EXPIRED' } });
+    await this.prisma.tradeSession.updateMany({ where: { status: { in: [...ACTIVE_TRADE_STATUSES] }, expiresAt: { lt: new Date() } }, data: { status: 'EXPIRED' } });
   }
 
   private syncOnlineBalances(snapshot: TradeSnapshot): void {
