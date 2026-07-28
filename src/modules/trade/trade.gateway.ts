@@ -1,6 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import type { Namespace } from 'socket.io';
+import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
 import { ZodError, type ZodType } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, SocketAck, SocketErrorPayload, TradeSnapshot } from '../../contracts/socket.events.js';
@@ -8,26 +7,29 @@ import { tradeCancelSchema, tradeConfirmSchema, tradeOfferSchema, tradeRequestSc
 import { LocalizationService } from '../../i18n/localization.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
+import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { TradeService } from './trade.service.js';
+
+type TradeServerEvent = 'trade:requested' | 'trade:updated' | 'trade:completed' | 'trade:cancelled';
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class TradeGateway {
   private readonly logger = new Logger(TradeGateway.name);
-  @WebSocketServer() private readonly namespace!: Namespace;
 
   constructor(
     private readonly trades: TradeService,
     private readonly world: WorldStateService,
     private readonly movement: MovementCoordinatorService,
     private readonly localization: LocalizationService,
+    private readonly publisher: WorldEventsPublisher,
   ) {}
 
   @SubscribeMessage('trade:request')
   request(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<TradeSnapshot>> {
     return this.handle(client, tradeRequestSchema, raw, async (session, payload) => {
       const snapshot = await this.trades.request(session.characterId, payload.targetCharacterId);
-      this.emitSnapshot(snapshot, 'trade:requested');
+      await this.emitSnapshot(snapshot, 'trade:requested');
       return snapshot;
     });
   }
@@ -36,7 +38,7 @@ export class TradeGateway {
   respond(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<TradeSnapshot>> {
     return this.handle(client, tradeRespondSchema, raw, async (session, payload) => {
       const snapshot = await this.trades.respond(payload.tradeId, session.characterId, payload.accept);
-      this.emitSnapshot(snapshot, payload.accept ? 'trade:updated' : 'trade:cancelled');
+      await this.emitSnapshot(snapshot, payload.accept ? 'trade:updated' : 'trade:cancelled');
       return snapshot;
     });
   }
@@ -45,7 +47,7 @@ export class TradeGateway {
   offer(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<TradeSnapshot>> {
     return this.handle(client, tradeOfferSchema, raw, async (session, payload) => {
       const snapshot = await this.trades.setOffer(payload.tradeId, session.characterId, payload.items, payload.silver);
-      this.emitSnapshot(snapshot, 'trade:updated');
+      await this.emitSnapshot(snapshot, 'trade:updated');
       return snapshot;
     });
   }
@@ -55,7 +57,7 @@ export class TradeGateway {
     return this.handle(client, tradeConfirmSchema, raw, async (session, payload) => {
       const snapshot = await this.trades.confirm(payload.tradeId, session.characterId);
       this.syncLiveBalances(snapshot);
-      this.emitSnapshot(snapshot, snapshot.status === 'COMPLETED' ? 'trade:completed' : 'trade:updated');
+      await this.emitSnapshot(snapshot, snapshot.status === 'COMPLETED' ? 'trade:completed' : 'trade:updated');
       return snapshot;
     });
   }
@@ -64,15 +66,17 @@ export class TradeGateway {
   cancel(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<TradeSnapshot>> {
     return this.handle(client, tradeCancelSchema, raw, async (session, payload) => {
       const snapshot = await this.trades.cancel(payload.tradeId, session.characterId);
-      this.emitSnapshot(snapshot, 'trade:cancelled');
+      await this.emitSnapshot(snapshot, 'trade:cancelled');
       return snapshot;
     });
   }
 
-  private emitSnapshot(snapshot: TradeSnapshot, event: 'trade:requested' | 'trade:updated' | 'trade:completed' | 'trade:cancelled'): void {
+  private async emitSnapshot(snapshot: TradeSnapshot, event: TradeServerEvent): Promise<void> {
     for (const characterId of [snapshot.initiator.characterId, snapshot.recipient.characterId]) {
       const socketId = this.world.getByCharacterId(characterId)?.socketId;
-      if (socketId) this.namespace.to(socketId).emit(event, snapshot);
+      if (!socketId) continue;
+      const viewerSnapshot = await this.trades.snapshot(snapshot.id, characterId);
+      this.publisher.emit(socketId, event, viewerSnapshot);
     }
   }
 
