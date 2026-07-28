@@ -1,4 +1,4 @@
-export const TRADE_INTERACTION_RADIUS = 2;
+import { isActorWithinInteractionRange } from '../../../common/rules/actor-interaction.js';
 export const TRADE_REQUEST_TTL_MS = 30_000;
 export const TRADE_OPEN_TTL_MS = 5 * 60_000;
 export const MAX_TRADE_SILVER = 2_147_483_647;
@@ -11,13 +11,8 @@ export interface TradePosition {
   y: number;
 }
 
-export function isTradeDistanceAllowed(
-  first: TradePosition,
-  second: TradePosition,
-  radius = TRADE_INTERACTION_RADIUS,
-): boolean {
-  return first.mapId === second.mapId &&
-    Math.max(Math.abs(first.x - second.x), Math.abs(first.y - second.y)) <= radius;
+export function isTradeDistanceAllowed(first: TradePosition, second: TradePosition): boolean {
+  return isActorWithinInteractionRange(first, second);
 }
 
 export function buildTradeLockKeys(firstCharacterId: string, secondCharacterId: string): string[] {

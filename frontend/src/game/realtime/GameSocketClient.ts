@@ -2,7 +2,7 @@ import type { User } from 'firebase/auth';
 import { io, type Socket } from 'socket.io-client';
 import { runtimeConfig } from '../../config/runtime';
 import type { CharacterClass, Direction } from '../../contracts/game';
-import type { CharacterCreateResult, ChatChannel, ChatMessagePayload, ClientToServerEvents, InventorySnapshot, MerchantSnapshot, MovementCommittedPayload, MovementStopPayload, PathAcceptedPayload, ServerToClientEvents, SocketAck, SocketErrorPayload, TradeSnapshot, VisibilityViewportPayload, WorldSpawnPayload } from '../../contracts/socket';
+import type { CharacterCreateResult, ChatChannel, ChatMessagePayload, ClientToServerEvents, InventorySnapshot, MerchantSnapshot, MovementCommittedPayload, MovementStopPayload, NpcDialogueChoiceResult, NpcDialogueSnapshot, PathAcceptedPayload, ServerToClientEvents, SocketAck, SocketErrorPayload, TradeSnapshot, VisibilityViewportPayload, WorldSpawnPayload } from '../../contracts/socket';
 import type { Locale } from '../../i18n/dictionaries';
 import { createRequestId } from '../../utils/requestId';
 import { gameStore } from '../state/gameStore';
@@ -45,9 +45,12 @@ export class GameSocketClient {
   async unequipInventoryItem(itemId: string): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:unequip', { requestId: createRequestId('inventory-unequip'), itemId }, ack)); }
   async useInventoryItem(itemId: string): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:use', { requestId: createRequestId('inventory-use'), itemId }, ack)); }
   async discardInventoryItem(itemId: string, quantity = 1): Promise<InventorySnapshot> { return this.inventoryCommand((socket, ack) => socket.emit('inventory:discard', { requestId: createRequestId('inventory-discard'), itemId, quantity }, ack)); }
-  async getMerchant(): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:get', { requestId: createRequestId('merchant') }, ack)); }
-  async buyFromMerchant(itemKey: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:buy', { requestId: createRequestId('merchant-buy'), itemKey, quantity }, ack)); }
-  async sellToMerchant(itemId: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:sell', { requestId: createRequestId('merchant-sell'), itemId, quantity }, ack)); }
+  async startNpcDialogue(npcId: string): Promise<NpcDialogueSnapshot> { const response = await this.withAck<NpcDialogueSnapshot>((ack) => this.requireSocket().emit('npc:dialogue:start', { requestId: createRequestId('npc-dialogue-start'), npcId }, ack)); this.assertOk(response); return response.data; }
+  async chooseNpcDialogue(npcId: string, nodeId: string, choiceId: string): Promise<NpcDialogueChoiceResult> { const response = await this.withAck<NpcDialogueChoiceResult>((ack) => this.requireSocket().emit('npc:dialogue:choose', { requestId: createRequestId('npc-dialogue-choice'), npcId, nodeId, choiceId }, ack)); this.assertOk(response); return response.data; }
+  async endNpcDialogue(npcId: string): Promise<void> { const socket = this.socket; if (!socket?.connected) return; await this.withAck<{ closed: boolean }>((ack) => socket.emit('npc:dialogue:end', { requestId: createRequestId('npc-dialogue-end'), npcId }, ack)).catch(() => undefined); }
+  async getMerchant(npcId: string): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:get', { requestId: createRequestId('merchant'), npcId }, ack)); }
+  async buyFromMerchant(npcId: string, itemKey: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:buy', { requestId: createRequestId('merchant-buy'), npcId, itemKey, quantity }, ack)); }
+  async sellToMerchant(npcId: string, itemId: string, quantity = 1): Promise<MerchantSnapshot> { return this.merchantCommand((socket, ack) => socket.emit('merchant:sell', { requestId: createRequestId('merchant-sell'), npcId, itemId, quantity }, ack)); }
   async getActiveTrade(): Promise<TradeSnapshot | null> { const response = await this.withAck<TradeSnapshot | null>((ack) => this.requireSocket().emit('trade:getActive', { requestId: createRequestId('trade-active') }, ack)); this.assertOk(response); if (response.data) gameStore.updateInventoryState(response.data.inventory); return response.data; }
   async requestTrade(targetCharacterId: string): Promise<TradeSnapshot> { return this.tradeCommand((socket, ack) => socket.emit('trade:request', { requestId: createRequestId('trade-request'), targetCharacterId }, ack)); }
   async respondTrade(tradeId: string, accept: boolean): Promise<TradeSnapshot> { return this.tradeCommand((socket, ack) => socket.emit('trade:respond', { requestId: createRequestId('trade-respond'), tradeId, accept }, ack)); }

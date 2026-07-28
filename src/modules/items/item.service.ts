@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 import type { CharacterClass, EquipmentSlot, ItemCategory } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { InventorySnapshot, ItemRarity, MerchantSnapshot } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
+import { parseNpcDialogueDefinition } from '../npcs/npc-dialogue.js';
 
 export const INVENTORY_CAPACITY = 40;
 
@@ -42,16 +44,16 @@ export class ItemService {
     return this.snapshot(userId, characterId, true);
   }
 
-  async getMerchant(userId: string, characterId: string): Promise<MerchantSnapshot> {
+  async getMerchant(userId: string, characterId: string, npcId: string): Promise<MerchantSnapshot> {
     await this.ensureCatalogAndRemoveLegacyStarterItems(userId, characterId);
-    return this.merchantSnapshot(userId, characterId);
+    return this.merchantSnapshot(userId, characterId, npcId);
   }
 
-  async buy(userId: string, characterId: string, itemKey: string, quantity: number, operationId: string): Promise<MerchantSnapshot> {
+  async buy(userId: string, characterId: string, npcId: string, itemKey: string, quantity: number, operationId: string): Promise<MerchantSnapshot> {
     this.assertQuantity(quantity);
     await this.prisma.$transaction(async (tx) => {
       const character = await this.requireCharacter(tx, userId, characterId);
-      const merchant = await this.requireNearbyMerchant(tx, character);
+      const merchant = await this.requireMerchant(tx, character, npcId);
       if (!merchant.itemKeys.includes(itemKey)) this.invalidItem();
       const definition = await tx.itemDefinition.findUnique({ where: { key: itemKey } });
       if (!definition) this.invalidItem();
@@ -63,14 +65,14 @@ export class ItemService {
       const updated = await tx.character.update({ where: { id: characterId }, data: { silver: { decrement: total } }, select: { silver: true } });
       await tx.characterCurrencyLedger.create({ data: { characterId, operationId: `shop-buy:${operationId}`, currency: 'SILVER', direction: 'DEBIT', amount: total, reason: 'NPC_ITEM_PURCHASE', balanceAfter: updated.silver, metadata: { itemKey, quantity, unitPrice: metadata.buyPriceSilver, npcId: merchant.id } } });
     });
-    return this.merchantSnapshot(userId, characterId);
+    return this.merchantSnapshot(userId, characterId, npcId);
   }
 
-  async sell(userId: string, characterId: string, itemId: string, quantity: number, operationId: string): Promise<MerchantSnapshot> {
+  async sell(userId: string, characterId: string, npcId: string, itemId: string, quantity: number, operationId: string): Promise<MerchantSnapshot> {
     this.assertQuantity(quantity);
     await this.prisma.$transaction(async (tx) => {
       const character = await this.requireCharacter(tx, userId, characterId);
-      const merchant = await this.requireNearbyMerchant(tx, character);
+      const merchant = await this.requireMerchant(tx, character, npcId);
       const item = await this.requireOwnedItem(tx, userId, characterId, itemId);
       if (item.equippedSlot) throw new GameError(GAME_ERROR_CODES.ITEM_EQUIPPED, 'errors.items.equipped');
       if (quantity > item.quantity) this.invalidItem();
@@ -82,7 +84,7 @@ export class ItemService {
       const updated = await tx.character.update({ where: { id: characterId }, data: { silver: { increment: total } }, select: { silver: true } });
       await tx.characterCurrencyLedger.create({ data: { characterId, operationId: `shop-sell:${operationId}`, currency: 'SILVER', direction: 'CREDIT', amount: total, reason: 'NPC_ITEM_SALE', balanceAfter: updated.silver, metadata: { itemKey: item.itemDefinition.key, quantity, unitPrice: metadata.sellPriceSilver, npcId: merchant.id } } });
     });
-    return this.merchantSnapshot(userId, characterId);
+    return this.merchantSnapshot(userId, characterId, npcId);
   }
 
   async move(userId: string, characterId: string, itemId: string, targetSlotIndex: number): Promise<InventorySnapshot> {
@@ -175,17 +177,20 @@ export class ItemService {
     }
   }
 
-  private async merchantSnapshot(userId: string, characterId: string): Promise<MerchantSnapshot> {
+  private async merchantSnapshot(userId: string, characterId: string, npcId: string): Promise<MerchantSnapshot> {
     const character = await this.prisma.character.findFirst({ where: { id: characterId, userId }, select: { id: true, mapId: true, x: true, y: true, silver: true } });
     if (!character) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
-    const merchant = await this.requireNearbyMerchant(this.prisma, character);
-    const definitions = await this.prisma.itemDefinition.findMany({ where: { key: { in: merchant.itemKeys } }, orderBy: { key: 'asc' } });
+    const merchant = await this.requireMerchant(this.prisma, character, npcId);
+    const definitions = await this.prisma.itemDefinition.findMany({ where: { key: { in: merchant.itemKeys } } });
+    const definitionsByKey = new Map(definitions.map((definition) => [definition.key, definition]));
     return {
       merchant: { id: merchant.id, key: merchant.key, name: merchant.name },
       silver: character.silver,
-      items: definitions.map((definition) => {
+      items: merchant.itemKeys.flatMap((itemKey) => {
+        const definition = definitionsByKey.get(itemKey);
+        if (!definition) return [];
         const metadata = this.metadata(definition.metadata);
-        return { definitionKey: definition.key, name: definition.name, description: definition.description, category: metadata.category, rarity: metadata.rarity, icon: metadata.icon, stackLimit: definition.stackLimit, equipmentSlot: metadata.equipmentSlot, requiredClass: metadata.requiredClass, minimumLevel: metadata.minimumLevel ?? 1, statBonuses: metadata.statBonuses ?? {}, effect: metadata.effect, buyPriceSilver: metadata.buyPriceSilver, sellPriceSilver: metadata.sellPriceSilver };
+        return [{ definitionKey: definition.key, name: definition.name, description: definition.description, category: metadata.category, rarity: metadata.rarity, icon: metadata.icon, stackLimit: definition.stackLimit, equipmentSlot: metadata.equipmentSlot, requiredClass: metadata.requiredClass, minimumLevel: metadata.minimumLevel ?? 1, statBonuses: metadata.statBonuses ?? {}, effect: metadata.effect, buyPriceSilver: metadata.buyPriceSilver, sellPriceSilver: metadata.sellPriceSilver }];
       }),
       inventory: await this.snapshot(userId, characterId, true),
     };
@@ -239,14 +244,10 @@ export class ItemService {
     return character;
   }
 
-  private async requireNearbyMerchant(tx: Pick<Prisma.TransactionClient, 'npcDefinition'>, character: { mapId: string; x: number; y: number }) {
-    const npcs = await tx.npcDefinition.findMany({ where: { mapId: character.mapId } });
-    for (const npc of npcs) {
-      const dialogue = npc.dialogue as { merchant?: { itemKeys?: unknown; interactionRadius?: unknown } } | null;
-      const itemKeys = Array.isArray(dialogue?.merchant?.itemKeys) ? dialogue.merchant.itemKeys.filter((key): key is string => typeof key === 'string') : [];
-      const radius = typeof dialogue?.merchant?.interactionRadius === 'number' ? dialogue.merchant.interactionRadius : 2;
-      if (itemKeys.length > 0 && Math.max(Math.abs(npc.x - character.x), Math.abs(npc.y - character.y)) <= radius) return { ...npc, itemKeys };
-    }
+  private async requireMerchant(tx: Pick<Prisma.TransactionClient, 'npcDefinition'>, character: { mapId: string; x: number; y: number }, npcId: string) {
+    const npc = await tx.npcDefinition.findUnique({ where: { id: npcId } });
+    const dialogue = npc ? parseNpcDialogueDefinition(npc.dialogue) : undefined;
+    if (npc && dialogue?.merchant && isActorWithinInteractionRange(npc, character)) return { ...npc, itemKeys: dialogue.merchant.itemKeys };
     throw new GameError(GAME_ERROR_CODES.MERCHANT_NOT_AVAILABLE, 'errors.items.merchantUnavailable');
   }
 

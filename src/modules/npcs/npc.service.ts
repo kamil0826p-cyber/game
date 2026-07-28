@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import type { NpcStatePayload } from '../../contracts/socket.events.js';
+import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
+import { ACTOR_INTERACTION_RADIUS, isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
+import type { NpcDialogueChoiceResult, NpcDialogueSnapshot, NpcStatePayload } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import type { SupportedLocale } from '../../i18n/localization.service.js';
+import { localizeDialogueText, parseNpcDialogueDefinition, type NpcDialogueDefinition } from './npc-dialogue.js';
 
 interface NpcDialogue {
   type?: unknown;
-  interactionRadius?: unknown;
-  merchant?: { interactionRadius?: unknown };
 }
+
+interface NpcInteractionPosition { mapId: string; x: number; y: number; }
 
 const tileKey = (x: number, y: number): string => `${x},${y}`;
 
@@ -51,6 +55,20 @@ export class NpcService {
     this.occupiedTileCache.clear();
   }
 
+  async startDialogue(npcId: string, position: NpcInteractionPosition, locale: SupportedLocale): Promise<NpcDialogueSnapshot> {
+    const { npc, dialogue } = await this.requireAvailableNpc(npcId, position);
+    return this.toDialogueSnapshot(npc, dialogue, dialogue.rootNodeId, locale);
+  }
+
+  async chooseDialogue(npcId: string, nodeId: string, choiceId: string, position: NpcInteractionPosition, locale: SupportedLocale): Promise<NpcDialogueChoiceResult> {
+    const { npc, dialogue } = await this.requireAvailableNpc(npcId, position);
+    const node = dialogue.nodes[nodeId];
+    const choice = node?.choices.find((candidate) => candidate.id === choiceId);
+    if (!node || !choice) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_STATE_INVALID, 'errors.npcs.dialogueStateInvalid');
+    if (choice.nextNodeId) return { type: 'NODE', dialogue: this.toDialogueSnapshot(npc, dialogue, choice.nextNodeId, locale) };
+    return { type: 'ACTION', action: { type: choice.action!, npcId: npc.id } };
+  }
+
   private async loadMapNpcs(mapId: string): Promise<readonly NpcStatePayload[]> {
     const records = await this.prisma.npcDefinition.findMany({
       where: { mapId },
@@ -62,12 +80,6 @@ export class NpcService {
       const interactionType = dialogue?.type === 'MERCHANT' || dialogue?.type === 'QUEST'
         ? dialogue.type
         : 'DIALOGUE';
-      const configuredRadius = interactionType === 'MERCHANT'
-        ? dialogue?.merchant?.interactionRadius
-        : dialogue?.interactionRadius;
-      const interactionRadius = typeof configuredRadius === 'number' && Number.isFinite(configuredRadius)
-        ? Math.max(0, Math.trunc(configuredRadius))
-        : 1;
 
       return {
         id: npc.id,
@@ -78,8 +90,30 @@ export class NpcService {
         y: npc.y,
         outfitKey: npc.outfitKey,
         interactionType,
-        interactionRadius,
+        interactionRadius: ACTOR_INTERACTION_RADIUS,
       };
     });
+  }
+
+  private async requireAvailableNpc(npcId: string, position: NpcInteractionPosition) {
+    const npc = await this.prisma.npcDefinition.findUnique({ where: { id: npcId } });
+    if (!npc || npc.mapId !== position.mapId) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
+    const dialogue = parseNpcDialogueDefinition(npc.dialogue);
+    if (!dialogue) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_UNAVAILABLE, 'errors.npcs.dialogueUnavailable', { npcId });
+    if (!isActorWithinInteractionRange(npc, position)) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
+    return { npc, dialogue };
+  }
+
+  private toDialogueSnapshot(npc: { id: string; key: string; name: string }, dialogue: NpcDialogueDefinition, nodeId: string, locale: SupportedLocale): NpcDialogueSnapshot {
+    const node = dialogue.nodes[nodeId];
+    if (!node) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_UNAVAILABLE, 'errors.npcs.dialogueUnavailable', { npcId: npc.id, nodeId });
+    return {
+      npc: { id: npc.id, key: npc.key, name: npc.name },
+      node: {
+        id: nodeId,
+        text: localizeDialogueText(node.text, locale),
+        choices: node.choices.map((choice) => ({ id: choice.id, label: localizeDialogueText(choice.label, locale) })),
+      },
+    };
   }
 }

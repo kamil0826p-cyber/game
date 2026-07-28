@@ -2,7 +2,6 @@ import { useCallback, useEffect } from 'react';
 import { gameStore, useGameState, type ModalKey } from '../../game/state/gameStore';
 import { CharacterModal } from './CharacterModal';
 import { InventoryModal } from './InventoryModal';
-import { MerchantModal } from './MerchantModal';
 import { QuestModal } from './QuestModal';
 import { SkillModal } from './SkillModal';
 
@@ -12,10 +11,9 @@ export function ModalHost(): React.JSX.Element | null {
   const state = useGameState();
   useEffect(() => { const listener = (event: KeyboardEvent) => { if (editable(event.target) || state.activeModal === 'trade') return; if (event.key === 'Escape' && state.activeModal) { event.preventDefault(); gameStore.setActiveModal(null); return; } const modal = modalByKey[event.key]; if (modal) { event.preventDefault(); gameStore.setActiveModal(state.activeModal === modal ? null : modal); } }; window.addEventListener('keydown', listener); return () => window.removeEventListener('keydown', listener); }, [state.activeModal]);
   const close = useCallback(() => gameStore.setActiveModal(null), []);
-  if (!state.self || !state.activeModal || state.activeModal === 'trade') return null;
+  if (!state.self || !state.activeModal || ['trade', 'npc-dialogue', 'merchant'].includes(state.activeModal)) return null;
   if (state.activeModal === 'character') return <CharacterModal character={state.self} onClose={close} />;
   if (state.activeModal === 'inventory') return <InventoryModal onClose={close} />;
-  if (state.activeModal === 'merchant') return <MerchantModal onClose={close} />;
   if (state.activeModal === 'quests') return <QuestModal onClose={close} />;
   return <SkillModal onClose={close} />;
 }

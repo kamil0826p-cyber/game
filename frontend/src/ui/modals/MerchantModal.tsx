@@ -17,7 +17,9 @@ const localizedNames: Record<string, string> = {
   'field-rations': 'Prowiant polowy',
 };
 
-export function MerchantModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+interface MerchantModalProps { npcId: string; npcName: string; onClose: () => void; }
+
+export function MerchantModal({ npcId, npcName, onClose }: MerchantModalProps): React.JSX.Element {
   const connection = useGameConnection();
   const { locale } = useI18n();
   const [snapshot, setSnapshot] = useState<MerchantSnapshot>();
@@ -26,7 +28,7 @@ export function MerchantModal({ onClose }: { onClose: () => void }): React.JSX.E
   useEffect(() => {
     let mounted = true;
     void connection
-      .getMerchant()
+      .getMerchant(npcId)
       .then((value) => {
         if (mounted) setSnapshot(value);
       })
@@ -34,7 +36,7 @@ export function MerchantModal({ onClose }: { onClose: () => void }): React.JSX.E
     return () => {
       mounted = false;
     };
-  }, [connection, onClose]);
+  }, [connection, npcId, onClose]);
 
   const mutate = async (operation: () => Promise<MerchantSnapshot>) => {
     if (busy) return;
@@ -63,7 +65,7 @@ export function MerchantModal({ onClose }: { onClose: () => void }): React.JSX.E
 
   return (
     <Modal
-      title="Borin Żelazna Dłoń"
+      title={snapshot?.merchant.name ?? npcName}
       subtitle={
         locale === 'pl'
           ? 'Najedź na przedmiot, aby zobaczyć jego statystyki.'
@@ -96,7 +98,7 @@ export function MerchantModal({ onClose }: { onClose: () => void }): React.JSX.E
                     className="hud-utility-button shrink-0"
                     disabled={busy || (snapshot?.silver ?? 0) < item.buyPriceSilver}
                     onClick={() =>
-                      void mutate(() => connection.buyFromMerchant(item.definitionKey, 1))
+                      void mutate(() => connection.buyFromMerchant(npcId, item.definitionKey, 1))
                     }
                   >
                     {locale === 'pl' ? 'Kup 1' : 'Buy 1'}
@@ -135,7 +137,7 @@ export function MerchantModal({ onClose }: { onClose: () => void }): React.JSX.E
                     type="button"
                     className="hud-utility-button shrink-0"
                     disabled={busy || Boolean(item.equippedSlot)}
-                    onClick={() => void mutate(() => connection.sellToMerchant(item.id, 1))}
+                    onClick={() => void mutate(() => connection.sellToMerchant(npcId, item.id, 1))}
                   >
                     {item.equippedSlot
                       ? locale === 'pl'

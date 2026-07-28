@@ -4,7 +4,7 @@ import type { CharacterCurrencyUpdatedPayload, InventorySnapshot, MovementCommit
 
 export type GamePhase = 'idle' | 'connecting' | 'character-required' | 'character-select' | 'in-world' | 'reconnecting' | 'fatal';
 export type PortalTransitionState = 'idle' | 'fade-out' | 'loading' | 'fade-in';
-export type ModalKey = 'character' | 'inventory' | 'merchant' | 'trade' | 'quests' | 'skills' | null;
+export type ModalKey = 'character' | 'inventory' | 'npc-dialogue' | 'merchant' | 'trade' | 'quests' | 'skills' | null;
 export interface ClientNotification extends SocketErrorPayload { id: string; createdAt: number; }
 export interface GameState {
   phase: GamePhase; socketConnected: boolean; desiredInWorld: boolean; realm: RealmState | undefined;

@@ -25,6 +25,9 @@ export interface ChatMessagePayload { id: string; channel: ChatChannel; characte
 export interface CharacterCurrencyUpdatedPayload { characterId: string; currency: 'SILVER' | 'GOLD'; amount: number; balance: number; }
 export type NpcInteractionType = 'DIALOGUE' | 'MERCHANT' | 'QUEST';
 export interface NpcStatePayload { id: string; key: string; name: string; mapId: string; x: number; y: number; outfitKey: string; interactionType: NpcInteractionType; interactionRadius: number; }
+export interface NpcDialogueSnapshot { npc: { id: string; key: string; name: string }; node: { id: string; text: string; choices: Array<{ id: string; label: string }> }; }
+export type NpcDialogueAction = { type: 'OPEN_MERCHANT' | 'CLOSE'; npcId: string };
+export type NpcDialogueChoiceResult = { type: 'NODE'; dialogue: NpcDialogueSnapshot } | { type: 'ACTION'; action: NpcDialogueAction };
 export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; npcs: NpcStatePayload[]; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
 export type CharacterCreateResult = WorldSpawnPayload;
 export interface PathAcceptedPayload { requestId: string; pathLength: number; }
@@ -47,9 +50,12 @@ export interface ClientToServerEvents {
   'inventory:unequip': (payload: { requestId: string; itemId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:use': (payload: { requestId: string; itemId: string }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:discard': (payload: { requestId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<InventorySnapshot>) => void) => void;
-  'merchant:get': (payload: { requestId: string }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
-  'merchant:buy': (payload: { requestId: string; itemKey: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
-  'merchant:sell': (payload: { requestId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:get': (payload: { requestId: string; npcId: string }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:buy': (payload: { requestId: string; npcId: string; itemKey: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:sell': (payload: { requestId: string; npcId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'npc:dialogue:start': (payload: { requestId: string; npcId: string }, acknowledgement: (response: SocketAck<NpcDialogueSnapshot>) => void) => void;
+  'npc:dialogue:choose': (payload: { requestId: string; npcId: string; nodeId: string; choiceId: string }, acknowledgement: (response: SocketAck<NpcDialogueChoiceResult>) => void) => void;
+  'npc:dialogue:end': (payload: { requestId: string; npcId: string }, acknowledgement: (response: SocketAck<{ closed: boolean }>) => void) => void;
   'trade:getActive': (payload: { requestId: string }, acknowledgement: (response: SocketAck<TradeSnapshot | null>) => void) => void;
   'trade:request': (payload: { requestId: string; targetCharacterId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
   'trade:respond': (payload: { requestId: string; tradeId: string; accept: boolean }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;

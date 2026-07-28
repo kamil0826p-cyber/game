@@ -2,9 +2,12 @@ import { Container, Graphics, Rectangle, Text, type FederatedPointerEvent } from
 import type { NpcStatePayload } from '../../contracts/socket';
 import { WORLD_TILE_SIZE } from './constants';
 
+export const NPC_CONTEXT_EVENT = 'game:npc-interaction';
+export interface NpcInteractionPoint { x: number; y: number; }
+
 export class NpcView {
   readonly container = new Container();
-  constructor(readonly npc: NpcStatePayload, onInteract: (npc: NpcStatePayload) => void) {
+  constructor(readonly npc: NpcStatePayload, onInteract?: (npc: NpcStatePayload, point: NpcInteractionPoint) => void) {
     this.container.position.set(npc.x * WORLD_TILE_SIZE + WORLD_TILE_SIZE / 2, npc.y * WORLD_TILE_SIZE + WORLD_TILE_SIZE / 2);
     this.container.zIndex = npc.y; this.container.eventMode = 'static'; this.container.cursor = 'pointer'; this.container.hitArea = new Rectangle(-18, -30, 36, 50);
     const shadow = new Graphics().ellipse(0, 13, 14, 6).fill({ color: 0x000000, alpha: 0.35 });
@@ -17,7 +20,12 @@ export class NpcView {
     const name = new Text({ text: npc.name, style: { fill: 0xfef3c7, fontSize: 10, fontWeight: 'bold', stroke: { color: 0x111827, width: 3 } } }); name.anchor.set(0.5, 0); name.position.set(0, 22);
     this.container.label = npc.outfitKey; this.container.addChild(shadow, body, head, shield, sword, interactionMarker, name);
     this.container.on('pointerdown', (event: FederatedPointerEvent) => event.stopPropagation());
-    this.container.on('pointertap', (event: FederatedPointerEvent) => { event.stopPropagation(); onInteract(npc); });
+    this.container.on('pointertap', (event: FederatedPointerEvent) => {
+      event.stopPropagation();
+      const point = { x: event.global.x, y: event.global.y };
+      if (onInteract) onInteract(npc, point);
+      else window.dispatchEvent(new CustomEvent(NPC_CONTEXT_EVENT, { detail: { npc, ...point } }));
+    });
   }
   destroy(): void { this.container.destroy({ children: true }); }
 }

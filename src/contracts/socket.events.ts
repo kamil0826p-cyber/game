@@ -10,10 +10,14 @@ import type {
   InventoryMovePayload,
   InventoryRequestPayload,
   MerchantBuyPayload,
+  MerchantRequestPayload,
   MerchantSellPayload,
   MoveStepPayload,
   MoveStopPayload,
   MoveTargetPayload,
+  NpcDialogueChoicePayload,
+  NpcDialogueEndPayload,
+  NpcDialogueStartPayload,
   TradeActionPayload,
   TradeGetActivePayload,
   TradeRequestPayload,
@@ -31,6 +35,9 @@ export interface CharacterCurrencyUpdatedPayload { characterId: string; currency
 export interface MapStatePayload { id: string; key: string; name: string; width: number; height: number; zoneType: ZoneType; version: number; }
 export type NpcInteractionType = 'DIALOGUE' | 'MERCHANT' | 'QUEST';
 export interface NpcStatePayload { id: string; key: string; name: string; mapId: string; x: number; y: number; outfitKey: string; interactionType: NpcInteractionType; interactionRadius: number; }
+export interface NpcDialogueSnapshot { npc: { id: string; key: string; name: string }; node: { id: string; text: string; choices: Array<{ id: string; label: string }> }; }
+export type NpcDialogueAction = { type: 'OPEN_MERCHANT' | 'CLOSE'; npcId: string };
+export type NpcDialogueChoiceResult = { type: 'NODE'; dialogue: NpcDialogueSnapshot } | { type: 'ACTION'; action: NpcDialogueAction };
 export interface WorldSpawnPayload { self: SelfCharacterState; map: MapStatePayload; npcs: NpcStatePayload[]; nearbyPlayers: PublicPlayerState[]; unlockedOutfits: Array<{ key: string; unlockLevel: number }>; movementStepMs: number; serverTime: number; }
 export interface MovementCommittedPayload { requestId?: string; source: 'DIRECT' | 'PATH'; mapId: string; x: number; y: number; direction: Direction; serverTime: number; portalTransition?: { sourceMapId: string; destinationMapId: string; targetX: number; targetY: number; }; }
 export interface MovementRejectedPayload extends SocketErrorPayload { requestId?: string; retryAfterMs?: number; authoritative: { mapId: string; x: number; y: number; direction: Direction; }; }
@@ -63,9 +70,12 @@ export interface ClientToServerEvents {
   'inventory:unequip': (payload: InventoryItemCommandPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:use': (payload: InventoryItemCommandPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
   'inventory:discard': (payload: InventoryDiscardPayload, acknowledgement?: (response: SocketAck<InventorySnapshot>) => void) => void;
-  'merchant:get': (payload: InventoryRequestPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'merchant:get': (payload: MerchantRequestPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:buy': (payload: MerchantBuyPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:sell': (payload: MerchantSellPayload, acknowledgement?: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'npc:dialogue:start': (payload: NpcDialogueStartPayload, acknowledgement?: (response: SocketAck<NpcDialogueSnapshot>) => void) => void;
+  'npc:dialogue:choose': (payload: NpcDialogueChoicePayload, acknowledgement?: (response: SocketAck<NpcDialogueChoiceResult>) => void) => void;
+  'npc:dialogue:end': (payload: NpcDialogueEndPayload, acknowledgement?: (response: SocketAck<{ closed: boolean }>) => void) => void;
   'trade:getActive': (payload: TradeGetActivePayload, acknowledgement?: (response: SocketAck<TradeSnapshot | null>) => void) => void;
   'trade:request': (payload: TradeRequestPayload, acknowledgement?: (response: SocketAck<TradeSnapshot>) => void) => void;
   'trade:respond': (payload: TradeRespondPayload, acknowledgement?: (response: SocketAck<TradeSnapshot>) => void) => void;
@@ -93,6 +103,6 @@ export interface ServerToClientEvents {
 }
 
 export interface InterServerEvents {}
-export interface GameSocketData { auth?: AuthContext; locale?: SupportedLocale; userId?: string; characterId?: string; sessionState?: 'INITIALIZING' | 'CHARACTER_REQUIRED' | 'CHARACTER_SELECT' | 'IN_WORLD' | 'DISCONNECTED'; }
+export interface GameSocketData { auth?: AuthContext; locale?: SupportedLocale; userId?: string; characterId?: string; sessionState?: 'INITIALIZING' | 'CHARACTER_REQUIRED' | 'CHARACTER_SELECT' | 'IN_WORLD' | 'DISCONNECTED'; activeNpcDialogue?: { npcId: string; nodeId: string }; merchantNpcId?: string; }
 export type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, GameSocketData>;
 export type GameNamespace = Namespace<ClientToServerEvents, ServerToClientEvents, InterServerEvents, GameSocketData>;
