@@ -39,8 +39,9 @@ class GameStore {
   removePlayer(characterId: string): void { if (!this.state.players[characterId]) return; const players = { ...this.state.players }; delete players[characterId]; this.patch({ players, ...(this.state.selectedPlayerId === characterId ? { activeModal: null, selectedPlayerId: undefined } : {}) }); }
   setActiveModal(activeModal: ModalKey): void { this.patch({ activeModal }); }
   selectPlayer(characterId: string): void { if (this.state.players[characterId]) this.patch({ selectedPlayerId: characterId, activeModal: 'player' }); }
-  setTrade(trade: TradeSnapshot): void {
+  setTrade(payload: TradeSnapshot): void {
     const selfId = this.state.self?.characterId;
+    const trade = selfId ? { ...payload, selfCharacterId: selfId } : payload;
     const incoming = trade.status === 'REQUESTED' && trade.recipient.characterId === selfId;
     const terminal = ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(trade.status);
     this.patch({ trade, selectedPlayerId: undefined, activeModal: terminal ? null : incoming ? 'trade-request' : trade.status === 'OPEN' || trade.status === 'LOCKED' ? 'trade' : this.state.activeModal });
