@@ -24,6 +24,11 @@ export const polishMessages = {
   'errors.items.equipped': 'Najpierw zdejmij ten przedmiot.',
   'errors.items.effectNotNeeded': 'Ten przedmiot niczego teraz nie odnowi.',
   'errors.items.merchantUnavailable': 'Podejdź bliżej do handlarza, aby handlować.',
+  'errors.trade.notFound': 'Ta sesja handlu nie istnieje.',
+  'errors.trade.busy': 'Jeden z graczy już prowadzi handel.',
+  'errors.trade.tooFar': 'Obaj gracze muszą pozostać blisko siebie.',
+  'errors.trade.invalidState': 'Ten handel nie jest już dostępny.',
+  'errors.trade.expired': 'Prośba o handel wygasła.',
   'errors.internal': 'Wystąpił wewnętrzny błąd serwera.',
   'notifications.sessionReplaced': 'Ta postać połączyła się z innej sesji.',
 } satisfies Record<MessageKey, string>;
