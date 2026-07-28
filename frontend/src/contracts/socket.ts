@@ -9,6 +9,9 @@ export interface InventoryCharacterSnapshot { hp: number; maxHp: number; energy:
 export interface InventorySnapshot { capacity: number; silver: number; items: InventoryItemPayload[]; character?: InventoryCharacterSnapshot; }
 export interface MerchantItemPayload { definitionKey: string; name: string; description: string; category: ItemCategory; rarity: ItemRarity; icon: string; stackLimit: number; equipmentSlot?: EquipmentSlot; requiredClass?: CharacterClass; minimumLevel: number; statBonuses: ItemStatBonuses; effect?: { hp?: number; energy?: number }; buyPriceSilver: number; sellPriceSilver: number; }
 export interface MerchantSnapshot { merchant: { id: string; key: string; name: string }; silver: number; items: MerchantItemPayload[]; inventory: InventorySnapshot; }
+export type TradeStatus = 'REQUESTED' | 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+export interface TradeSideSnapshot { characterId: string; name: string; silver: number; offeredSilver: number; accepted: boolean; items: InventoryItemPayload[]; }
+export interface TradeSnapshot { id: string; status: TradeStatus; expiresAt: number; selfCharacterId: string; initiator: TradeSideSnapshot; recipient: TradeSideSnapshot; }
 export interface SocketErrorPayload { code: string; message: string; details?: Record<string, unknown>; }
 export type SocketAck<T> = { ok: true; data: T } | { ok: false; error: SocketErrorPayload };
 export interface CreateCharacterPayload { requestId: string; name: string; characterClass: CharacterClass; }
@@ -48,6 +51,12 @@ export interface ClientToServerEvents {
   'merchant:get': (payload: { requestId: string }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:buy': (payload: { requestId: string; itemKey: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
   'merchant:sell': (payload: { requestId: string; itemId: string; quantity: number }, acknowledgement: (response: SocketAck<MerchantSnapshot>) => void) => void;
+  'trade:request': (payload: { requestId: string; targetCharacterId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:respond': (payload: { requestId: string; tradeId: string; accept: boolean }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:offer': (payload: { requestId: string; tradeId: string; silver: number; items: Array<{ itemId: string; quantity: number }> }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:accept': (payload: { requestId: string; tradeId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:cancel': (payload: { requestId: string; tradeId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
+  'trade:get': (payload: { requestId: string; tradeId: string }, acknowledgement: (response: SocketAck<TradeSnapshot>) => void) => void;
 }
 
 export interface ServerToClientEvents {
@@ -62,5 +71,6 @@ export interface ServerToClientEvents {
   'movement:rejected': (payload: MovementRejectedPayload) => void;
   'character:currencyUpdated': (payload: CharacterCurrencyUpdatedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
+  'trade:updated': (payload: TradeSnapshot) => void;
   notification: (payload: SocketErrorPayload) => void;
 }
