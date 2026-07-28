@@ -4,6 +4,7 @@ import { WORLD_TILE_SIZE } from './constants';
 import { gameAssetLoader, type OutfitFrames } from './GameAssetLoader';
 
 const classColors = { MAGE: 0x6d5bd0, WARRIOR: 0xb45454, ARCHER: 0x4f9467 } as const;
+const PLAYER_CONTEXT_EVENT = 'game:player-context';
 
 export class CharacterView {
   readonly container = new Container();
@@ -11,6 +12,7 @@ export class CharacterView {
   private readonly fallback: Graphics;
   private readonly sprite = new Sprite();
   private readonly nameplate = new Container();
+  private readonly clickTarget = new Graphics();
   private readonly nameText: Text;
   private frames: OutfitFrames | undefined = undefined;
   private destroyed = false;
@@ -27,11 +29,6 @@ export class CharacterView {
   constructor(state: PublicPlayerState, private readonly localPlayer: boolean) {
     this.state = state;
     this.container.sortableChildren = true;
-    if (!localPlayer) {
-      this.container.eventMode = 'static';
-      this.container.cursor = 'pointer';
-      this.container.on('pointertap', this.onPlayerClick);
-    }
 
     this.shadow = new Graphics().ellipse(0, -2, 17, 7).fill({ color: 0x03040a, alpha: 0.48 });
     this.shadow.zIndex = 0;
@@ -51,7 +48,16 @@ export class CharacterView {
     this.nameplate.addChild(badge, this.nameText);
     this.nameplate.position.set(0, -72);
     this.nameplate.zIndex = 4;
-    this.container.addChild(this.shadow, this.fallback, this.sprite, this.nameplate);
+
+    this.clickTarget.rect(-24, -78, 48, 78).fill({ color: 0xffffff, alpha: 0.001 });
+    this.clickTarget.zIndex = 10;
+    if (!localPlayer) {
+      this.clickTarget.eventMode = 'static';
+      this.clickTarget.cursor = 'pointer';
+      this.clickTarget.on('pointerdown', this.onPlayerPointerDown);
+    }
+
+    this.container.addChild(this.shadow, this.fallback, this.sprite, this.nameplate, this.clickTarget);
     const x = (state.x + 0.5) * WORLD_TILE_SIZE;
     const y = (state.y + 1) * WORLD_TILE_SIZE;
     this.startX = this.targetX = x;
@@ -101,14 +107,20 @@ export class CharacterView {
 
   destroy(): void {
     this.destroyed = true;
-    this.container.off('pointertap', this.onPlayerClick);
+    this.clickTarget.off('pointerdown', this.onPlayerPointerDown);
     this.container.destroy({ children: true });
   }
 
-  private readonly onPlayerClick = (event: FederatedPointerEvent): void => {
+  private readonly onPlayerPointerDown = (event: FederatedPointerEvent): void => {
+    if (event.button !== 0) return;
     event.stopPropagation();
-    const original = event.nativeEvent;
-    window.dispatchEvent(new CustomEvent('game:player-context', { detail: { player: this.state, clientX: original.clientX, clientY: original.clientY } }));
+    window.dispatchEvent(new CustomEvent(PLAYER_CONTEXT_EVENT, {
+      detail: {
+        player: this.state,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      },
+    }));
   };
 
   private updateFrame(now: number): void {
