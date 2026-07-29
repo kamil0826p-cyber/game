@@ -1,0 +1,37 @@
+name: Materialize static outfits once
+
+on:
+  push:
+    branches:
+      - agent/complete-outfit-sprite-set
+    paths:
+      - frontend/scripts/materialize_outfits.py
+      - .github/workflows/materialize-outfits-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/complete-outfit-sprite-set
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pillow==11.3.0
+      - run: python frontend/scripts/materialize_outfits.py
+      - name: Remove one-time materializer
+        run: |
+          rm frontend/scripts/materialize_outfits.py
+          rm .github/workflows/materialize-outfits-once.yml
+      - name: Commit static assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A frontend/public/assets frontend/scripts .github/workflows
+          git commit -m "Commit complete static outfit sprite set"
+          git push origin HEAD:agent/complete-outfit-sprite-set
