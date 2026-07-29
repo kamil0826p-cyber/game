@@ -5,6 +5,7 @@ import type {
   PublicPlayerState,
   RealmState,
   SelfCharacterState,
+  ZoneType,
 } from './game';
 export type EquipmentSlot =
   'HEAD' | 'CHEST' | 'LEGS' | 'FEET' | 'MAIN_HAND' | 'OFF_HAND' | 'AMULET' | 'RING';
@@ -105,6 +106,83 @@ export interface TradeSnapshot {
   initiator: TradeParticipantPayload;
   recipient: TradeParticipantPayload;
   inventory: InventorySnapshot;
+}
+export type CombatLifecycleStatus =
+  'REQUESTED' | 'ACTIVE' | 'FINISHED' | 'DECLINED' | 'EXPIRED' | 'CANCELLED';
+export type CombatFinishReason =
+  | 'DEFEATED'
+  | 'FORFEIT'
+  | 'DISCONNECTED'
+  | 'DECLINED'
+  | 'REQUEST_EXPIRED'
+  | 'CANCELLED'
+  | 'SERVER_SHUTDOWN';
+export interface CombatStatusPayload {
+  key: string;
+  turnsRemaining: number;
+  magnitude?: number;
+}
+export interface CombatSkillStatePayload {
+  key: string;
+  cooldownTurnsRemaining: number;
+}
+export interface CombatParticipantPayload {
+  actorId: string;
+  kind: 'PLAYER' | 'MOB';
+  characterId?: string;
+  name: string;
+  characterClass: CharacterClass;
+  level: number;
+  outfitKey: string;
+  hp: number;
+  maxHp: number;
+  energy: number;
+  maxEnergy: number;
+  shield: number;
+  statuses: CombatStatusPayload[];
+  skills: CombatSkillStatePayload[];
+}
+export interface CombatActionResultPayload {
+  targetActorId: string;
+  hpDelta: number;
+  energyDelta: number;
+  shieldDelta: number;
+  shieldAbsorbed: number;
+  dodged: boolean;
+  statusesApplied: CombatStatusPayload[];
+  statusesRemoved: string[];
+}
+export interface CombatActionResolutionPayload {
+  sequence: number;
+  actorId: string;
+  targetActorId?: string;
+  action: 'BASIC_ATTACK' | 'SKILL' | 'STATUS_TICK' | 'TURN_SKIPPED';
+  skillKey?: string;
+  label: string;
+  animationKey: string;
+  visual: SkillVisualDefinition;
+  results: CombatActionResultPayload[];
+  occurredAt: number;
+}
+export interface CombatSnapshot {
+  combatId: string;
+  status: CombatLifecycleStatus;
+  zoneType: ZoneType;
+  mapId: string;
+  createdAt: number;
+  expiresAt?: number;
+  startedAt?: number;
+  finishedAt?: number;
+  turnNumber: number;
+  activeActorId?: string;
+  turnStartedAt?: number;
+  turnEndsAt?: number;
+  winnerActorId?: string;
+  finishReason?: CombatFinishReason;
+  initiatorActorId: string;
+  recipientActorId: string;
+  participants: [CombatParticipantPayload, CombatParticipantPayload];
+  recentActions: CombatActionResolutionPayload[];
 }
 export type SkillTargeting = 'SELF' | 'ENEMY' | 'AREA';
 export type SkillUnlockState =
@@ -399,6 +477,28 @@ export interface ClientToServerEvents {
     payload: { requestId: string; skillKey: string },
     acknowledgement: (response: SocketAck<SkillTreeSnapshot>) => void,
   ) => void;
+  'combat:getActive': (
+    payload: { requestId: string },
+    acknowledgement: (response: SocketAck<CombatSnapshot | null>) => void,
+  ) => void;
+  'combat:request': (
+    payload: { requestId: string; targetCharacterId: string },
+    acknowledgement: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
+  'combat:respond': (
+    payload: { requestId: string; combatId: string; accept: boolean },
+    acknowledgement: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
+  'combat:act': (
+    payload:
+      | { requestId: string; combatId: string; action: 'BASIC_ATTACK' }
+      | { requestId: string; combatId: string; action: 'SKILL'; skillKey: string },
+    acknowledgement: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
+  'combat:leave': (
+    payload: { requestId: string; combatId: string },
+    acknowledgement: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
 }
 export interface ServerToClientEvents {
   'session:ready': (payload: SessionReadyPayload) => void;
@@ -420,5 +520,7 @@ export interface ServerToClientEvents {
   'chat:message': (payload: ChatMessagePayload) => void;
   'trade:requested': (payload: TradeSnapshot) => void;
   'trade:updated': (payload: TradeSnapshot) => void;
+  'combat:requested': (payload: CombatSnapshot) => void;
+  'combat:updated': (payload: CombatSnapshot) => void;
   notification: (payload: SocketErrorPayload) => void;
 }

@@ -9,6 +9,7 @@ import type {
 } from '../../contracts/game';
 import type {
   CharacterCurrencyUpdatedPayload,
+  CombatSnapshot,
   InventorySnapshot,
   MovementCommittedPayload,
   MovementRejectedPayload,
@@ -34,6 +35,7 @@ export type ModalKey =
   | 'npc-dialogue'
   | 'merchant'
   | 'trade'
+  | 'combat'
   | 'quests'
   | 'skills'
   | null;
@@ -245,6 +247,47 @@ class GameStore {
   }
   updateSkillTree(skillTree: SkillTreeSnapshot): void {
     this.patch({ skillTree });
+  }
+  updateCombatState(combat: CombatSnapshot): void {
+    const self = this.state.self;
+    if (!self) return;
+    const participant = combat.participants.find(
+      (candidate) => candidate.characterId === self.characterId,
+    );
+    if (!participant) return;
+    const active = combat.status === 'ACTIVE';
+    const cooldowns = new Map(
+      participant.skills.map((skill) => [skill.key, skill.cooldownTurnsRemaining]),
+    );
+    const players = { ...this.state.players };
+    for (const combatant of combat.participants) {
+      if (!combatant.characterId || combatant.characterId === self.characterId) continue;
+      const player = players[combatant.characterId];
+      if (player)
+        players[combatant.characterId] = {
+          ...player,
+          combatState: active ? 'IN_BATTLE' : 'IDLE',
+        };
+    }
+    this.patch({
+      self: {
+        ...self,
+        combatState: active ? 'IN_BATTLE' : 'IDLE',
+        hp: active ? participant.hp : Math.max(1, participant.hp),
+        energy: participant.energy,
+      },
+      players,
+      skillTree: this.state.skillTree
+        ? {
+            ...this.state.skillTree,
+            skills: this.state.skillTree.skills.map((skill) => ({
+              ...skill,
+              cooldownTurnsRemaining: cooldowns.get(skill.key) ?? skill.cooldownTurnsRemaining,
+            })),
+          }
+        : undefined,
+      plannedPath: active ? [] : this.state.plannedPath,
+    });
   }
   addNotification(payload: SocketErrorPayload): void {
     if (payload.code === 'MOVE_COLLISION') return;

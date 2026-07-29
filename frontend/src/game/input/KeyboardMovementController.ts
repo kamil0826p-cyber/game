@@ -59,6 +59,7 @@ export class KeyboardMovementController {
       !state.socketConnected ||
       state.portalTransition !== 'idle' ||
       state.activeModal ||
+      state.self?.combatState !== 'IDLE' ||
       this.requestInFlight ||
       now < this.nextAllowedAt
     )

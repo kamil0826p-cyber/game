@@ -1,5 +1,6 @@
 import { isActorWithinInteractionRange } from '../../../common/rules/actor-interaction.js';
-export const TRADE_REQUEST_TTL_MS = 30_000;
+import { PLAYER_INTERACTION_REQUEST_TTL_MS } from '../../../common/rules/player-interaction-request.js';
+export const TRADE_REQUEST_TTL_MS = PLAYER_INTERACTION_REQUEST_TTL_MS;
 export const TRADE_OPEN_TTL_MS = 5 * 60_000;
 export const MAX_TRADE_SILVER = 2_147_483_647;
 export const MAX_TRADE_ITEM_QUANTITY = 9_999;

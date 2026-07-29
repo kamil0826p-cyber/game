@@ -37,6 +37,11 @@ import type {
   ViewportUpdatePayload,
   SkillRequestPayload,
   SkillUnlockPayload,
+  CombatActionPayload,
+  CombatGetActivePayload,
+  CombatLeavePayload,
+  CombatRequestPayload,
+  CombatRespondPayload,
 } from './socket.schemas.js';
 
 export interface SocketErrorPayload {
@@ -229,6 +234,90 @@ export interface TradeSnapshot {
   inventory: InventorySnapshot;
 }
 
+export type CombatLifecycleStatus =
+  'REQUESTED' | 'ACTIVE' | 'FINISHED' | 'DECLINED' | 'EXPIRED' | 'CANCELLED';
+export type CombatFinishReason =
+  | 'DEFEATED'
+  | 'FORFEIT'
+  | 'DISCONNECTED'
+  | 'DECLINED'
+  | 'REQUEST_EXPIRED'
+  | 'CANCELLED'
+  | 'SERVER_SHUTDOWN';
+export interface CombatStatusPayload {
+  key: string;
+  turnsRemaining: number;
+  magnitude?: number;
+}
+export interface CombatSkillStatePayload {
+  key: string;
+  cooldownTurnsRemaining: number;
+}
+export interface CombatParticipantPayload {
+  actorId: string;
+  kind: 'PLAYER' | 'MOB';
+  characterId?: string;
+  name: string;
+  characterClass: CharacterClass;
+  level: number;
+  outfitKey: string;
+  hp: number;
+  maxHp: number;
+  energy: number;
+  maxEnergy: number;
+  shield: number;
+  statuses: CombatStatusPayload[];
+  skills: CombatSkillStatePayload[];
+}
+export interface CombatActionResultPayload {
+  targetActorId: string;
+  hpDelta: number;
+  energyDelta: number;
+  shieldDelta: number;
+  shieldAbsorbed: number;
+  dodged: boolean;
+  statusesApplied: CombatStatusPayload[];
+  statusesRemoved: string[];
+}
+export interface CombatActionResolutionPayload {
+  sequence: number;
+  actorId: string;
+  targetActorId?: string;
+  action: 'BASIC_ATTACK' | 'SKILL' | 'STATUS_TICK' | 'TURN_SKIPPED';
+  skillKey?: string;
+  label: string;
+  animationKey: string;
+  visual: {
+    castEffectKey: string;
+    projectileEffectKey?: string;
+    impactEffectKey: string;
+    accentColor: string;
+    travelMs?: number;
+  };
+  results: CombatActionResultPayload[];
+  occurredAt: number;
+}
+export interface CombatSnapshot {
+  combatId: string;
+  status: CombatLifecycleStatus;
+  zoneType: ZoneType;
+  mapId: string;
+  createdAt: number;
+  expiresAt?: number;
+  startedAt?: number;
+  finishedAt?: number;
+  turnNumber: number;
+  activeActorId?: string;
+  turnStartedAt?: number;
+  turnEndsAt?: number;
+  winnerActorId?: string;
+  finishReason?: CombatFinishReason;
+  initiatorActorId: string;
+  recipientActorId: string;
+  participants: [CombatParticipantPayload, CombatParticipantPayload];
+  recentActions: CombatActionResolutionPayload[];
+}
+
 export interface ClientToServerEvents {
   'character:create': (
     payload: CreateCharacterPayload,
@@ -339,6 +428,26 @@ export interface ClientToServerEvents {
     payload: SkillUnlockPayload,
     acknowledgement?: (response: SocketAck<SkillTreeSnapshot>) => void,
   ) => void;
+  'combat:getActive': (
+    payload: CombatGetActivePayload,
+    acknowledgement?: (response: SocketAck<CombatSnapshot | null>) => void,
+  ) => void;
+  'combat:request': (
+    payload: CombatRequestPayload,
+    acknowledgement?: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
+  'combat:respond': (
+    payload: CombatRespondPayload,
+    acknowledgement?: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
+  'combat:act': (
+    payload: CombatActionPayload,
+    acknowledgement?: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
+  'combat:leave': (
+    payload: CombatLeavePayload,
+    acknowledgement?: (response: SocketAck<CombatSnapshot>) => void,
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -361,6 +470,8 @@ export interface ServerToClientEvents {
   'chat:message': (payload: ChatMessagePayload) => void;
   'trade:requested': (payload: TradeSnapshot) => void;
   'trade:updated': (payload: TradeSnapshot) => void;
+  'combat:requested': (payload: CombatSnapshot) => void;
+  'combat:updated': (payload: CombatSnapshot) => void;
   notification: (payload: SocketErrorPayload) => void;
 }
 

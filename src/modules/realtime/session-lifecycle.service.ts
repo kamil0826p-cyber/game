@@ -6,6 +6,7 @@ import { GameConfigService } from '../../config/game-config.service.js';
 import type { GameSocket, WorldSpawnPayload } from '../../contracts/socket.events.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
 import { CharacterService } from '../characters/character.service.js';
+import { CombatService } from '../combat/combat.service.js';
 import type { CreateCharacterInput } from '../characters/character.types.js';
 import { getUnlockedOutfits } from '../characters/outfit.catalog.js';
 import { MapService } from '../maps/map.service.js';
@@ -41,6 +42,7 @@ export class SessionLifecycleService {
     private readonly localization: LocalizationService,
     private readonly sessionClaims: SessionClaimExecutor,
     private readonly skills: SkillService,
+    private readonly combats: CombatService,
   ) {}
 
   async initializeConnection(client: GameSocket): Promise<void> {
@@ -138,6 +140,7 @@ export class SessionLifecycleService {
     const session = this.worldState.getBySocketId(client.id);
     if (!session) return;
 
+    await this.combats.handleDisconnect(session.characterId);
     const snapshot = await this.movement.quiesce(session, () => {
       const activeSession = this.worldState.getBySocketId(client.id);
       if (!activeSession || activeSession.connectionId !== session.connectionId) return undefined;
@@ -265,6 +268,7 @@ export class SessionLifecycleService {
   }
 
   private async replaceExistingSession(existing: PlayerSession): Promise<void> {
+    await this.combats.handleDisconnect(existing.characterId);
     const snapshot = await this.movement.quiesce(existing, () => {
       const activeSession = this.worldState.getByCharacterId(existing.characterId);
       if (!activeSession || activeSession.connectionId !== existing.connectionId) return undefined;

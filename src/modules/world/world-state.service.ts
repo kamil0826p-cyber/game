@@ -30,6 +30,7 @@ export class WorldStateService {
     const character = input.character;
     const positionChanged =
       input.mapId !== character.mapId || input.x !== character.x || input.y !== character.y;
+    const staleCombatState = character.combatState !== 'IDLE';
     return {
       socketId: input.socketId,
       connectionId: input.connectionId,
@@ -47,7 +48,7 @@ export class WorldStateService {
       x: input.x,
       y: input.y,
       direction: character.direction,
-      combatState: character.combatState,
+      combatState: 'IDLE',
       hp: character.hp,
       maxHp: character.maxHp,
       energy: character.energy,
@@ -63,9 +64,9 @@ export class WorldStateService {
       },
       connectedAt: Date.now(),
       nextMoveAllowedAt: 0,
-      stateRevision: character.stateVersion + (positionChanged ? 1 : 0),
+      stateRevision: character.stateVersion + (positionChanged || staleCombatState ? 1 : 0),
       persistedRevision: character.stateVersion,
-      dirty: positionChanged,
+      dirty: positionChanged || staleCombatState,
       activeInWorld: input.activeInWorld ?? true,
       visibleCharacterIds: new Set<string>(),
       watcherCharacterIds: new Set<string>(),
@@ -92,7 +93,9 @@ export class WorldStateService {
   removeSessionBySocket(socketId: string): PlayerSession | undefined {
     const session = this.sessionsBySocketId.get(socketId);
     if (!session) return undefined;
-    if (this.sessionsByCharacterId.get(session.characterId)?.connectionId !== session.connectionId) {
+    if (
+      this.sessionsByCharacterId.get(session.characterId)?.connectionId !== session.connectionId
+    ) {
       this.sessionsBySocketId.delete(socketId);
       return undefined;
     }
@@ -165,7 +168,8 @@ export class WorldStateService {
     for (const characterId of candidates) {
       if (characterId === excludingCharacterId) continue;
       const session = this.sessionsByCharacterId.get(characterId);
-      if (session?.activeInWorld && session.mapId === mapId && session.x === x && session.y === y) return true;
+      if (session?.activeInWorld && session.mapId === mapId && session.x === x && session.y === y)
+        return true;
     }
     return false;
   }
@@ -188,7 +192,8 @@ export class WorldStateService {
         session.x <= maximumX &&
         session.y >= minimumY &&
         session.y <= maximumY
-      ) sessions.push(session);
+      )
+        sessions.push(session);
     }
     return sessions;
   }

@@ -7,6 +7,7 @@ import type {
   ChatChannel,
   ChatMessagePayload,
   ClientToServerEvents,
+  CombatSnapshot,
   InventorySnapshot,
   MerchantSnapshot,
   MovementCommittedPayload,
@@ -31,6 +32,7 @@ const SERVER_RECONNECT_DELAY_MS = 1_200;
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type ChatListener = (message: ChatMessagePayload) => void;
 type TradeListener = (trade: TradeSnapshot) => void;
+type CombatListener = (combat: CombatSnapshot) => void;
 type AdminCommandAck = SocketAck<{ message: string }>;
 
 export class GameSocketClient {
@@ -41,6 +43,7 @@ export class GameSocketClient {
   private serverReconnectTimer: number | undefined;
   private readonly chatListeners = new Set<ChatListener>();
   private readonly tradeListeners = new Set<TradeListener>();
+  private readonly combatListeners = new Set<CombatListener>();
   private readonly pageHideHandler = () => this.socket?.disconnect();
   private readonly pageShowHandler = () => {
     if (!this.manualDisconnect && this.socket && !this.socket.connected) {
@@ -97,6 +100,7 @@ export class GameSocketClient {
     this.socket = undefined;
     this.chatListeners.clear();
     this.tradeListeners.clear();
+    this.combatListeners.clear();
     gameStore.reset();
   }
   setLocale(locale: Locale): void {
@@ -109,6 +113,10 @@ export class GameSocketClient {
   subscribeTrade(listener: TradeListener): () => void {
     this.tradeListeners.add(listener);
     return () => this.tradeListeners.delete(listener);
+  }
+  subscribeCombat(listener: CombatListener): () => void {
+    this.combatListeners.add(listener);
+    return () => this.combatListeners.delete(listener);
   }
 
   async sendChat(channel: ChatChannel, text: string): Promise<void> {
@@ -316,6 +324,74 @@ export class GameSocketClient {
       socket.emit('trade:cancel', { requestId: createRequestId('trade-cancel'), tradeId }, ack),
     );
   }
+  async getActiveCombat(): Promise<CombatSnapshot | null> {
+    const response = await this.withAck<CombatSnapshot | null>((ack) =>
+      this.requireSocket().emit(
+        'combat:getActive',
+        { requestId: createRequestId('combat-active') },
+        ack,
+      ),
+    );
+    this.assertOk(response);
+    if (response.data) gameStore.updateCombatState(response.data);
+    return response.data;
+  }
+  async requestCombat(targetCharacterId: string): Promise<CombatSnapshot> {
+    return this.combatCommand((socket, ack) =>
+      socket.emit(
+        'combat:request',
+        { requestId: createRequestId('combat-request'), targetCharacterId },
+        ack,
+      ),
+    );
+  }
+  async respondCombat(combatId: string, accept: boolean): Promise<CombatSnapshot> {
+    return this.combatCommand((socket, ack) =>
+      socket.emit(
+        'combat:respond',
+        { requestId: createRequestId('combat-respond'), combatId, accept },
+        ack,
+      ),
+    );
+  }
+  async performCombatAction(
+    combatId: string,
+    action: 'BASIC_ATTACK' | 'SKILL',
+    skillKey?: string,
+  ): Promise<CombatSnapshot> {
+    return this.combatCommand((socket, ack) => {
+      if (action === 'SKILL' && skillKey)
+        socket.emit(
+          'combat:act',
+          {
+            requestId: createRequestId('combat-skill'),
+            combatId,
+            action,
+            skillKey,
+          },
+          ack,
+        );
+      else
+        socket.emit(
+          'combat:act',
+          {
+            requestId: createRequestId('combat-attack'),
+            combatId,
+            action: 'BASIC_ATTACK',
+          },
+          ack,
+        );
+    });
+  }
+  async leaveCombat(combatId: string): Promise<CombatSnapshot> {
+    return this.combatCommand((socket, ack) =>
+      socket.emit(
+        'combat:leave',
+        { requestId: createRequestId('combat-leave'), combatId },
+        ack,
+      ),
+    );
+  }
   async getSkills(): Promise<SkillTreeSnapshot> {
     const response = await this.withAck<SkillTreeSnapshot>((ack) =>
       this.requireSocket().emit('skills:get', { requestId: createRequestId('skills') }, ack),
@@ -438,6 +514,16 @@ export class GameSocketClient {
     gameStore.updateInventoryState(response.data.inventory);
     return response.data;
   }
+  private async combatCommand(
+    emit: (socket: GameSocket, ack: (response: SocketAck<CombatSnapshot>) => void) => void,
+  ): Promise<CombatSnapshot> {
+    const response = await this.withAck<CombatSnapshot>((ack) =>
+      emit(this.requireSocket(), ack),
+    );
+    this.assertOk(response);
+    gameStore.updateCombatState(response.data);
+    return response.data;
+  }
   private assertOk<T>(response: SocketAck<T>): asserts response is { ok: true; data: T } {
     if (!response.ok) {
       gameStore.addNotification(response.error);
@@ -489,6 +575,14 @@ export class GameSocketClient {
     socket.on('trade:updated', (payload) => {
       gameStore.updateInventoryState(payload.inventory);
       for (const listener of this.tradeListeners) listener(payload);
+    });
+    socket.on('combat:requested', (payload) => {
+      gameStore.updateCombatState(payload);
+      for (const listener of this.combatListeners) listener(payload);
+    });
+    socket.on('combat:updated', (payload) => {
+      gameStore.updateCombatState(payload);
+      for (const listener of this.combatListeners) listener(payload);
     });
     socket.on('notification', (payload) => gameStore.addNotification(payload));
   }

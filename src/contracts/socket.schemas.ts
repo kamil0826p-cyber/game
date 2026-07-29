@@ -7,6 +7,7 @@ const itemKey = z.string().trim().min(1).max(96);
 const quantity = z.number().int().min(1).max(9999);
 const tradeQuantity = z.number().int().min(0).max(9999);
 const tradeId = z.string().uuid();
+const combatId = z.string().uuid();
 const characterId = z.string().uuid();
 const npcId = z.string().uuid();
 const dialogueIdentifier = z
@@ -76,6 +77,14 @@ export const tradeSetSilverSchema = z.object({ requestId, tradeId, silver }).str
 export const tradeActionSchema = z.object({ requestId, tradeId }).strict();
 export const skillRequestSchema = z.object({ requestId }).strict();
 export const skillUnlockSchema = z.object({ requestId, skillKey }).strict();
+export const combatGetActiveSchema = z.object({ requestId }).strict();
+export const combatRequestSchema = z.object({ requestId, targetCharacterId: characterId }).strict();
+export const combatRespondSchema = z.object({ requestId, combatId, accept: z.boolean() }).strict();
+export const combatActionSchema = z.discriminatedUnion('action', [
+  z.object({ requestId, combatId, action: z.literal('BASIC_ATTACK') }).strict(),
+  z.object({ requestId, combatId, action: z.literal('SKILL'), skillKey }).strict(),
+]);
+export const combatLeaveSchema = z.object({ requestId, combatId }).strict();
 
 export type CreateCharacterPayload = z.infer<typeof createCharacterSchema>;
 export type MoveStepPayload = z.infer<typeof moveStepSchema>;
@@ -101,3 +110,8 @@ export type TradeSetSilverPayload = z.infer<typeof tradeSetSilverSchema>;
 export type TradeActionPayload = z.infer<typeof tradeActionSchema>;
 export type SkillRequestPayload = z.infer<typeof skillRequestSchema>;
 export type SkillUnlockPayload = z.infer<typeof skillUnlockSchema>;
+export type CombatGetActivePayload = z.infer<typeof combatGetActiveSchema>;
+export type CombatRequestPayload = z.infer<typeof combatRequestSchema>;
+export type CombatRespondPayload = z.infer<typeof combatRespondSchema>;
+export type CombatActionPayload = z.infer<typeof combatActionSchema>;
+export type CombatLeavePayload = z.infer<typeof combatLeaveSchema>;

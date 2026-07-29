@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { LocalizationModule } from './i18n/localization.module.js';
 import { CharacterModule } from './modules/characters/character.module.js';
+import { CombatModule } from './modules/combat/combat.module.js';
 import { ItemModule } from './modules/items/item.module.js';
 import { MapModule } from './modules/maps/map.module.js';
 import { MovementModule } from './modules/movement/movement.module.js';
@@ -25,6 +26,7 @@ import { WorldModule } from './modules/world/world.module.js';
     RealmModule,
     MapModule,
     CharacterModule,
+    CombatModule,
     WorldModule,
     PersistenceModule,
     MovementModule,
