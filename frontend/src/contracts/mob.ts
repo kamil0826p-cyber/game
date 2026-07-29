@@ -1,6 +1,7 @@
 import type { CharacterClass, SelfCharacterState } from './game';
 import type {
   CombatSnapshot,
+  EquipmentSlot,
   ItemRarity,
   ItemStatBonuses,
   SocketAck,
@@ -29,6 +30,7 @@ export interface MobLootRewardPayload {
   icon: string;
   quantity: number;
   stackLimit: number;
+  equipmentSlot?: EquipmentSlot;
   requiredClass?: CharacterClass;
   minimumLevel: number;
   statBonuses: ItemStatBonuses;
