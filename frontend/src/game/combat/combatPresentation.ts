@@ -6,9 +6,42 @@ import type {
 import { mobStore } from '../state/mobStore';
 
 export type CombatVfxFamily =
-  'arcane' | 'fire' | 'frost' | 'physical' | 'projectile' | 'status';
+  | 'arcane'
+  | 'fire'
+  | 'frost'
+  | 'physical'
+  | 'projectile'
+  | 'status'
+  | 'support';
 
-export function getCombatVfxFamily(animationKey: string): CombatVfxFamily {
+export function isSelfCastCombatAction(
+  action: CombatActionResolutionPayload | undefined,
+): boolean {
+  return Boolean(
+    action &&
+      action.action === 'SKILL' &&
+      action.targetActorId === action.actorId &&
+      action.results.every((result) => result.targetActorId === action.actorId),
+  );
+}
+
+export function usesAttackMotion(action: CombatActionResolutionPayload | undefined): boolean {
+  if (!action) return false;
+  if (action.action === 'BASIC_ATTACK') return true;
+  return action.action === 'SKILL' && !isSelfCastCombatAction(action);
+}
+
+export function getCombatVfxFamily(
+  actionOrAnimationKey: CombatActionResolutionPayload | string,
+): CombatVfxFamily {
+  if (typeof actionOrAnimationKey !== 'string' && isSelfCastCombatAction(actionOrAnimationKey)) {
+    return 'support';
+  }
+
+  const animationKey =
+    typeof actionOrAnimationKey === 'string'
+      ? actionOrAnimationKey
+      : actionOrAnimationKey.animationKey;
   const key = animationKey.toLowerCase();
   if (
     key.includes('fire') ||
