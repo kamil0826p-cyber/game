@@ -60,11 +60,18 @@ export class PveCombatService implements OnModuleDestroy {
         this.fail(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
       }
       const claimed = this.mobs.claim(mobId, session);
+      let runtime: CombatRuntime | undefined;
+      session.combatState = 'IN_BATTLE';
+      session.stateRevision += 1;
+      session.dirty = true;
       try {
         const player = await this.buildActor(session);
+        if (await this.trades.hasActive(characterId)) {
+          this.fail(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
+        }
         const map = await this.maps.getMap(session.mapId);
         const now = Date.now();
-        const runtime = this.engine.createRequest(
+        runtime = this.engine.createRequest(
           randomUUID(),
           map.zoneType,
           map.id,
@@ -80,6 +87,13 @@ export class PveCombatService implements OnModuleDestroy {
         this.scheduleTurn(runtime);
         return snapshot;
       } catch (error) {
+        if (runtime) {
+          this.release(runtime);
+          this.combats.delete(runtime.combatId);
+        }
+        session.combatState = 'IDLE';
+        session.stateRevision += 1;
+        session.dirty = true;
         this.mobs.releaseClaim(mobId, characterId);
         throw error;
       }
@@ -199,7 +213,12 @@ export class PveCombatService implements OnModuleDestroy {
     const cooldowns = Object.fromEntries(
       [...player.skills].map(([key, skill]) => [key, skill.cooldownTurnsRemaining]),
     );
-    await this.skills.persistCooldowns(session.characterId, cooldowns);
+    await this.skills.persistCooldowns(session.characterId, cooldowns).catch((error: unknown) => {
+      this.logger.error(
+        `Could not persist PVE cooldowns for ${session.characterId}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    });
     try {
       const persisted = await this.persistence.persistSession(session, 'combat');
       this.world.markPersisted(
