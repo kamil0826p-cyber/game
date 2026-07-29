@@ -12,6 +12,7 @@ export interface MobStatePayload {
   y: number;
   level: number;
   outfitKey: string;
+  renderScale: number;
 }
 export interface MobLootRewardPayload { itemKey: string; name: string; quantity: number; }
 export interface MobRewardPayload {
@@ -26,6 +27,9 @@ export interface MobRewardPayload {
 }
 
 declare module './socket' {
+  interface CombatParticipantPayload {
+    renderScale?: number;
+  }
   interface ClientToServerEvents {
     'mobs:get': (
       payload: { requestId: string },
