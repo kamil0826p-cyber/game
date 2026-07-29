@@ -6,7 +6,13 @@ import type { PlayerSession } from '../world/player-session.types.js';
 import { capturePlayerState, type PlayerStateSnapshot } from './player-state-snapshot.js';
 
 export type PersistenceReason =
-  'autosave' | 'combat' | 'disconnect' | 'portal' | 'shutdown' | 'repair';
+  | 'autosave'
+  | 'combat'
+  | 'disconnect'
+  | 'portal'
+  | 'shutdown'
+  | 'repair'
+  | 'character-switch';
 
 @Injectable()
 export class PlayerPersistenceService {
