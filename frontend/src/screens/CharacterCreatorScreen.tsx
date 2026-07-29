@@ -11,6 +11,7 @@ import { OutfitPreview } from '../components/common/OutfitPreview';
 import { Panel } from '../components/common/Panel';
 import type { CharacterClass } from '../contracts/game';
 import { useGameConnection } from '../game/realtime/GameConnectionProvider';
+import { selectCharacter } from '../game/realtime/characterLobby';
 import { useGameState } from '../game/state/gameStore';
 import { useI18n } from '../i18n/I18nProvider';
 import { CLASS_PRESENTATION, OUTFIT_CATALOG } from '../mock/outfitCatalog';
@@ -21,7 +22,7 @@ export function CharacterCreatorScreen(): React.JSX.Element {
   const state = useGameState();
   const client = useGameConnection();
   const { signOut } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const available = state.allowedClasses.length > 0
     ? state.allowedClasses
     : (['MAGE', 'WARRIOR', 'ARCHER'] satisfies CharacterClass[]);
@@ -35,6 +36,7 @@ export function CharacterCreatorScreen(): React.JSX.Element {
   const preview = outfits[previewIndex] ?? outfits[0]!;
   const classInfo = CLASS_PRESENTATION[characterClass];
   const validName = characterNamePattern.test(name.trim());
+  const canGoBack = Boolean(state.self?.characterId);
 
   const startingStats = useMemo(
     () =>
@@ -50,7 +52,9 @@ export function CharacterCreatorScreen(): React.JSX.Element {
     event.preventDefault();
     setFormError(null);
     if (!validName) {
-      setFormError('Use 3-20 characters. Start with a letter and use letters, numbers, spaces, hyphens, or underscores.');
+      setFormError(locale === 'pl'
+        ? 'Użyj 3–20 znaków. Zacznij od litery; dozwolone są litery, cyfry, spacje, myślniki i podkreślenia.'
+        : 'Use 3–20 characters. Start with a letter and use letters, numbers, spaces, hyphens, or underscores.');
       return;
     }
     setBusy(true);
@@ -58,6 +62,20 @@ export function CharacterCreatorScreen(): React.JSX.Element {
       await client.createCharacter(name.trim(), characterClass);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Character creation failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const goBack = async () => {
+    const characterId = state.self?.characterId;
+    if (!characterId || busy) return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      await selectCharacter(client, characterId);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Nie udało się wrócić do wyboru postaci.');
     } finally {
       setBusy(false);
     }
@@ -76,6 +94,11 @@ export function CharacterCreatorScreen(): React.JSX.Element {
           <h1 className="font-display mt-1 text-3xl text-amber-100">{t('character.createTitle')}</h1>
         </div>
         <div className="flex items-center gap-2">
+          {canGoBack ? (
+            <Button variant="ghost" onClick={() => void goBack()} type="button" disabled={busy}>
+              {locale === 'pl' ? 'Wstecz' : 'Back'}
+            </Button>
+          ) : null}
           <LocaleToggle />
           <Button variant="ghost" onClick={() => void signOut()} type="button">
             {t('hud.signOut')}
@@ -130,9 +153,7 @@ export function CharacterCreatorScreen(): React.JSX.Element {
             <input
               className="text-input"
               value={name}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                setName(event.target.value)
-              }
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setName(event.target.value)}
               placeholder="Example: Rowan Storm"
               minLength={3}
               maxLength={20}
@@ -162,7 +183,9 @@ export function CharacterCreatorScreen(): React.JSX.Element {
                 onClick={() => setPreviewIndex((previewIndex - 1 + outfits.length) % outfits.length)}
                 aria-label="Previous outfit"
               >
-                ‹
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
               </button>
               <div className="text-center">
                 <h2 className="font-display text-xl text-amber-100">{preview.label}</h2>
@@ -179,11 +202,15 @@ export function CharacterCreatorScreen(): React.JSX.Element {
                 onClick={() => setPreviewIndex((previewIndex + 1) % outfits.length)}
                 aria-label="Next outfit"
               >
-                ›
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
               </button>
             </div>
             <p className="mt-5 rounded-lg border border-sky-400/20 bg-sky-500/5 p-3 text-xs leading-5 text-sky-100/80">
-              Level 10 outfits are preview-only during creation. The backend assigns the level 1 default outfit and remains authoritative for unlocks.
+              {locale === 'pl'
+                ? 'Podczas tworzenia możesz podejrzeć wszystkie outfity. Nowa postać zaczyna z outfitem poziomu 1, a kolejne odblokowują się co 10 poziomów.'
+                : 'You can preview every outfit during creation. A new character starts with the level 1 outfit, and another unlocks every 10 levels.'}
             </p>
             <Button
               className="mt-6 w-full justify-center py-3"
