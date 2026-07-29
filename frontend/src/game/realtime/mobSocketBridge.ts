@@ -83,7 +83,6 @@ export function installMobSocketBridge(client: GameSocketClient): void {
       void requestMobs().catch(() => undefined);
     });
     socket.on('world:mobSpawned', (mob) => mobStore.upsert(mob));
-    socket.on('world:mobDefeated', (mob) => mobStore.upsert(mob));
     socket.on('world:mobDespawned', ({ mobId }) => mobStore.remove(mobId));
     socket.on('mob:rewards', applyReward);
     socket.on('combat:updated', (combat) => {
