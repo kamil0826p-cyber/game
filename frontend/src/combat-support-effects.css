@@ -1,0 +1,185 @@
+.combat-vfx-support {
+  animation: none;
+  filter: drop-shadow(0 0 14px var(--combat-accent));
+}
+
+.combat-support-aura {
+  position: absolute;
+  z-index: 12;
+  bottom: 31%;
+  width: 10rem;
+  height: 12rem;
+  opacity: 0;
+  animation: combat-support-aura-enter 920ms ease-out both;
+}
+
+.combat-vfx-left-to-right .combat-support-aura {
+  left: calc(19% + 1rem);
+  transform: translateX(-50%);
+}
+
+.combat-vfx-right-to-left .combat-support-aura {
+  right: calc(19% + 1rem);
+  transform: translateX(50%);
+}
+
+.combat-support-sigil {
+  position: absolute;
+  top: 0.2rem;
+  left: 50%;
+  width: 4.8rem;
+  height: 4.8rem;
+  border: 3px double var(--combat-accent);
+  border-radius: 46% 46% 54% 54%;
+  background:
+    linear-gradient(135deg, transparent 46%, rgba(255, 255, 255, 0.82) 48% 52%, transparent 54%),
+    radial-gradient(circle, rgba(255, 255, 255, 0.35), transparent 62%);
+  box-shadow:
+    inset 0 0 24px color-mix(in srgb, var(--combat-accent) 62%, transparent),
+    0 0 28px var(--combat-accent);
+  transform: translateX(-50%) rotate(45deg) scale(0.25);
+  animation: combat-support-sigil 820ms ease-out both;
+}
+
+.combat-support-ring {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.1rem;
+  left: 0.6rem;
+  height: 2.8rem;
+  border: 3px solid var(--combat-accent);
+  border-radius: 50%;
+  opacity: 0;
+  box-shadow:
+    inset 0 0 18px var(--combat-accent),
+    0 0 22px var(--combat-accent);
+  transform: scale(0.25) rotateX(62deg);
+  animation: combat-support-ring 900ms 80ms ease-out both;
+}
+
+.combat-support-aura i {
+  position: absolute;
+  bottom: 1.2rem;
+  left: 50%;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  opacity: 0;
+  background: #fff;
+  box-shadow: 0 0 10px 3px var(--combat-accent);
+  animation: combat-support-particle 760ms ease-out both;
+}
+
+.combat-support-aura i:nth-of-type(1) {
+  margin-left: -3.8rem;
+  animation-delay: 40ms;
+}
+
+.combat-support-aura i:nth-of-type(2) {
+  margin-left: -2.2rem;
+  animation-delay: 130ms;
+}
+
+.combat-support-aura i:nth-of-type(3) {
+  margin-left: -0.7rem;
+  animation-delay: 20ms;
+}
+
+.combat-support-aura i:nth-of-type(4) {
+  margin-left: 0.9rem;
+  animation-delay: 170ms;
+}
+
+.combat-support-aura i:nth-of-type(5) {
+  margin-left: 2.5rem;
+  animation-delay: 80ms;
+}
+
+.combat-support-aura i:nth-of-type(6) {
+  margin-left: 3.8rem;
+  animation-delay: 220ms;
+}
+
+@keyframes combat-support-aura-enter {
+  0% {
+    opacity: 0;
+    filter: brightness(0.7);
+  }
+  22% {
+    opacity: 1;
+    filter: brightness(1.7);
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(1);
+  }
+}
+
+@keyframes combat-support-sigil {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) rotate(5deg) scale(0.2);
+  }
+  38% {
+    opacity: 1;
+    transform: translateX(-50%) rotate(45deg) scale(1);
+  }
+  72% {
+    opacity: 0.92;
+    transform: translateX(-50%) rotate(135deg) scale(0.94);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-1.2rem) rotate(205deg) scale(1.2);
+  }
+}
+
+@keyframes combat-support-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotateX(62deg);
+  }
+  35% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45) rotateX(62deg);
+  }
+}
+
+@keyframes combat-support-particle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.3);
+  }
+  26% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8rem) scale(1.15);
+  }
+}
+
+@media (max-width: 1050px) {
+  .combat-vfx-left-to-right .combat-support-aura {
+    left: calc(15% + 1rem);
+  }
+
+  .combat-vfx-right-to-left .combat-support-aura {
+    right: calc(15% + 1rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .combat-support-aura,
+  .combat-support-sigil,
+  .combat-support-ring,
+  .combat-support-aura i {
+    animation-duration: 1ms;
+  }
+}
