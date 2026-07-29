@@ -35,16 +35,20 @@ export class CharacterService {
     return rows.map((row) => this.toPersistedState(row));
   }
 
-  async findCharacterForCurrentRealm(userId: string, characterId: string): Promise<PersistedCharacterState | undefined> {
+  async findCharacterForCurrentRealm(userId: string, characterId?: string): Promise<PersistedCharacterState | undefined> {
     const realm = await this.realmService.getCurrentRealm();
-    const row = await this.prisma.character.findFirst({ where: { id: characterId, userId, realmId: realm.id } });
+    const row = await this.prisma.character.findFirst({
+      where: { userId, realmId: realm.id, ...(characterId ? { id: characterId } : {}) },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
     return row ? this.toPersistedState(row) : undefined;
   }
 
   async createCharacter(userId: string, input: CreateCharacterInput): Promise<PersistedCharacterState> {
     const realm = await this.realmService.getCurrentRealm();
     const template = STARTING_TEMPLATES[input.characterClass];
-    const outfitKey = isOutfitUnlocked(input.characterClass, 1, input.outfitKey) ? input.outfitKey : getDefaultOutfit(input.characterClass).key;
+    const requestedOutfit = input.outfitKey ?? getDefaultOutfit(input.characterClass).key;
+    const outfitKey = isOutfitUnlocked(input.characterClass, 1, requestedOutfit) ? requestedOutfit : getDefaultOutfit(input.characterClass).key;
     try {
       const row = await this.prisma.$transaction(async (tx) => {
         const count = await tx.character.count({ where: { userId, realmId: realm.id } });
