@@ -15,7 +15,7 @@ import type { SkillTreeSnapshot } from '../modules/skills/skill.types.js';
 import type {
   ChatSendPayload,
   CreateCharacterPayload,
-  InventoryDiscardPayload,
+  InventoryDestroyPayload,
   InventoryItemPayload as InventoryItemCommandPayload,
   InventoryMovePayload,
   InventoryRequestPayload,
@@ -364,8 +364,8 @@ export interface ClientToServerEvents {
     payload: InventoryItemCommandPayload,
     acknowledgement?: (response: SocketAck<InventorySnapshot>) => void,
   ) => void;
-  'inventory:discard': (
-    payload: InventoryDiscardPayload,
+  'inventory:destroy': (
+    payload: InventoryDestroyPayload,
     acknowledgement?: (response: SocketAck<InventorySnapshot>) => void,
   ) => void;
   'merchant:get': (
