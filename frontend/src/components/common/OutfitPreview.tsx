@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { CharacterClass, Direction } from '../../contracts/game';
-import { getOutfitSheetCanvas } from '../../game/engine/OutfitSheetLoader';
+import { outfitImageUrl } from '../../mock/outfitCatalog';
 
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
-const classColors: Record<CharacterClass, string> = { MAGE: '#6d5bd0', WARRIOR: '#b45454', ARCHER: '#4f9467' };
 
 interface OutfitPreviewProps {
   outfitKey: string;
@@ -17,7 +16,7 @@ interface OutfitPreviewProps {
 
 export function OutfitPreview({
   outfitKey,
-  characterClass,
+  characterClass: _characterClass,
   direction = 'SOUTH',
   size = 'large',
   animated = true,
@@ -32,76 +31,69 @@ export function OutfitPreview({
     if (!canvas || !context) return;
 
     context.imageSmoothingEnabled = false;
+    const image = new Image();
+    image.decoding = 'async';
     const mob = outfitKey.startsWith('mob-');
-    const mobImage = mob ? new Image() : undefined;
     const safeRenderScale = Math.max(0.2, Math.min(3, renderScale));
-    let outfitSheet: HTMLCanvasElement | undefined;
     let frameId = 0;
     let start = performance.now();
+    let loaded = false;
     let cancelled = false;
-
-    const drawFallback = () => {
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = 'rgba(3, 5, 12, 0.45)';
-      context.beginPath();
-      context.ellipse(48, 131, 26, 8, 0, 0, Math.PI * 2);
-      context.fill();
-      context.fillStyle = '#e8b98f';
-      context.fillRect(39, 25, 18, 24);
-      context.fillStyle = classColors[characterClass];
-      context.fillRect(29, 48, 38, 55);
-      context.fillStyle = '#1f2937';
-      context.fillRect(31, 103, 13, 28);
-      context.fillRect(52, 103, 13, 28);
-    };
 
     const draw = (now: number) => {
       if (cancelled) return;
       context.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (mob && mobImage?.complete && mobImage.naturalWidth > 0) {
-        const scale = Math.min(88 / mobImage.naturalWidth, 112 / mobImage.naturalHeight) * safeRenderScale;
-        const width = mobImage.naturalWidth * scale;
-        const height = mobImage.naturalHeight * scale;
-        context.drawImage(mobImage, (96 - width) / 2, 144 - height - 12, width, height);
-      } else if (!mob && outfitSheet) {
-        const frame = animated ? Math.floor((now - start) / 120) % 4 : 0;
-        context.drawImage(
-          outfitSheet,
-          frame * 32,
-          directionRows[direction] * 48,
-          32,
-          48,
-          0,
-          0,
-          96,
-          144,
-        );
-      } else {
-        drawFallback();
+      if (loaded && image.naturalWidth > 0) {
+        if (mob) {
+          const scale = Math.min(88 / image.naturalWidth, 112 / image.naturalHeight) * safeRenderScale;
+          const width = image.naturalWidth * scale;
+          const height = image.naturalHeight * scale;
+          context.drawImage(image, (96 - width) / 2, 144 - height - 12, width, height);
+        } else {
+          const frame = animated ? Math.floor((now - start) / 120) % 4 : 0;
+          context.drawImage(
+            image,
+            frame * 32,
+            directionRows[direction] * 48,
+            32,
+            48,
+            0,
+            0,
+            96,
+            144,
+          );
+        }
       }
 
       frameId = requestAnimationFrame(draw);
     };
 
-    if (mob && mobImage) {
-      mobImage.onload = () => { start = performance.now(); };
-      mobImage.onerror = drawFallback;
-      mobImage.src = `/assets/mobs/${encodeURIComponent(outfitKey)}.svg`;
-    } else {
-      void getOutfitSheetCanvas(outfitKey).then((sheet) => {
-        if (cancelled || !sheet) return;
-        outfitSheet = sheet;
-        start = performance.now();
-      });
-    }
+    image.onload = () => {
+      if (cancelled) return;
+      const validSheet = mob || (image.naturalWidth === 128 && image.naturalHeight === 192);
+      if (!validSheet) {
+        console.error(`Outfit ${outfitKey} has invalid dimensions ${image.naturalWidth}x${image.naturalHeight}. Expected 128x192.`);
+        return;
+      }
+      loaded = true;
+      start = performance.now();
+    };
+    image.onerror = () => {
+      console.error(`Outfit image failed to load: ${image.src}`);
+    };
+    image.src = mob
+      ? `${import.meta.env.BASE_URL}assets/mobs/${encodeURIComponent(outfitKey)}.svg`
+      : outfitImageUrl(outfitKey);
 
     frameId = requestAnimationFrame(draw);
     return () => {
       cancelled = true;
       cancelAnimationFrame(frameId);
+      image.onload = null;
+      image.onerror = null;
     };
-  }, [animated, characterClass, direction, outfitKey, renderScale]);
+  }, [animated, direction, outfitKey, renderScale]);
 
   return (
     <canvas
