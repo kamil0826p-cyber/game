@@ -1,7 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
 import type { PublicPlayerState } from '../../contracts/game';
 import { WORLD_TILE_SIZE } from './constants';
-import { gameAssetLoader, type OutfitFrames } from './GameAssetLoader';
+import { getOutfitSheetFrames, type OutfitSheetFrames } from './OutfitSheetLoader';
 
 export const PLAYER_CONTEXT_EVENT = 'game:player-interaction';
 export interface CharacterInteractionPoint { x: number; y: number; }
@@ -12,7 +12,7 @@ export class CharacterView {
   private readonly sprite = new Sprite();
   private readonly nameplate = new Container();
   private readonly nameText: Text;
-  private frames: OutfitFrames | undefined;
+  private frames: OutfitSheetFrames | undefined;
   private destroyed = false;
   private state: PublicPlayerState;
   private startX = 0;
@@ -132,7 +132,7 @@ export class CharacterView {
   private updateFrame(now: number): void {
     const frames = this.frames?.frames[this.state.direction];
     if (!frames?.length) return;
-    const duration = this.frames?.definition.frameDurationMs ?? 120;
+    const duration = this.frames?.frameDurationMs ?? 120;
     const index = this.moving
       ? Math.floor((now - this.movementStartedAt) / duration) % frames.length
       : 0;
@@ -145,7 +145,7 @@ export class CharacterView {
     this.frames = undefined;
     this.sprite.visible = false;
 
-    void gameAssetLoader.getOutfitFrames(outfitKey).then((frames) => {
+    void getOutfitSheetFrames(outfitKey).then((frames) => {
       if (this.destroyed || this.lastOutfitKey !== outfitKey) return;
       if (!frames) {
         console.error(`Outfit frames failed to load for ${outfitKey}.`);
