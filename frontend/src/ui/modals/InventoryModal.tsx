@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { EquipmentSlot, InventoryItemPayload, InventorySnapshot } from '../../contracts/socket';
+import { ItemIcon } from '../../components/common/ItemIcon';
 import { ItemTooltip, rarityClasses } from '../../components/common/ItemTooltip';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
@@ -62,7 +63,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                 }}
                 onClick={() => item && setSelectedId(item.id)}
                 className={`equipment-slot min-h-20 ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''}`}
-              ><span>{slotLabels[slot][locale]}</span>{item ? <strong className="mt-1 text-lg">{item.icon}</strong> : null}</button>;
+              ><span>{slotLabels[slot][locale]}</span>{item ? <ItemIcon definitionKey={item.definitionKey} fallback={item.icon} className="mt-1 h-9 w-9" /> : null}</button>;
               return item ? <ItemTooltip key={slot} item={tooltipItem(item)} currentLevel={level}>{button}</ItemTooltip> : button;
             })}
           </div>
@@ -77,7 +78,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => { event.preventDefault(); const dropped = droppedItem(event); if (dropped) void mutate(async () => { if (dropped.equippedSlot) await connection.unequipInventoryItem(dropped.id); return connection.moveInventoryItem(dropped.id, index); }); }}
                 onClick={() => setSelectedId(item?.id)} className={`inventory-slot ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''} ${locked ? 'opacity-60' : ''}`}
-                aria-label={item ? `${item.name}, ${item.quantity}` : t('common.emptySlot')}>{item ? <><span className="text-xl">{item.icon}</span><small>{item.quantity}</small>{item.equippedSlot ? <i className="absolute left-1 top-1 text-[8px] text-emerald-300">E</i> : null}{locked ? <i className="absolute right-1 top-1 text-[8px] font-bold text-red-300">Lv</i> : null}</> : null}</button>;
+                aria-label={item ? `${item.name}, ${item.quantity}` : t('common.emptySlot')}>{item ? <><ItemIcon definitionKey={item.definitionKey} fallback={item.icon} className="h-8 w-8" /><small>{item.quantity}</small>{item.equippedSlot ? <i className="absolute left-1 top-1 text-[8px] text-emerald-300">E</i> : null}{locked ? <i className="absolute right-1 top-1 text-[8px] font-bold text-red-300">Lv</i> : null}</> : null}</button>;
               return item ? <ItemTooltip key={index} item={tooltipItem(item)} currentLevel={level}>{button}</ItemTooltip> : button;
             })}
           </div>
@@ -85,14 +86,14 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
       </div>
       <section className={`sticky -bottom-5 z-20 -mx-5 -mb-5 mt-5 min-h-[76px] border-t bg-slate-950/[0.98] px-5 py-3 shadow-[0_-12px_24px_rgba(2,6,23,0.75)] ${selected ? rarityClasses(selected.rarity) : 'border-white/10'}`}>
         {selected ? <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><span className="text-2xl">{selected.icon}</span><div><strong className="block">{selected.name}</strong><span className={`text-[11px] ${selected.minimumLevel > level ? 'text-red-300' : 'text-slate-400'}`}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymagany poziom' : 'Required level'}: ${selected.minimumLevel}` : locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
+          <div className="flex items-center gap-3"><ItemIcon definitionKey={selected.definitionKey} fallback={selected.icon} className="h-10 w-10" /><div><strong className="block">{selected.name}</strong><span className={`text-[11px] ${selected.minimumLevel > level ? 'text-red-300' : 'text-slate-400'}`}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymagany poziom' : 'Required level'}: ${selected.minimumLevel}` : locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
           <div className="flex flex-wrap gap-2">
             {selected.usable ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.useInventoryItem(selected.id))}>{locale === 'pl' ? 'Użyj' : 'Use'}</button> : null}
             {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy || !canEquip(selected)} onClick={() => void mutate(() => connection.equipInventoryItem(selected.id))}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymaga Lv.' : 'Requires Lv.'} ${selected.minimumLevel}` : locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
             {selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.unequipInventoryItem(selected.id))}>{locale === 'pl' ? 'Zdejmij' : 'Unequip'}</button> : null}
             <button className="hud-utility-button" disabled={busy || Boolean(selected.equippedSlot)} onClick={() => void mutate(() => connection.discardInventoryItem(selected.id, 1))}>{locale === 'pl' ? 'Wyrzuć 1' : 'Discard 1'}</button>
           </div>
-        </div> : <p className="py-3 text-center text-sm text-slate-400">{locale === 'pl' ? 'Kliknij przedmiot, aby wyświetlić przyciski akcji.' : 'Click an item to show its action buttons.'}</p>}
+        </div> : <p className="py-3 text-center text-sm text-slate-400">{locale === 'pl' ? 'Kliknij przedmiot, aby wyświetlić przyciski akcji.' : 'Click an item to show action buttons.'}</p>}
       </section>
     </Modal>
   );

@@ -4,6 +4,7 @@ import type {
   MerchantItemPayload,
   MerchantSnapshot,
 } from '../../contracts/socket';
+import { ItemIcon } from '../../components/common/ItemIcon';
 import { ItemTooltip, rarityClasses } from '../../components/common/ItemTooltip';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
@@ -90,7 +91,7 @@ export function MerchantModal({ npcId, npcName, onClose }: MerchantModalProps): 
                     className={`flex items-center justify-between gap-3 rounded border bg-black/20 p-3 ${rarityClasses(item.rarity)} ${locked ? 'opacity-70' : ''}`}
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="text-2xl">{item.icon}</span>
+                      <ItemIcon definitionKey={item.definitionKey} fallback={item.icon} className="h-10 w-10" />
                       <div className="min-w-0">
                         <strong className="block truncate">{name(item)}</strong>
                         <p className="text-xs text-amber-200">
@@ -135,7 +136,7 @@ export function MerchantModal({ npcId, npcName, onClose }: MerchantModalProps): 
                   className={`flex items-center justify-between gap-3 rounded border bg-black/20 p-3 ${rarityClasses(item.rarity)}`}
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="text-2xl">{item.icon}</span>
+                    <ItemIcon definitionKey={item.definitionKey} fallback={item.icon} className="h-10 w-10" />
                     <div className="min-w-0">
                       <strong className="block truncate">{name(item)}</strong>
                       <p className="text-xs text-slate-400">
