@@ -209,7 +209,6 @@ export function SkillModal({ onClose }: { onClose: () => void }): React.JSX.Elem
         </aside>
       </div>
 
-      <p className="skill-combat-notice">{t('modal.skills.combatOnly')}</p>
     </Modal>
   );
 }

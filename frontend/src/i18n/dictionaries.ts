@@ -150,8 +150,6 @@ export const dictionaries = {
     'modal.skills.requires': 'Requires',
     'modal.skills.unlock': 'Unlock for 1 point',
     'modal.skills.unlocked': 'Already unlocked',
-    'modal.skills.combatOnly':
-      'Combat skills can only be activated during turn-based combat. The action bar emits a skill intent; the future combat server remains authoritative for resolving effects and VFX.',
     'notification.pathUnavailable': 'No walkable route reaches that tile.',
     'notification.socketTimeout': 'The game server did not acknowledge the request.',
   },
@@ -307,8 +305,6 @@ export const dictionaries = {
     'modal.skills.requires': 'Wymaga',
     'modal.skills.unlock': 'Odblokuj za 1 punkt',
     'modal.skills.unlocked': 'Już odblokowana',
-    'modal.skills.combatOnly':
-      'Umiejętności można aktywować wyłącznie w walce turowej. Pasek wysyła intencję użycia skilla, a przyszły serwer walki pozostanie źródłem prawdy dla efektów i animacji.',
     'notification.pathUnavailable': 'Nie można dotrzeć do tego kafla.',
     'notification.socketTimeout': 'Serwer gry nie odpowiedział na żądanie.',
   },

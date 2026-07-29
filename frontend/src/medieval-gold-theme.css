@@ -926,18 +926,6 @@ body {
   line-height: 1.4;
 }
 
-.skill-combat-notice {
-  margin-top: 1rem;
-  border: 1px solid rgba(216, 170, 69, 0.22);
-  border-radius: 3px;
-  padding: 0.7rem 0.85rem;
-  background: rgba(19, 12, 7, 0.72);
-  color: var(--royal-parchment-muted);
-  font-size: 0.68rem;
-  line-height: 1.45;
-  text-align: center;
-}
-
 .action-slot {
   color: var(--skill-accent, var(--royal-gold-100));
 }
