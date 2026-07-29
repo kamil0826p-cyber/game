@@ -173,8 +173,8 @@ model Character {
   receivedTrades   TradeSession[]            @relation("TradeRecipient")
   tradeOffers      TradeOfferItem[]
 
-  @@unique([userId, realmId])
   @@unique([realmId, name])
+  @@index([userId, realmId])
   @@index([realmId, mapId])
   @@index([mapId, x, y])
 }
@@ -348,11 +348,11 @@ model CharacterQuest {
   characterId       String              @db.Uuid
   questDefinitionId String              @db.Uuid
   status            QuestProgressStatus @default(NOT_STARTED)
-  progress          Json                @default("{}") @db.JsonB
+  progress          Json                 @default("{}") @db.JsonB
   startedAt         DateTime?
   completedAt       DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
   questDefinition QuestDefinition @relation(fields: [questDefinitionId], references: [id], onDelete: Restrict)
