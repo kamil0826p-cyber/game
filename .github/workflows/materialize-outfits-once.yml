@@ -1,18 +1,20 @@
 name: Materialize static outfits once
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/complete-outfit-sprite-set
-    paths:
-      - frontend/scripts/materialize_outfits.py
-      - .github/workflows/materialize-outfits-once.yml
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
   materialize:
+    if: github.head_ref == 'agent/complete-outfit-sprite-set'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +30,11 @@ jobs:
         run: |
           rm frontend/scripts/materialize_outfits.py
           rm .github/workflows/materialize-outfits-once.yml
+          rm -f frontend/src/assets/outfitSprites/mageA.ts
       - name: Commit static assets
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A frontend/public/assets frontend/scripts .github/workflows
+          git add -A frontend/public/assets frontend/scripts frontend/src/assets/outfitSprites .github/workflows
           git commit -m "Commit complete static outfit sprite set"
           git push origin HEAD:agent/complete-outfit-sprite-set
