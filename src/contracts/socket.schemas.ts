@@ -58,7 +58,7 @@ export const inventoryMoveSchema = z.object({
   itemId,
   targetSlotIndex: z.number().int().min(0).max(39),
 });
-export const inventoryDiscardSchema = z.object({ requestId, itemId, quantity });
+export const inventoryDestroySchema = z.object({ requestId, itemId, quantity });
 export const merchantRequestSchema = z.object({ requestId, npcId }).strict();
 export const merchantBuySchema = z.object({ requestId, npcId, itemKey, quantity }).strict();
 export const merchantSellSchema = z.object({ requestId, npcId, itemId, quantity }).strict();
@@ -95,7 +95,7 @@ export type ChatSendPayload = z.infer<typeof chatSendSchema>;
 export type InventoryRequestPayload = z.infer<typeof inventoryRequestSchema>;
 export type InventoryItemPayload = z.infer<typeof inventoryItemSchema>;
 export type InventoryMovePayload = z.infer<typeof inventoryMoveSchema>;
-export type InventoryDiscardPayload = z.infer<typeof inventoryDiscardSchema>;
+export type InventoryDestroyPayload = z.infer<typeof inventoryDestroySchema>;
 export type MerchantRequestPayload = z.infer<typeof merchantRequestSchema>;
 export type MerchantBuyPayload = z.infer<typeof merchantBuySchema>;
 export type MerchantSellPayload = z.infer<typeof merchantSellSchema>;
