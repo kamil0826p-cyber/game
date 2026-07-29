@@ -1,7 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
-import type { Direction, PublicPlayerState } from '../../contracts/game';
+import type { PublicPlayerState } from '../../contracts/game';
 import { WORLD_TILE_SIZE } from './constants';
-import { gameAssetLoader, type OutfitFrames } from './GameAssetLoader';
+import { staticOutfitLoader, type StaticOutfitFrames } from './StaticOutfitLoader';
 
 const classColors = { MAGE: 0x6d5bd0, WARRIOR: 0xb45454, ARCHER: 0x4f9467 } as const;
 export const PLAYER_CONTEXT_EVENT = 'game:player-interaction';
@@ -14,7 +14,7 @@ export class CharacterView {
   private readonly sprite = new Sprite();
   private readonly nameplate = new Container();
   private readonly nameText: Text;
-  private frames: OutfitFrames | undefined = undefined;
+  private frames: StaticOutfitFrames | undefined = undefined;
   private destroyed = false;
   private state: PublicPlayerState;
   private startX = 0; private startY = 0; private targetX = 0; private targetY = 0;
@@ -54,7 +54,7 @@ export class CharacterView {
   get worldX(): number { return this.container.x; }
   get worldY(): number { return this.container.y - WORLD_TILE_SIZE * 0.5; }
   destroy(): void { this.destroyed = true; this.container.destroy({ children: true }); }
-  private updateFrame(now: number): void { const frames = this.frames?.frames[this.state.direction]; if (!frames?.length) return; const duration = this.frames?.definition.frameDurationMs ?? 120; const index = this.moving ? Math.floor(now / duration) % frames.length : 0; const texture = frames[index]; if (texture && this.sprite.texture !== texture) this.sprite.texture = texture; }
-  private loadOutfit(outfitKey: string): void { this.lastOutfitKey = outfitKey; this.frames = undefined; this.sprite.visible = false; this.fallback.visible = true; void gameAssetLoader.getOutfitFrames(outfitKey).then((frames) => { if (this.destroyed || this.lastOutfitKey !== outfitKey || !frames) return; const initialTexture = frames.frames[this.state.direction]?.[0]; if (!initialTexture) return; this.frames = frames; this.sprite.texture = initialTexture as Texture; this.sprite.visible = true; this.fallback.visible = false; }); }
+  private updateFrame(now: number): void { const frames = this.frames?.frames[this.state.direction]; if (!frames?.length) return; const duration = this.frames?.frameDurationMs ?? 120; const index = this.moving ? Math.floor(now / duration) % frames.length : 0; const texture = frames[index]; if (texture && this.sprite.texture !== texture) this.sprite.texture = texture; }
+  private loadOutfit(outfitKey: string): void { this.lastOutfitKey = outfitKey; this.frames = undefined; this.sprite.visible = false; this.fallback.visible = true; void staticOutfitLoader.getFrames(outfitKey).then((frames) => { if (this.destroyed || this.lastOutfitKey !== outfitKey || !frames) return; const initialTexture = frames.frames[this.state.direction]?.[0]; if (!initialTexture) return; this.frames = frames; this.sprite.texture = initialTexture as Texture; this.sprite.visible = true; this.fallback.visible = false; }); }
   private createFallback(state: PublicPlayerState): Graphics { const primary = classColors[state.characterClass]; const accent = state.outfitKey.includes('archmage') || state.outfitKey.includes('champion') || state.outfitKey.includes('ranger') ? 0xfacc15 : 0xdbeafe; return new Graphics().circle(0, -51, 10).fill({ color: 0xe8b98f }).roundRect(-12, -43, 24, 31, 7).fill({ color: primary }).rect(-11, -29, 22, 4).fill({ color: accent }).rect(-9, -14, 7, 14).fill({ color: 0x1f2937 }).rect(2, -14, 7, 14).fill({ color: 0x1f2937 }); }
 }
