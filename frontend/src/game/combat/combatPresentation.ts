@@ -3,6 +3,7 @@ import type {
   CombatParticipantPayload,
   CombatSnapshot,
 } from '../../contracts/socket';
+import { mobStore } from '../state/mobStore';
 
 export type CombatVfxFamily =
   'arcane' | 'fire' | 'frost' | 'physical' | 'projectile' | 'status';
@@ -31,6 +32,14 @@ export function getCombatVfxFamily(animationKey: string): CombatVfxFamily {
   return 'physical';
 }
 
+function withMobRenderScale(participant: CombatParticipantPayload): CombatParticipantPayload {
+  if (participant.kind !== 'MOB' || participant.renderScale !== undefined) return participant;
+  const mob = Object.values(mobStore.getSnapshot()).find(
+    (candidate) => candidate.outfitKey === participant.outfitKey,
+  );
+  return mob ? { ...participant, renderScale: mob.renderScale } : participant;
+}
+
 export function combatSides(
   combat: CombatSnapshot,
   ownCharacterId: string,
@@ -41,7 +50,9 @@ export function combatSides(
   const opponent = combat.participants.find(
     (participant) => participant.characterId !== ownCharacterId,
   );
-  return own && opponent ? { own, opponent } : undefined;
+  return own && opponent
+    ? { own: withMobRenderScale(own), opponent: withMobRenderScale(opponent) }
+    : undefined;
 }
 
 export function actionDamageFor(
