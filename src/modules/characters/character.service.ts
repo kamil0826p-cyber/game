@@ -79,6 +79,13 @@ export class CharacterService {
         if (count >= MAX_CHARACTERS_PER_REALM) {
           throw new GameError(GAME_ERROR_CODES.CHARACTER_LIMIT_REACHED, 'errors.character.limitReached', { limit: MAX_CHARACTERS_PER_REALM });
         }
+        const nameTaken = await transaction.character.findFirst({
+          where: { realmId: realm.id, name: input.name },
+          select: { id: true },
+        });
+        if (nameTaken) {
+          throw new GameError(GAME_ERROR_CODES.CHARACTER_NAME_TAKEN, 'errors.character.nameTaken');
+        }
         const map = await transaction.map.findFirst({
           where: { id: realm.defaultMapId, realmId: realm.id },
           select: { id: true, spawnX: true, spawnY: true },
@@ -97,7 +104,7 @@ export class CharacterService {
       return this.toPersistedState(character);
     } catch (error) {
       if (error instanceof GameError) throw error;
-      if (this.isUniqueConstraintError(error)) {
+      if (this.isCharacterNameConstraintError(error)) {
         throw new GameError(GAME_ERROR_CODES.CHARACTER_NAME_TAKEN, 'errors.character.nameTaken');
       }
       throw error;
@@ -117,7 +124,12 @@ export class CharacterService {
     };
   }
 
-  private isUniqueConstraintError(error: unknown): boolean {
-    return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+  private isCharacterNameConstraintError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+    const prismaError = error as { code?: unknown; meta?: { target?: unknown } };
+    if (prismaError.code !== 'P2002') return false;
+    const target = prismaError.meta?.target;
+    if (Array.isArray(target)) return target.includes('name');
+    return typeof target === 'string' && target.toLowerCase().includes('name');
   }
 }
