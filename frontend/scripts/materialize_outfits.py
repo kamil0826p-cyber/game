@@ -2,6 +2,7 @@ from PIL import Image, ImageDraw
 from pathlib import Path
 import json
 
+# One-time repository materializer. This file removes itself after committing the generated assets.
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'public' / 'assets' / 'sprites'
 OUT.mkdir(parents=True, exist_ok=True)
@@ -97,38 +98,31 @@ def draw_frame(image, character_class, style, column, row, palette):
         line(draw, [(weapon_x,oy+15),(weapon_x,oy+42)], accent, 1)
         if style >= 4: px(draw, ox+13, oy+7+bob, 7, 3, primary)
         if style in (8,9,10):
-            quiver_x = ox+7 if west else ox+23
-            px(draw, quiver_x, oy+18, 3, 17, secondary); px(draw, quiver_x+1, oy+15, 1, 3, accent)
+            quiver_x = ox+5 if west else ox+24
+            px(draw, quiver_x, oy+20, 3, 17, secondary); line(draw, [(quiver_x+1,oy+20),(quiver_x+1,oy+15)], accent, 1)
 
-def materialize(character_class, style, key):
-    image = Image.new('RGBA', (128, 192), (0, 0, 0, 0))
-    for row in range(4):
-        for column in range(4):
-            draw_frame(image, character_class, style, column, row, PALETTES[character_class][style])
-    image.save(OUT / f'{key}.png', optimize=True)
+def materialize():
+    for old in OUT.glob('*.png'):
+        old.unlink()
+    outfits = {}
+    for character_class, keys in CATALOG.items():
+        for index, key in enumerate(keys):
+            sheet = Image.new('RGBA', (128, 192), (0, 0, 0, 0))
+            for row in range(4):
+                for column in range(4):
+                    draw_frame(sheet, character_class, index, column, row, PALETTES[character_class][index])
+            sheet.save(OUT / f'{key}.png', optimize=True)
+            outfits[key] = {
+                'image': f'/assets/sprites/{key}.png?v=6', 'frameWidth': 32, 'frameHeight': 48,
+                'columns': 4, 'rows': 4, 'framesPerDirection': 4, 'frameDurationMs': 120,
+                'directionRows': {'SOUTH': 0, 'WEST': 1, 'EAST': 2, 'NORTH': 3},
+                'characterClass': character_class, 'unlockLevel': LEVELS[index],
+            }
+    manifest_path = ROOT / 'public' / 'assets' / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['version'] = 6
+    manifest['outfits'] = outfits
+    manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
 
-for existing in OUT.glob('*.png'):
-    existing.unlink()
-for character_class, keys in CATALOG.items():
-    for style, key in enumerate(keys):
-        materialize(character_class, style, key)
-
-manifest_path = ROOT / 'public' / 'assets' / 'manifest.json'
-manifest = json.loads(manifest_path.read_text())
-manifest['version'] = 5
-manifest['outfits'] = {}
-for character_class, keys in CATALOG.items():
-    for style, key in enumerate(keys):
-        manifest['outfits'][key] = {
-            'image': f'/assets/sprites/{key}.png?v=5',
-            'frameWidth': 32,
-            'frameHeight': 48,
-            'columns': 4,
-            'rows': 4,
-            'framesPerDirection': 4,
-            'frameDurationMs': 120,
-            'directionRows': {'SOUTH': 0, 'WEST': 1, 'EAST': 2, 'NORTH': 3},
-            'characterClass': character_class,
-            'unlockLevel': LEVELS[style],
-        }
-manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+if __name__ == '__main__':
+    materialize()
