@@ -1,7 +1,14 @@
-import type { CombatSnapshot, SocketAck } from './socket';
-import type { SelfCharacterState } from './game';
+import type { CharacterClass, SelfCharacterState } from './game';
+import type {
+  CombatSnapshot,
+  ItemRarity,
+  ItemStatBonuses,
+  SocketAck,
+} from './socket';
 
 export type MobRank = 'SPAWN' | 'EXECUTIONER' | 'ARCH_EXECUTIONER' | 'REAPER' | 'ANCIENT';
+export type MobDisplayState = 'ALIVE' | 'CORPSE';
+
 export interface MobStatePayload {
   id: string;
   definitionKey: string;
@@ -13,13 +20,29 @@ export interface MobStatePayload {
   level: number;
   outfitKey: string;
   renderScale: number;
+  state: MobDisplayState;
 }
-export interface MobLootRewardPayload { itemKey: string; name: string; quantity: number; }
+
+export interface MobLootRewardPayload {
+  itemKey: string;
+  name: string;
+  description: string;
+  rarity: ItemRarity;
+  icon: string;
+  quantity: number;
+  stackLimit: number;
+  requiredClass?: CharacterClass;
+  minimumLevel: number;
+  statBonuses: ItemStatBonuses;
+  effect?: { hp?: number; energy?: number };
+}
+
 export interface MobRewardPayload {
   mobId: string;
   mobName: string;
   experienceGained: number;
   levelsGained: number;
+  skillPointsGained: number;
   nextLevelExperience: number | null;
   loot: MobLootRewardPayload[];
   skippedLoot: MobLootRewardPayload[];
@@ -56,6 +79,7 @@ declare module './socket' {
   }
   interface ServerToClientEvents {
     'world:mobSpawned': (payload: MobStatePayload) => void;
+    'world:mobDefeated': (payload: MobStatePayload & { respawnsAt: number }) => void;
     'world:mobDespawned': (payload: { mobId: string; respawnsAt: number }) => void;
     'mob:rewards': (payload: MobRewardPayload) => void;
   }
