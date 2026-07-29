@@ -59,4 +59,4 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
 };
 
 export const outfitImageUrl = (outfitKey: string): string =>
-  `/assets/sprites/${encodeURIComponent(outfitKey)}.svg?v=10`;
+  `/assets/sprites/${encodeURIComponent(outfitKey)}.png?v=11`;
