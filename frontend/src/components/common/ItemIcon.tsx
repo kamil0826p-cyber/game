@@ -1,35 +1,29 @@
+import { useEffect, useState } from 'react';
+import { ITEM_ICON_KEY_SET, itemIconUrl } from './itemIconAssets';
+
 interface ItemIconProps {
   definitionKey: string;
   fallback: string;
   className?: string;
 }
 
-const knownItemKeys = new Set([
-  'traveler-sword',
-  'apprentice-staff',
-  'field-bow',
-  'minor-health-potion',
-  'field-rations',
-  'town-scroll',
-  'rabbit-fur',
-  'rabbit-foot',
-  'scorpion-chitin',
-  'scorpion-stinger',
-  'venom-sac',
-]);
-
 export function ItemIcon({ definitionKey, fallback, className = 'h-8 w-8' }: ItemIconProps): React.JSX.Element {
-  if (!knownItemKeys.has(definitionKey)) {
-    return <span className={className}>{fallback}</span>;
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => setFailed(false), [definitionKey]);
+
+  if (!ITEM_ICON_KEY_SET.has(definitionKey) || failed) {
+    return <span className={`${className} inline-flex items-center justify-center`}>{fallback}</span>;
   }
 
   return (
-    <svg
+    <img
       aria-hidden="true"
-      className={`${className} shrink-0 overflow-visible drop-shadow-[0_2px_2px_rgba(0,0,0,0.75)]`}
-      viewBox="0 0 64 64"
-    >
-      <use href={`/assets/items/items.svg#${definitionKey}`} />
-    </svg>
+      alt=""
+      className={`${className} shrink-0 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.75)]`}
+      draggable={false}
+      src={itemIconUrl(definitionKey)}
+      onError={() => setFailed(true)}
+    />
   );
 }
