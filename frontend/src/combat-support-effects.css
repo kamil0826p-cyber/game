@@ -13,13 +13,15 @@
   animation: combat-support-aura-enter 920ms ease-out both;
 }
 
+/* Combatant containers are 12rem wide, so their visual center is 6rem
+   after the side offset used by .combat-character-left/right. */
 .combat-vfx-left-to-right .combat-support-aura {
-  left: calc(19% + 1rem);
+  left: calc(19% + 6rem);
   transform: translateX(-50%);
 }
 
 .combat-vfx-right-to-left .combat-support-aura {
-  right: calc(19% + 1rem);
+  right: calc(19% + 6rem);
   transform: translateX(50%);
 }
 
@@ -167,11 +169,11 @@
 
 @media (max-width: 1050px) {
   .combat-vfx-left-to-right .combat-support-aura {
-    left: calc(15% + 1rem);
+    left: calc(15% + 6rem);
   }
 
   .combat-vfx-right-to-left .combat-support-aura {
-    right: calc(15% + 1rem);
+    right: calc(15% + 6rem);
   }
 }
 
