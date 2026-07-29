@@ -130,7 +130,7 @@ const mobItemDefinitions = [
 const mobDefinitions: MobSeedDefinition[] = [
   {
     key: 'spawn-rabbit',
-    name: 'Królik Pomiot',
+    name: 'Królik',
     mapKey: 'greenfields',
     level: 2,
     outfitKey: 'mob-spawn-rabbit',
@@ -164,7 +164,7 @@ const mobDefinitions: MobSeedDefinition[] = [
   },
   {
     key: 'executioner-scorpion',
-    name: 'Skorpion Kat',
+    name: 'Skorpion',
     mapKey: 'crystal-cave',
     level: 7,
     outfitKey: 'mob-executioner-scorpion',
