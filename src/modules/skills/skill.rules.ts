@@ -17,6 +17,15 @@ export const calculateSkillPoints = (level: number, spent: number): SkillPointSu
   };
 };
 
+export const skillPointsGainedBetweenLevels = (
+  previousLevel: number,
+  nextLevel: number,
+): number =>
+  Math.max(
+    0,
+    calculateSkillPoints(nextLevel, 0).earned - calculateSkillPoints(previousLevel, 0).earned,
+  );
+
 export interface SkillEligibility {
   unlockState: SkillUnlockState;
   missingPrerequisiteKeys: string[];
