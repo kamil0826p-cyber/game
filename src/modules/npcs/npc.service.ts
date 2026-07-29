@@ -9,7 +9,7 @@ import type { PlayerSession } from '../world/player-session.types.js';
 import { localizeDialogueText, parseNpcDialogueDefinition, type NpcDialogueDefinition } from './npc-dialogue.js';
 
 interface NpcDialogue { type?: unknown; }
-type NpcInteractionPosition = Pick<PlayerSession, 'characterId' | 'userId' | 'mapId' | 'x' | 'y'> & Partial<PlayerSession>;
+interface NpcInteractionPosition { characterId?: string; userId?: string; mapId: string; x: number; y: number; }
 export type NpcDialogueResult = NpcDialogueChoiceResult & { questUpdate?: QuestMutationResult };
 const tileKey = (x: number, y: number): string => `${x},${y}`;
 
@@ -18,26 +18,17 @@ export class NpcService {
   private readonly mapNpcCache = new Map<string, Promise<readonly NpcStatePayload[]>>();
   private readonly occupiedTileCache = new Map<string, Promise<ReadonlySet<string>>>();
   constructor(private readonly prisma: PrismaService, @Optional() private readonly quests?: QuestService) {}
-
-  async getMapNpcs(mapId: string): Promise<NpcStatePayload[]> {
-    let loading = this.mapNpcCache.get(mapId);
-    if (!loading) { loading = this.loadMapNpcs(mapId); this.mapNpcCache.set(mapId, loading); }
-    return [...(await loading)];
-  }
-  async getOccupiedTiles(mapId: string): Promise<ReadonlySet<string>> {
-    let loading = this.occupiedTileCache.get(mapId);
-    if (!loading) { loading = this.getMapNpcs(mapId).then((npcs) => new Set(npcs.map((npc) => tileKey(npc.x, npc.y)))); this.occupiedTileCache.set(mapId, loading); }
-    return loading;
-  }
+  async getMapNpcs(mapId: string): Promise<NpcStatePayload[]> { let loading = this.mapNpcCache.get(mapId); if (!loading) { loading = this.loadMapNpcs(mapId); this.mapNpcCache.set(mapId, loading); } return [...(await loading)]; }
+  async getOccupiedTiles(mapId: string): Promise<ReadonlySet<string>> { let loading = this.occupiedTileCache.get(mapId); if (!loading) { loading = this.getMapNpcs(mapId).then((npcs) => new Set(npcs.map((npc) => tileKey(npc.x, npc.y)))); this.occupiedTileCache.set(mapId, loading); } return loading; }
   async isTileOccupied(mapId: string, x: number, y: number): Promise<boolean> { return (await this.getOccupiedTiles(mapId)).has(tileKey(x, y)); }
   clearMapCache(mapId?: string): void { if (mapId) { this.mapNpcCache.delete(mapId); this.occupiedTileCache.delete(mapId); return; } this.mapNpcCache.clear(); this.occupiedTileCache.clear(); }
 
   async startDialogue(npcId: string, position: NpcInteractionPosition, locale: SupportedLocale): Promise<NpcDialogueSnapshot> {
     const { npc, dialogue } = await this.requireAvailableNpc(npcId, position);
-    if (this.quests) await this.quests.recordNpcTalk(position.characterId, npc.key);
+    if (position.characterId && this.quests) await this.quests.recordNpcTalk(position.characterId, npc.key);
     let nodeId = dialogue.rootNodeId;
     if (dialogue.quest) {
-      if (!this.quests) throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
+      if (!position.characterId || !this.quests) throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
       const state = await this.quests.getDialogueState(position.characterId, dialogue.quest.questKey);
       nodeId = dialogue.quest.rootNodes[state === 'NOT_STARTED' ? 'notStarted' : state === 'ACTIVE' ? 'active' : state === 'READY' ? 'ready' : 'rewarded'];
     }
@@ -50,7 +41,7 @@ export class NpcService {
     if (!node || !choice) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_STATE_INVALID, 'errors.npcs.dialogueStateInvalid');
     if (choice.nextNodeId) return { type: 'NODE', dialogue: this.toDialogueSnapshot(npc, dialogue, choice.nextNodeId, locale) };
     if (choice.questAction) {
-      if (!this.quests) throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
+      if (!position.characterId || !position.userId || !this.quests) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
       const session = position as PlayerSession;
       const questUpdate = choice.questAction.type === 'ACCEPT' ? await this.quests.accept(session, choice.questAction.questKey) : await this.quests.turnIn(session, choice.questAction.questKey, locale);
       const targetNodeId = questUpdate.completed ? choice.questAction.successNodeId : choice.questAction.type === 'TURN_IN' ? choice.questAction.incompleteNodeId ?? choice.questAction.successNodeId : choice.questAction.successNodeId;
