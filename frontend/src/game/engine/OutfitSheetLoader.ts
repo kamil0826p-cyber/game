@@ -33,33 +33,34 @@ export const extractEmbeddedPng = (svgText: string): Uint8Array | undefined => {
   return bytes;
 };
 
-const createSheetCanvas = async (outfitKey: string): Promise<HTMLCanvasElement> => {
-  const url = outfitImageUrl(outfitKey);
+const drawSheet = (image: CanvasImageSource): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   canvas.width = SHEET_WIDTH;
   canvas.height = SHEET_HEIGHT;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas 2D context is required for outfit rendering.');
   context.imageSmoothingEnabled = false;
+  context.drawImage(image, 0, 0, SHEET_WIDTH, SHEET_HEIGHT);
+  return canvas;
+};
 
+const createSheetCanvas = async (outfitKey: string): Promise<HTMLCanvasElement> => {
+  const url = outfitImageUrl(outfitKey);
   if (new URL(url, window.location.origin).pathname.toLowerCase().endsWith('.svg')) {
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Outfit ${url} could not be loaded (${response.status}).`);
     const embeddedPng = extractEmbeddedPng(await response.text());
     if (!embeddedPng) throw new Error(`Outfit ${url} does not contain an embedded PNG sheet.`);
 
-    const bitmap = await createImageBitmap(new Blob([embeddedPng], { type: 'image/png' }));
+    const objectUrl = URL.createObjectURL(new Blob([embeddedPng], { type: 'image/png' }));
     try {
-      context.drawImage(bitmap, 0, 0, SHEET_WIDTH, SHEET_HEIGHT);
+      return drawSheet(await loadImage(objectUrl));
     } finally {
-      bitmap.close();
+      URL.revokeObjectURL(objectUrl);
     }
-    return canvas;
   }
 
-  const image = await loadImage(url);
-  context.drawImage(image, 0, 0, SHEET_WIDTH, SHEET_HEIGHT);
-  return canvas;
+  return drawSheet(await loadImage(url));
 };
 
 export const getOutfitSheetCanvas = (outfitKey: string): Promise<HTMLCanvasElement | undefined> => {
