@@ -58,5 +58,20 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
   ARCHER: { label: 'Archer', role: 'Agile marksman', description: 'High agility with balanced health and energy.', accent: 'text-emerald-300' },
 };
 
-export const outfitImageUrl = (outfitKey: string): string =>
-  `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.png?v=12`;
+const assetUrl = (outfitKey: string): string =>
+  `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.png?v=13`;
+
+const fallbackKeyFor = (outfitKey: string): string => {
+  if (outfitKey.startsWith('mage-') && outfitKey !== 'mage-apprentice') return 'mage-archmage';
+  if (outfitKey.startsWith('warrior-') && outfitKey !== 'warrior-recruit') return 'warrior-champion';
+  if (outfitKey.startsWith('archer-') && outfitKey !== 'archer-scout') return 'archer-ranger';
+  return outfitKey;
+};
+
+export const outfitImageUrl = (outfitKey: string): string => assetUrl(outfitKey);
+
+export const outfitImageCandidates = (outfitKey: string): readonly string[] => {
+  const primary = assetUrl(outfitKey);
+  const fallback = assetUrl(fallbackKeyFor(outfitKey));
+  return primary === fallback ? [primary] : [primary, fallback];
+};
