@@ -58,4 +58,16 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
   ARCHER: { label: 'Archer', role: 'Agile marksman', description: 'High agility with balanced health and energy.', accent: 'text-emerald-300' },
 };
 
-export const outfitImageUrl = (outfitKey: string): string => `/assets/sprites/${encodeURIComponent(outfitKey)}.svg?v=8`;
+const spriteVariants: Record<CharacterClass, readonly [string, string]> = {
+  MAGE: ['/assets/sprites/mage-astral.svg?v=9', '/assets/sprites/mage-void.svg?v=9'],
+  WARRIOR: ['/assets/sprites/warrior-aegis.svg?v=9', '/assets/sprites/warrior-blood.svg?v=9'],
+  ARCHER: ['/assets/sprites/archer-warden.svg?v=9', '/assets/sprites/archer-night.svg?v=9'],
+};
+
+const outfitVariantPath = new Map<string, string>();
+for (const [characterClass, outfits] of Object.entries(OUTFIT_CATALOG) as [CharacterClass, readonly ClientOutfitDefinition[]][]) {
+  outfits.forEach((definition, index) => outfitVariantPath.set(definition.key, spriteVariants[characterClass][index % 2]));
+}
+
+export const outfitImageUrl = (outfitKey: string): string =>
+  outfitVariantPath.get(outfitKey) ?? '/assets/sprites/mage-astral.svg?v=9';
