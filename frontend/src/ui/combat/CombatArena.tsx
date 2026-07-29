@@ -6,7 +6,7 @@ import {
   combatAnimationReducer,
   INITIAL_COMBAT_ANIMATION_STATE,
 } from '../../game/combat/combatAnimationQueue';
-import { combatSides } from '../../game/combat/combatPresentation';
+import { combatSides, usesAttackMotion } from '../../game/combat/combatPresentation';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
 import { COMBAT_SKILL_INTENT_EVENT, type CombatSkillIntent, ActionBar } from '../hud/ActionBar';
@@ -153,8 +153,9 @@ export function CombatArena({
   const remainingMs = Math.max(0, (combat.turnEndsAt ?? now) - now);
   const turnPercent = Math.max(0, Math.min(100, (remainingMs / 30_000) * 100));
   const actionActor = animatedAction?.actorId;
-  const ownAnimating = sides?.own.actorId === actionActor;
-  const opponentAnimating = sides?.opponent.actorId === actionActor;
+  const attackMotion = usesAttackMotion(animatedAction);
+  const ownAnimating = attackMotion && sides?.own.actorId === actionActor;
+  const opponentAnimating = attackMotion && sides?.opponent.actorId === actionActor;
   const damagingTarget = (actorId: string | undefined): boolean =>
     Boolean(
       actorId &&
