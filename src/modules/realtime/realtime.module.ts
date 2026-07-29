@@ -10,6 +10,7 @@ import { PersistenceModule } from '../persistence/persistence.module.js';
 import { RealmModule } from '../realm/realm.module.js';
 import { SkillModule } from '../skills/skill.module.js';
 import { WorldModule } from '../world/world.module.js';
+import { CharacterLobbyGateway } from './character-lobby.gateway.js';
 import { GameGateway } from './game.gateway.js';
 import { SessionClaimExecutor } from './session-claim.executor.js';
 import { SessionLifecycleService } from './session-lifecycle.service.js';
@@ -28,6 +29,6 @@ import { SessionLifecycleService } from './session-lifecycle.service.js';
     MovementModule,
     SkillModule,
   ],
-  providers: [GameGateway, SessionClaimExecutor, SessionLifecycleService],
+  providers: [GameGateway, CharacterLobbyGateway, SessionClaimExecutor, SessionLifecycleService],
 })
 export class RealtimeModule {}
