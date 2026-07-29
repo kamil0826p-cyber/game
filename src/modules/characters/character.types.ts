@@ -13,6 +13,7 @@ export interface FirebaseUserRecord {
 export interface CreateCharacterInput {
   name: string;
   characterClass: CharacterClass;
+  outfitKey: string;
 }
 
 export type StartingCharacterTemplate = CharacterStats;
