@@ -3,12 +3,12 @@ import type { CharacterClass } from '../../common/domain/game.types.js';
 export const MOB_RANKS = ['SPAWN', 'EXECUTIONER', 'ARCH_EXECUTIONER', 'REAPER', 'ANCIENT'] as const;
 export type MobRank = (typeof MOB_RANKS)[number];
 
-export interface MobLootEntry {
+export type MobLootEntry = {
   itemKey: string;
   chance: number;
   minQuantity: number;
   maxQuantity: number;
-}
+};
 
 export interface MobCatalogDefinition {
   key: string;
