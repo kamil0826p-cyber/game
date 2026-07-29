@@ -40,10 +40,10 @@ export const questStepsSchema = z.array(z.discriminatedUnion('type', [
 
 export const questRewardsSchema = z.object({
   experience: z.number().int().min(0).max(2_147_483_647).default(0),
-  gold: z.number().int().min(0).max(2_147_483_647).default(0),
+  gold: z.literal(0).default(0),
   silver: z.number().int().min(0).max(2_147_483_647).default(0),
-}).strict().refine((reward) => reward.experience > 0 || reward.gold > 0 || reward.silver > 0, {
-  message: 'A quest must award at least one reward.',
+}).strict().refine((reward) => reward.experience > 0 || reward.silver > 0, {
+  message: 'A quest must award experience or silver. Gold is premium currency and cannot be awarded by quests.',
 });
 
 export type QuestStepDefinition = z.infer<typeof questStepsSchema>[number];
