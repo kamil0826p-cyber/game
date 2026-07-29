@@ -1,4 +1,4 @@
-import type { CharacterClass } from '../common/domain/game.types.js';
+import type { CharacterClass, EquipmentSlot } from '../common/domain/game.types.js';
 import type {
   CombatSnapshot,
   ItemRarity,
@@ -30,6 +30,7 @@ export interface MobLootRewardPayload {
   icon: string;
   quantity: number;
   stackLimit: number;
+  equipmentSlot?: EquipmentSlot;
   requiredClass?: CharacterClass;
   minimumLevel: number;
   statBonuses: ItemStatBonuses;
