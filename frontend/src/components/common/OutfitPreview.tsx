@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import type { CharacterClass, Direction } from '../../contracts/game';
-import { outfitImageUrl } from '../../mock/outfitCatalog';
+import { getOutfitSheetCanvas } from '../../game/engine/OutfitSheetLoader';
 
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
 const classColors: Record<CharacterClass, string> = { MAGE: '#6d5bd0', WARRIOR: '#b45454', ARCHER: '#4f9467' };
+
 interface OutfitPreviewProps {
   outfitKey: string;
   characterClass: CharacterClass;
@@ -13,6 +14,7 @@ interface OutfitPreviewProps {
   renderScale?: number;
   className?: string;
 }
+
 export function OutfitPreview({
   outfitKey,
   characterClass,
@@ -23,17 +25,21 @@ export function OutfitPreview({
   className = '',
 }: OutfitPreviewProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !context) return;
+
     context.imageSmoothingEnabled = false;
-    const image = new Image();
     const mob = outfitKey.startsWith('mob-');
+    const mobImage = mob ? new Image() : undefined;
     const safeRenderScale = Math.max(0.2, Math.min(3, renderScale));
+    let outfitSheet: HTMLCanvasElement | undefined;
     let frameId = 0;
     let start = performance.now();
     let cancelled = false;
+
     const drawFallback = () => {
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = 'rgba(3, 5, 12, 0.45)';
@@ -48,28 +54,55 @@ export function OutfitPreview({
       context.fillRect(31, 103, 13, 28);
       context.fillRect(52, 103, 13, 28);
     };
+
     const draw = (now: number) => {
       if (cancelled) return;
       context.clearRect(0, 0, canvas.width, canvas.height);
-      if (image.complete && image.naturalWidth > 0) {
-        if (mob) {
-          const scale = Math.min(88 / image.naturalWidth, 112 / image.naturalHeight) * safeRenderScale;
-          const width = image.naturalWidth * scale;
-          const height = image.naturalHeight * scale;
-          context.drawImage(image, (96 - width) / 2, 144 - height - 12, width, height);
-        } else {
-          const frame = animated ? Math.floor((now - start) / 120) % 4 : 0;
-          context.drawImage(image, frame * 32, directionRows[direction] * 48, 32, 48, 0, 0, 96, 144);
-        }
-      } else drawFallback();
+
+      if (mob && mobImage?.complete && mobImage.naturalWidth > 0) {
+        const scale = Math.min(88 / mobImage.naturalWidth, 112 / mobImage.naturalHeight) * safeRenderScale;
+        const width = mobImage.naturalWidth * scale;
+        const height = mobImage.naturalHeight * scale;
+        context.drawImage(mobImage, (96 - width) / 2, 144 - height - 12, width, height);
+      } else if (!mob && outfitSheet) {
+        const frame = animated ? Math.floor((now - start) / 120) % 4 : 0;
+        context.drawImage(
+          outfitSheet,
+          frame * 32,
+          directionRows[direction] * 48,
+          32,
+          48,
+          0,
+          0,
+          96,
+          144,
+        );
+      } else {
+        drawFallback();
+      }
+
       frameId = requestAnimationFrame(draw);
     };
-    image.onload = () => { start = performance.now(); };
-    image.onerror = drawFallback;
-    image.src = mob ? `/assets/mobs/${encodeURIComponent(outfitKey)}.svg` : outfitImageUrl(outfitKey);
+
+    if (mob && mobImage) {
+      mobImage.onload = () => { start = performance.now(); };
+      mobImage.onerror = drawFallback;
+      mobImage.src = `/assets/mobs/${encodeURIComponent(outfitKey)}.svg`;
+    } else {
+      void getOutfitSheetCanvas(outfitKey).then((sheet) => {
+        if (cancelled || !sheet) return;
+        outfitSheet = sheet;
+        start = performance.now();
+      });
+    }
+
     frameId = requestAnimationFrame(draw);
-    return () => { cancelled = true; cancelAnimationFrame(frameId); };
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frameId);
+    };
   }, [animated, characterClass, direction, outfitKey, renderScale]);
+
   return (
     <canvas
       ref={canvasRef}
