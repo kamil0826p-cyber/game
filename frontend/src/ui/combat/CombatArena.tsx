@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { OutfitPreview } from '../../components/common/OutfitPreview';
-import type {
-  CombatActionResolutionPayload,
-  CombatParticipantPayload,
-  CombatSnapshot,
-} from '../../contracts/socket';
+import type { CombatParticipantPayload, CombatSnapshot } from '../../contracts/socket';
+import {
+  combatAnimationDuration,
+  combatAnimationReducer,
+  INITIAL_COMBAT_ANIMATION_STATE,
+} from '../../game/combat/combatAnimationQueue';
 import { combatSides } from '../../game/combat/combatPresentation';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
@@ -122,9 +123,11 @@ export function CombatArena({
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const [queue, setQueue] = useState<CombatActionResolutionPayload[]>([]);
-  const [animatedAction, setAnimatedAction] = useState<CombatActionResolutionPayload>();
-  const seenSequence = useRef(0);
+  const [animation, dispatchAnimation] = useReducer(
+    combatAnimationReducer,
+    INITIAL_COMBAT_ANIMATION_STATE,
+  );
+  const animatedAction = animation.current;
   const sides = state.self ? combatSides(combat, state.self.characterId) : undefined;
 
   useEffect(() => {
@@ -133,23 +136,18 @@ export function CombatArena({
   }, []);
 
   useEffect(() => {
-    const unseen = combat.recentActions.filter(
-      (action) => action.sequence > seenSequence.current,
-    );
-    if (unseen.length === 0) return;
-    seenSequence.current = unseen.at(-1)!.sequence;
-    setQueue((current) => [...current, ...unseen]);
+    dispatchAnimation({ type: 'SYNC', actions: combat.recentActions });
   }, [combat.recentActions]);
 
   useEffect(() => {
-    if (animatedAction || queue.length === 0) return;
-    const [next, ...rest] = queue;
-    setQueue(rest);
-    setAnimatedAction(next);
-    const duration = Math.max(760, (next?.visual.travelMs ?? 360) + 520);
-    const timer = window.setTimeout(() => setAnimatedAction(undefined), duration);
+    if (!animatedAction) return;
+    const sequence = animatedAction.sequence;
+    const timer = window.setTimeout(
+      () => dispatchAnimation({ type: 'FINISH', sequence }),
+      combatAnimationDuration(animatedAction),
+    );
     return () => window.clearTimeout(timer);
-  }, [animatedAction, queue]);
+  }, [animatedAction]);
 
   const isOwnTurn = Boolean(sides && combat.activeActorId === sides.own.actorId);
   const remainingMs = Math.max(0, (combat.turnEndsAt ?? now) - now);
@@ -160,11 +158,11 @@ export function CombatArena({
   const damagingTarget = (actorId: string | undefined): boolean =>
     Boolean(
       actorId &&
-      animatedAction?.results.some(
-        (result) =>
-          result.targetActorId === actorId &&
-          (result.hpDelta < 0 || result.shieldAbsorbed > 0 || result.dodged),
-      ),
+        animatedAction?.results.some(
+          (result) =>
+            result.targetActorId === actorId &&
+            (result.hpDelta < 0 || result.shieldAbsorbed > 0 || result.dodged),
+        ),
     );
   const ownHit = damagingTarget(sides?.own.actorId);
   const opponentHit = damagingTarget(sides?.opponent.actorId);
