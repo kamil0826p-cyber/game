@@ -8,7 +8,7 @@ import { MapService } from '../maps/map.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
-import { MOB_CATALOG, MOB_RANKS, type MobLootEntry, type MobRank } from './mob.catalog.js';
+import { MOB_RANKS, type MobLootEntry, type MobRank } from './mob.catalog.js';
 import { MobRewardService } from './mob-reward.service.js';
 import type { ClaimedMob, RuntimeMob } from './mob.types.js';
 
@@ -31,7 +31,6 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.bootstrapDefinitions();
     const records = await this.prisma.mobDefinition.findMany({
       orderBy: [{ mapId: 'asc' }, { key: 'asc' }],
     });
@@ -57,7 +56,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       this.mobIdByActorId.set(this.actorId(mob.id), mob.id);
       map.collision[mob.y * map.width + mob.x] = 1;
     }
-    this.logger.log(`Loaded ${this.mobs.size} mob instances with runtime respawn management.`);
+    this.logger.log(`Loaded ${this.mobs.size} mob instances from the database.`);
   }
 
   onModuleDestroy(): void {
@@ -199,159 +198,6 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
             : 'An internal server error occurred.',
       });
     }
-  }
-
-  private async bootstrapDefinitions(): Promise<void> {
-    const maps = await Promise.all(
-      [...new Set(MOB_CATALOG.map((definition) => definition.mapKey))].map((key) =>
-        this.maps.getMapByKey(key),
-      ),
-    );
-    const mapByKey = new Map(maps.map((map) => [map.key, map]));
-    const reservedByMap = new Map<string, Set<string>>();
-    const planned = MOB_CATALOG.flatMap((definition) => {
-      const map = mapByKey.get(definition.mapKey);
-      if (!map) throw new Error(`Missing map ${definition.mapKey} for mob seed.`);
-      const reserved = reservedByMap.get(map.id) ?? new Set<string>();
-      reservedByMap.set(map.id, reserved);
-      return definition.spawnPoints.map((requested, index) => {
-        const position = this.maps.findNearestWalkable(map, requested, (x, y) => {
-          const key = `${x},${y}`;
-          return reserved.has(key) || map.portalsByTile.has(key);
-        });
-        reserved.add(`${position.x},${position.y}`);
-        return { definition, mapId: map.id, index, position };
-      });
-    });
-    await this.prisma.$transaction(async (transaction) => {
-      const itemDefinitions = [
-        {
-          key: 'rabbit-fur',
-          name: 'Królicze futro',
-          description: 'Miękkie futro spaczonego królika.',
-          stackLimit: 50,
-          icon: '◌',
-          sellPriceSilver: 5,
-        },
-        {
-          key: 'rabbit-foot',
-          name: 'Królicza łapka',
-          description: 'Rzadkie trofeum z Królika Pomiotu.',
-          stackLimit: 20,
-          icon: '♧',
-          sellPriceSilver: 22,
-        },
-        {
-          key: 'scorpion-chitin',
-          name: 'Chityna skorpiona',
-          description: 'Twarda płyta pancerza Skorpiona Kata.',
-          stackLimit: 50,
-          icon: '⬡',
-          sellPriceSilver: 14,
-        },
-        {
-          key: 'scorpion-stinger',
-          name: 'Żądło skorpiona',
-          description: 'Ostre żądło przydatne w rzemiośle.',
-          stackLimit: 20,
-          icon: '⌁',
-          sellPriceSilver: 44,
-        },
-        {
-          key: 'venom-sac',
-          name: 'Woreczek jadowy',
-          description: 'Rzadki gruczoł jadowy Skorpiona Kata.',
-          stackLimit: 10,
-          icon: '◆',
-          sellPriceSilver: 90,
-        },
-      ] as const;
-      for (const item of itemDefinitions) {
-        await transaction.itemDefinition.upsert({
-          where: { key: item.key },
-          create: {
-            key: item.key,
-            name: item.name,
-            description: item.description,
-            stackLimit: item.stackLimit,
-            metadata: {
-              category: 'MATERIAL',
-              rarity: 'COMMON',
-              icon: item.icon,
-              buyPriceSilver: 0,
-              sellPriceSilver: item.sellPriceSilver,
-              sellable: true,
-            },
-          },
-          update: {
-            name: item.name,
-            description: item.description,
-            stackLimit: item.stackLimit,
-            metadata: {
-              category: 'MATERIAL',
-              rarity: 'COMMON',
-              icon: item.icon,
-              buyPriceSilver: 0,
-              sellPriceSilver: item.sellPriceSilver,
-              sellable: true,
-            },
-          },
-        });
-      }
-
-      const expectedKeys: string[] = [];
-      for (const { definition, mapId, index, position } of planned) {
-        const key = `${definition.key}-${index + 1}`;
-        expectedKeys.push(key);
-        await transaction.mobDefinition.upsert({
-          where: { mapId_key: { mapId, key } },
-          create: {
-            mapId,
-            key,
-            name: definition.name,
-            x: position.x,
-            y: position.y,
-            level: definition.level,
-            outfitKey: definition.outfitKey,
-            stats: {
-              rank: definition.rank,
-              characterClass: definition.characterClass,
-              experience: definition.experience,
-              ...definition.stats,
-            },
-            lootTable: definition.loot,
-            respawnMs: definition.respawnMs,
-          },
-          update: {
-            name: definition.name,
-            x: position.x,
-            y: position.y,
-            level: definition.level,
-            outfitKey: definition.outfitKey,
-            stats: {
-              rank: definition.rank,
-              characterClass: definition.characterClass,
-              experience: definition.experience,
-              ...definition.stats,
-            },
-            lootTable: definition.loot,
-            respawnMs: definition.respawnMs,
-          },
-        });
-      }
-      await transaction.mobDefinition.deleteMany({
-        where: {
-          key: { startsWith: 'spawn-rabbit-' },
-          NOT: { key: { in: expectedKeys } },
-        },
-      });
-      await transaction.mobDefinition.deleteMany({
-        where: {
-          key: { startsWith: 'executioner-scorpion-' },
-          NOT: { key: { in: expectedKeys } },
-        },
-      });
-    });
   }
 
   private scheduleRespawn(mob: RuntimeMob): void {
