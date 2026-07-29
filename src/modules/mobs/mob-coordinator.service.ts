@@ -69,7 +69,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
 
   getMapMobs(mapId: string): MobStatePayload[] {
     return [...this.mobs.values()]
-      .filter((mob) => mob.mapId === mapId)
+      .filter((mob) => mob.mapId === mapId && mob.state !== 'RESPAWNING')
       .map((mob) => this.toPayload(mob));
   }
 
@@ -79,7 +79,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
         mob.mapId === mapId &&
         mob.x === x &&
         mob.y === y &&
-        mob.state !== 'CORPSE',
+        mob.state !== 'RESPAWNING',
     );
   }
 
@@ -140,15 +140,12 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    mob.state = 'CORPSE';
+    mob.state = 'RESPAWNING';
     mob.engagedCharacterId = undefined;
     const map = await this.maps.getMap(mob.mapId);
     map.collision[mob.y * map.width + mob.x] = 0;
     mob.respawnsAt = Date.now() + mob.respawnMs;
-    this.broadcastDefeated(mob.mapId, {
-      ...this.toPayload(mob),
-      respawnsAt: mob.respawnsAt,
-    });
+    this.broadcastDespawn(mob.mapId, { mobId: mob.id, respawnsAt: mob.respawnsAt });
     this.scheduleRespawn(mob);
 
     const session = this.world.getByCharacterId(playerActor.characterId);
@@ -219,7 +216,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
 
   private async tryRespawn(mobId: string): Promise<void> {
     const mob = this.mobs.get(mobId);
-    if (!mob || mob.state !== 'CORPSE' || this.shuttingDown) return;
+    if (!mob || mob.state !== 'RESPAWNING' || this.shuttingDown) return;
     if (this.world.isOccupied(mob.mapId, mob.x, mob.y)) {
       mob.respawnsAt = Date.now() + RESPAWN_OCCUPIED_RETRY_MS;
       this.scheduleRespawn(mob);
@@ -241,13 +238,13 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private broadcastDefeated(
+  private broadcastDespawn(
     mapId: string,
-    payload: MobStatePayload & { respawnsAt: number },
+    payload: { mobId: string; respawnsAt: number },
   ): void {
     for (const session of this.world.listSessions()) {
       if (session.activeInWorld && session.mapId === mapId) {
-        this.publisher.emit(session.socketId, 'world:mobDefeated', payload);
+        this.publisher.emit(session.socketId, 'world:mobDespawned', payload);
       }
     }
   }
@@ -279,7 +276,6 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       level: mob.level,
       outfitKey: mob.outfitKey,
       renderScale: mob.renderScale,
-      state: mob.state === 'CORPSE' ? 'CORPSE' : 'ALIVE',
     };
   }
 
