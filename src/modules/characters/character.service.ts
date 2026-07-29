@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '../../auth/auth-context.interface.js';
-import type { CharacterClass, PersistedCharacterState } from '../../common/domain/game.types.js';
+import type {
+  CharacterClass,
+  PersistedCharacterState,
+} from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { RealmService } from '../realm/realm.service.js';
 import { getDefaultOutfit, isOutfitUnlocked } from './outfit.catalog.js';
-import type { CreateCharacterInput, FirebaseUserRecord, StartingCharacterTemplate } from './character.types.js';
+import type {
+  CreateCharacterInput,
+  FirebaseUserRecord,
+  StartingCharacterTemplate,
+} from './character.types.js';
 
 export const MAX_CHARACTERS_PER_REALM = 5;
 
@@ -15,9 +22,40 @@ const STARTING_TEMPLATES: Readonly<Record<CharacterClass, StartingCharacterTempl
   ARCHER: { hp: 95, maxHp: 95, energy: 95, maxEnergy: 95, strength: 7, agility: 14, intelligence: 5, armor: 4 },
 };
 
+interface CharacterRow {
+  id: string;
+  userId: string;
+  realmId: string;
+  name: string;
+  class: string;
+  level: number;
+  experience: number;
+  outfitKey: string;
+  mapId: string;
+  x: number;
+  y: number;
+  direction: string;
+  combatState: string;
+  hp: number;
+  maxHp: number;
+  energy: number;
+  maxEnergy: number;
+  strength: number;
+  agility: number;
+  intelligence: number;
+  armor: number;
+  silver: number;
+  gold: number;
+  stateVersion: number;
+  lastSavedAt: Date;
+}
+
 @Injectable()
 export class CharacterService {
-  constructor(private readonly prisma: PrismaService, private readonly realmService: RealmService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realmService: RealmService,
+  ) {}
 
   async synchronizeFirebaseUser(auth: AuthContext): Promise<FirebaseUserRecord> {
     const user = await this.prisma.user.upsert({
@@ -26,71 +64,170 @@ export class CharacterService {
       update: { email: auth.email, displayName: auth.displayName },
       select: { id: true, firebaseUid: true, email: true, displayName: true, role: true },
     });
-    return { id: user.id, firebaseUid: user.firebaseUid, email: user.email ?? undefined, displayName: user.displayName ?? undefined, role: user.role };
+    return {
+      id: user.id,
+      firebaseUid: user.firebaseUid,
+      email: user.email ?? undefined,
+      displayName: user.displayName ?? undefined,
+      role: user.role,
+    };
   }
 
   async listCharactersForCurrentRealm(userId: string): Promise<PersistedCharacterState[]> {
     const realm = await this.realmService.getCurrentRealm();
-    const rows = await this.prisma.character.findMany({ where: { userId, realmId: realm.id }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
-    return rows.map((row) => this.toPersistedState(row));
-  }
-
-  async findCharacterForCurrentRealm(userId: string, characterId?: string): Promise<PersistedCharacterState | undefined> {
-    const realm = await this.realmService.getCurrentRealm();
-    const row = await this.prisma.character.findFirst({
-      where: { userId, realmId: realm.id, ...(characterId ? { id: characterId } : {}) },
+    const characters = await this.prisma.character.findMany({
+      where: { userId, realmId: realm.id },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
-    return row ? this.toPersistedState(row) : undefined;
+    return characters.map((character) => this.toPersistedState(character));
+  }
+
+  async findCharacterForCurrentRealm(
+    userId: string,
+    characterId?: string,
+  ): Promise<PersistedCharacterState | undefined> {
+    const realm = await this.realmService.getCurrentRealm();
+    const character = await this.prisma.character.findFirst({
+      where: {
+        userId,
+        realmId: realm.id,
+        ...(characterId ? { id: characterId } : {}),
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    return character ? this.toPersistedState(character) : undefined;
   }
 
   async createCharacter(userId: string, input: CreateCharacterInput): Promise<PersistedCharacterState> {
     const realm = await this.realmService.getCurrentRealm();
     const template = STARTING_TEMPLATES[input.characterClass];
-    const requestedOutfit = input.outfitKey ?? getDefaultOutfit(input.characterClass).key;
-    const outfitKey = isOutfitUnlocked(input.characterClass, 1, requestedOutfit) ? requestedOutfit : getDefaultOutfit(input.characterClass).key;
+    const defaultOutfit = getDefaultOutfit(input.characterClass).key;
+    const requestedOutfit = input.outfitKey ?? defaultOutfit;
+    const outfitKey = isOutfitUnlocked(input.characterClass, 1, requestedOutfit)
+      ? requestedOutfit
+      : defaultOutfit;
+
     try {
-      const row = await this.prisma.$transaction(async (tx) => {
-        const count = await tx.character.count({ where: { userId, realmId: realm.id } });
-        if (count >= MAX_CHARACTERS_PER_REALM) throw new GameError(GAME_ERROR_CODES.CHARACTER_LIMIT_REACHED, 'errors.character.limitReached', { maxCharacters: MAX_CHARACTERS_PER_REALM });
-        const map = await tx.map.findFirst({ where: { id: realm.defaultMapId, realmId: realm.id }, select: { id: true, spawnX: true, spawnY: true } });
-        if (!map) throw new GameError(GAME_ERROR_CODES.REALM_UNAVAILABLE, 'errors.realm.unavailable');
-        return tx.character.create({ data: {
-          userId, realmId: realm.id, name: input.name, class: input.characterClass, level: 1, experience: 0, outfitKey,
-          mapId: map.id, x: map.spawnX, y: map.spawnY, direction: 'SOUTH', combatState: 'IDLE',
-          hp: template.hp, maxHp: template.maxHp, energy: template.energy, maxEnergy: template.maxEnergy,
-          strength: template.strength, agility: template.agility, intelligence: template.intelligence, armor: template.armor,
-          silver: 0, gold: 0,
-        } });
+      const character = await this.prisma.$transaction(async (transaction) => {
+        const lockKey = `${userId}:${realm.id}`;
+        await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+        const count = await transaction.character.count({
+          where: { userId, realmId: realm.id },
+        });
+        if (count >= MAX_CHARACTERS_PER_REALM) {
+          throw new GameError(
+            GAME_ERROR_CODES.CHARACTER_LIMIT_REACHED,
+            'errors.character.limitReached',
+            { maxCharacters: MAX_CHARACTERS_PER_REALM },
+          );
+        }
+
+        const map = await transaction.map.findFirst({
+          where: { id: realm.defaultMapId, realmId: realm.id },
+          select: { id: true, spawnX: true, spawnY: true },
+        });
+        if (!map) {
+          throw new GameError(GAME_ERROR_CODES.REALM_UNAVAILABLE, 'errors.realm.unavailable');
+        }
+
+        return transaction.character.create({
+          data: {
+            userId,
+            realmId: realm.id,
+            name: input.name,
+            class: input.characterClass,
+            level: 1,
+            experience: 0,
+            outfitKey,
+            mapId: map.id,
+            x: map.spawnX,
+            y: map.spawnY,
+            direction: 'SOUTH',
+            combatState: 'IDLE',
+            hp: template.hp,
+            maxHp: template.maxHp,
+            energy: template.energy,
+            maxEnergy: template.maxEnergy,
+            strength: template.strength,
+            agility: template.agility,
+            intelligence: template.intelligence,
+            armor: template.armor,
+            silver: 0,
+            gold: 0,
+          },
+        });
       });
-      return this.toPersistedState(row);
+      return this.toPersistedState(character);
     } catch (error) {
       if (error instanceof GameError) throw error;
-      if (this.isUniqueConstraintError(error)) throw new GameError(GAME_ERROR_CODES.CHARACTER_NAME_TAKEN, 'errors.character.nameTaken');
+      if (this.isUniqueConstraintError(error)) {
+        throw new GameError(GAME_ERROR_CODES.CHARACTER_NAME_TAKEN, 'errors.character.nameTaken');
+      }
       throw error;
     }
   }
 
-  async updateOutfit(userId: string, characterId: string, outfitKey: string): Promise<PersistedCharacterState> {
+  async updateOutfit(
+    userId: string,
+    characterId: string,
+    outfitKey: string,
+  ): Promise<PersistedCharacterState> {
     const character = await this.findCharacterForCurrentRealm(userId, characterId);
-    if (!character) throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
-    if (!isOutfitUnlocked(character.characterClass, character.level, outfitKey)) throw new GameError(GAME_ERROR_CODES.OUTFIT_NOT_UNLOCKED, 'errors.character.outfitLocked');
-    const row = await this.prisma.character.update({ where: { id: character.id }, data: { outfitKey, stateVersion: { increment: 1 }, lastSavedAt: new Date() } });
-    return this.toPersistedState(row);
+    if (!character) {
+      throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
+    }
+    if (!isOutfitUnlocked(character.characterClass, character.level, outfitKey)) {
+      throw new GameError(GAME_ERROR_CODES.OUTFIT_NOT_UNLOCKED, 'errors.character.outfitLocked');
+    }
+
+    const updated = await this.prisma.character.update({
+      where: { id: character.id },
+      data: {
+        outfitKey,
+        stateVersion: { increment: 1 },
+        lastSavedAt: new Date(),
+      },
+    });
+    return this.toPersistedState(updated);
   }
 
-  private toPersistedState(character: any): PersistedCharacterState {
+  private toPersistedState(character: CharacterRow): PersistedCharacterState {
     return {
-      id: character.id, userId: character.userId, realmId: character.realmId, name: character.name,
-      characterClass: character.class, level: character.level, experience: character.experience, outfitKey: character.outfitKey,
-      mapId: character.mapId, x: character.x, y: character.y, direction: character.direction, combatState: character.combatState,
-      hp: character.hp, maxHp: character.maxHp, energy: character.energy, maxEnergy: character.maxEnergy,
-      strength: character.strength, agility: character.agility, intelligence: character.intelligence, armor: character.armor,
-      silver: character.silver, gold: character.gold, stateVersion: character.stateVersion, lastSavedAt: character.lastSavedAt,
+      id: character.id,
+      userId: character.userId,
+      realmId: character.realmId,
+      name: character.name,
+      characterClass: character.class as PersistedCharacterState['characterClass'],
+      level: character.level,
+      experience: character.experience,
+      outfitKey: character.outfitKey,
+      mapId: character.mapId,
+      x: character.x,
+      y: character.y,
+      direction: character.direction as PersistedCharacterState['direction'],
+      combatState: character.combatState as PersistedCharacterState['combatState'],
+      hp: character.hp,
+      maxHp: character.maxHp,
+      energy: character.energy,
+      maxEnergy: character.maxEnergy,
+      strength: character.strength,
+      agility: character.agility,
+      intelligence: character.intelligence,
+      armor: character.armor,
+      silver: character.silver,
+      gold: character.gold,
+      stateVersion: character.stateVersion,
+      lastSavedAt: character.lastSavedAt,
     };
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
-    return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'P2002'
+    );
   }
 }
