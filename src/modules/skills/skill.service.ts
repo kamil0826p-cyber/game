@@ -125,6 +125,22 @@ export class SkillService {
     return this.getSnapshot(userId, characterId);
   }
 
+  async persistCooldowns(
+    characterId: string,
+    cooldowns: Readonly<Record<string, number>>,
+  ): Promise<void> {
+    const entries = Object.entries(cooldowns);
+    if (entries.length === 0) return;
+    await this.prisma.$transaction(
+      entries.map(([key, cooldownTurnsRemaining]) =>
+        this.prisma.characterSkill.updateMany({
+          where: { characterId, skillDefinition: { key } },
+          data: { cooldownTurnsRemaining: Math.max(0, Math.trunc(cooldownTurnsRemaining)) },
+        }),
+      ),
+    );
+  }
+
   private buildSnapshot(
     characterClass: CharacterClass,
     characterLevel: number,

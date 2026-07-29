@@ -11,6 +11,11 @@ export interface CombatSkillIntent {
   skillKey: string;
 }
 
+interface ActionBarProps {
+  disabled?: boolean;
+  disabledLabel?: string;
+}
+
 const blockReasonLabelKey = {
   LOCKED: 'hud.action.locked',
   OUT_OF_COMBAT: 'hud.action.combatOnly',
@@ -22,7 +27,10 @@ const isEditable = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 
-export function ActionBar(): React.JSX.Element {
+export function ActionBar({
+  disabled = false,
+  disabledLabel,
+}: ActionBarProps = {}): React.JSX.Element {
   const { locale, t } = useI18n();
   const state = useGameState();
   const [active, setActive] = useState<number>();
@@ -33,6 +41,7 @@ export function ActionBar(): React.JSX.Element {
 
   const activate = (skill: SkillDefinitionPayload, index: number): void => {
     if (
+      disabled ||
       !state.self ||
       getSkillUseBlockReason(skill, state.self.combatState, state.self.energy)
     ) {
@@ -83,16 +92,19 @@ export function ActionBar(): React.JSX.Element {
           state.self.combatState,
           state.self.energy,
         );
-        const reason = blockReason
-          ? t(blockReasonLabelKey[blockReason])
-          : t('hud.action.ready');
+        const reason =
+          disabled && !blockReason
+            ? (disabledLabel ?? t('hud.action.ready'))
+            : blockReason
+              ? t(blockReasonLabelKey[blockReason])
+              : t('hud.action.ready');
 
         return (
           <span key={skill.key} className="hud-tooltip-anchor">
             <button
               type="button"
               aria-label={`${localized.name} (${index + 1}): ${reason}`}
-              disabled={blockReason !== undefined}
+              disabled={disabled || blockReason !== undefined}
               onClick={() => activate(skill, index)}
               className={[
                 'action-slot',

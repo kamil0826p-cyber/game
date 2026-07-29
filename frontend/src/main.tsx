@@ -8,6 +8,7 @@ import './styles.css';
 import './ui-refresh.css';
 import './medieval-gold-theme.css';
 import './hud-tooltips.css';
+import './combat.css';
 
 const root = document.getElementById('root');
 if (!root) {

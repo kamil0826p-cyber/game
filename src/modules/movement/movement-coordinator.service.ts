@@ -23,6 +23,7 @@ export class MovementCoordinatorService implements OnModuleDestroy {
     requestId: string,
   ): Promise<SocketAck<MovementCommittedPayload>> {
     this.assertAcceptingCommands();
+    this.assertMovementAllowed(session);
     this.pathMovement.cancel(session.characterId);
     return this.serialExecutor.run(session.characterId, async () => {
       const result = await this.movement.performStep(session, direction, 'DIRECT', requestId);
@@ -39,6 +40,7 @@ export class MovementCoordinatorService implements OnModuleDestroy {
     targetY: number,
   ): Promise<{ requestId: string; pathLength: number }> {
     this.assertAcceptingCommands();
+    this.assertMovementAllowed(session);
     return this.serialExecutor.run(session.characterId, () =>
       this.pathMovement.startPath(session, requestId, targetX, targetY),
     );
@@ -63,6 +65,15 @@ export class MovementCoordinatorService implements OnModuleDestroy {
   quiesce<T>(session: PlayerSession, task: () => Promise<T> | T): Promise<T> {
     this.pathMovement.cancel(session.characterId);
     return this.serialExecutor.run(session.characterId, async () => task());
+  }
+
+  private assertMovementAllowed(session: PlayerSession): void {
+    if (session.combatState !== 'IDLE') {
+      throw new GameError(
+        GAME_ERROR_CODES.COMBAT_MOVEMENT_BLOCKED,
+        'errors.combat.movementBlocked',
+      );
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

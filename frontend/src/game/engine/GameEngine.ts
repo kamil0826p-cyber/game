@@ -1,9 +1,4 @@
-import {
-  Application,
-  Container,
-  Rectangle,
-  type FederatedPointerEvent,
-} from 'pixi.js';
+import { Application, Container, Rectangle, type FederatedPointerEvent } from 'pixi.js';
 import type { PublicPlayerState } from '../../contracts/game';
 import type { NpcStatePayload } from '../../contracts/socket';
 import type { LoadedMapDefinition } from '../../contracts/tiled';
@@ -143,10 +138,15 @@ export class GameEngine {
       this.reportViewport();
       if (state.portalTransition !== 'idle') {
         gameStore.setPortalTransition('fade-in');
-        this.transitionTimer = window.setTimeout(() => gameStore.setPortalTransition('idle'), 280);
+        this.transitionTimer = window.setTimeout(
+          () => gameStore.setPortalTransition('idle'),
+          280,
+        );
       }
     } catch (error) {
-      gameStore.setFatalError(error instanceof Error ? error.message : 'The current map could not be loaded.');
+      gameStore.setFatalError(
+        error instanceof Error ? error.message : 'The current map could not be loaded.',
+      );
     }
   }
 
@@ -154,7 +154,15 @@ export class GameEngine {
     const expected = new Map(npcs.map((npc) => [npc.id, npc]));
     for (const [npcId, view] of this.npcViews) {
       const npc = expected.get(npcId);
-      if (!npc || view.npc.x !== npc.x || view.npc.y !== npc.y || view.npc.name !== npc.name || view.npc.outfitKey !== npc.outfitKey || view.npc.interactionType !== npc.interactionType || view.npc.interactionRadius !== npc.interactionRadius) {
+      if (
+        !npc ||
+        view.npc.x !== npc.x ||
+        view.npc.y !== npc.y ||
+        view.npc.name !== npc.name ||
+        view.npc.outfitKey !== npc.outfitKey ||
+        view.npc.interactionType !== npc.interactionType ||
+        view.npc.interactionRadius !== npc.interactionRadius
+      ) {
         view.destroy();
         this.npcViews.delete(npcId);
       }
@@ -167,10 +175,19 @@ export class GameEngine {
     }
   }
 
-  private readonly interactWithNpc = (npc: NpcStatePayload, point: NpcInteractionPoint): void => {
+  private readonly interactWithNpc = (
+    npc: NpcStatePayload,
+    point: NpcInteractionPoint,
+  ): void => {
     const state = gameStore.getSnapshot();
     const self = state.self;
-    if (!self || state.phase !== 'in-world' || !state.socketConnected || state.portalTransition !== 'idle') return;
+    if (
+      !self ||
+      state.phase !== 'in-world' ||
+      !state.socketConnected ||
+      state.portalTransition !== 'idle'
+    )
+      return;
     if (!canInteractWithNpc(self, npc)) {
       gameStore.addNotification({
         code: 'NPC_TOO_FAR',
@@ -183,12 +200,14 @@ export class GameEngine {
 
   private syncCharacters(state: GameState, immediate = false): void {
     const self = state.self;
-    if (!self || !state.map || !this.currentMap || state.map.key !== this.currentMap.key) return;
+    if (!self || !state.map || !this.currentMap || state.map.key !== this.currentMap.key)
+      return;
 
     const expected = new Map<string, { player: PublicPlayerState; local: boolean }>();
     expected.set(self.characterId, { player: self, local: true });
     for (const player of Object.values(state.players)) {
-      if (player.mapId === self.mapId) expected.set(player.characterId, { player, local: false });
+      if (player.mapId === self.mapId)
+        expected.set(player.characterId, { player, local: false });
     }
 
     for (const [characterId, entry] of expected) {
@@ -225,15 +244,25 @@ export class GameEngine {
     if (!localView || !this.currentMap) return;
     const screenWidth = this.app.screen.width;
     const screenHeight = this.app.screen.height;
-    const desiredX = this.clampCamera(localView.worldX, screenWidth, this.mapRenderer.pixelWidth);
-    const desiredY = this.clampCamera(localView.worldY, screenHeight, this.mapRenderer.pixelHeight);
+    const desiredX = this.clampCamera(
+      localView.worldX,
+      screenWidth,
+      this.mapRenderer.pixelWidth,
+    );
+    const desiredY = this.clampCamera(
+      localView.worldY,
+      screenHeight,
+      this.mapRenderer.pixelHeight,
+    );
     this.cameraX += (desiredX - this.cameraX) * 0.15;
     this.cameraY += (desiredY - this.cameraY) * 0.15;
     this.world.position.set(screenWidth / 2 - this.cameraX, screenHeight / 2 - this.cameraY);
-    this.host.dispatchEvent(new CustomEvent<LocalPlayerScreenPosition>(LOCAL_PLAYER_SCREEN_EVENT, {
-      bubbles: true,
-      detail: { x: localView.worldX + this.world.x, y: localView.worldY + this.world.y },
-    }));
+    this.host.dispatchEvent(
+      new CustomEvent<LocalPlayerScreenPosition>(LOCAL_PLAYER_SCREEN_EVENT, {
+        bubbles: true,
+        detail: { x: localView.worldX + this.world.x, y: localView.worldY + this.world.y },
+      }),
+    );
   }
 
   private clampCamera(value: number, viewportSize: number, worldSize: number): number {
@@ -247,13 +276,26 @@ export class GameEngine {
     const state = gameStore.getSnapshot();
     const map = this.currentMap;
     const self = state.self;
-    if (state.phase !== 'in-world' || !state.socketConnected || state.portalTransition !== 'idle' || state.activeModal || !map || !self) return;
+    if (
+      state.phase !== 'in-world' ||
+      !state.socketConnected ||
+      state.portalTransition !== 'idle' ||
+      state.activeModal ||
+      self?.combatState !== 'IDLE' ||
+      !map ||
+      !self
+    )
+      return;
 
     const local = this.world.toLocal(event.global);
-    const target = { x: Math.floor(local.x / WORLD_TILE_SIZE), y: Math.floor(local.y / WORLD_TILE_SIZE) };
+    const target = {
+      x: Math.floor(local.x / WORLD_TILE_SIZE),
+      y: Math.floor(local.y / WORLD_TILE_SIZE),
+    };
     const occupied = new Set<string>();
     if (state.map?.zoneType !== 'SAFE') {
-      for (const player of Object.values(state.players)) occupied.add(`${player.x},${player.y}`);
+      for (const player of Object.values(state.players))
+        occupied.add(`${player.x},${player.y}`);
     }
     for (const npc of state.npcs) occupied.add(`${npc.x},${npc.y}`);
     const path = findPath(map, { x: self.x, y: self.y }, target, {
@@ -264,12 +306,18 @@ export class GameEngine {
 
     if (path.length === 0) {
       if (target.x === self.x && target.y === self.y) void this.client.stopMovement();
-      else gameStore.addNotification({ code: 'PATH_UNAVAILABLE', message: 'No walkable route reaches that tile.' });
+      else
+        gameStore.addNotification({
+          code: 'PATH_UNAVAILABLE',
+          message: 'No walkable route reaches that tile.',
+        });
       return;
     }
 
     gameStore.setPlannedPath(path);
-    void this.client.requestTarget(target.x, target.y).catch(() => gameStore.clearPlannedPath());
+    void this.client
+      .requestTarget(target.x, target.y)
+      .catch(() => gameStore.clearPlannedPath());
   };
 
   private readonly onContextMenu = (event: MouseEvent): void => {
@@ -285,8 +333,14 @@ export class GameEngine {
 
   private reportViewport(): void {
     if (!this.currentMap) return;
-    const halfWidth = Math.min(MAX_VIEWPORT_HALF_WIDTH, Math.max(1, Math.ceil(this.app.screen.width / WORLD_TILE_SIZE / 2) + 2));
-    const halfHeight = Math.min(MAX_VIEWPORT_HALF_HEIGHT, Math.max(1, Math.ceil(this.app.screen.height / WORLD_TILE_SIZE / 2) + 2));
+    const halfWidth = Math.min(
+      MAX_VIEWPORT_HALF_WIDTH,
+      Math.max(1, Math.ceil(this.app.screen.width / WORLD_TILE_SIZE / 2) + 2),
+    );
+    const halfHeight = Math.min(
+      MAX_VIEWPORT_HALF_HEIGHT,
+      Math.max(1, Math.ceil(this.app.screen.height / WORLD_TILE_SIZE / 2) + 2),
+    );
     const key = `${halfWidth}:${halfHeight}`;
     if (key === this.lastViewportReport) return;
     this.lastViewportReport = key;

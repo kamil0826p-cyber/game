@@ -5,7 +5,8 @@ import { PrismaService } from '../../database/prisma.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { capturePlayerState, type PlayerStateSnapshot } from './player-state-snapshot.js';
 
-export type PersistenceReason = 'autosave' | 'disconnect' | 'portal' | 'shutdown' | 'repair';
+export type PersistenceReason =
+  'autosave' | 'combat' | 'disconnect' | 'portal' | 'shutdown' | 'repair';
 
 @Injectable()
 export class PlayerPersistenceService {
@@ -66,10 +67,7 @@ export class PlayerPersistenceService {
           where: { id: snapshot.characterId },
           select: { realmId: true, stateVersion: true },
         });
-        if (
-          current?.realmId === snapshot.realmId &&
-          current.stateVersion >= snapshot.revision
-        ) {
+        if (current?.realmId === snapshot.realmId && current.stateVersion >= snapshot.revision) {
           this.logger.warn(
             `Skipped stale character snapshot ${snapshot.characterId} at revision ${snapshot.revision}.`,
           );
@@ -122,10 +120,7 @@ export class PlayerPersistenceService {
     }
 
     let cursor = 0;
-    const workerCount = Math.min(
-      this.config.values.AUTOSAVE_CONCURRENCY,
-      characterIds.length,
-    );
+    const workerCount = Math.min(this.config.values.AUTOSAVE_CONCURRENCY, characterIds.length);
     const workers = Array.from({ length: workerCount }, async () => {
       while (cursor < characterIds.length) {
         const characterId = characterIds[cursor]!;

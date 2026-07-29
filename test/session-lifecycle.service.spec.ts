@@ -5,6 +5,7 @@ import type { GameConfigService } from '../src/config/game-config.service.js';
 import type { GameSocket } from '../src/contracts/socket.events.js';
 import type { LocalizationService } from '../src/i18n/localization.service.js';
 import type { CharacterService } from '../src/modules/characters/character.service.js';
+import type { CombatService } from '../src/modules/combat/combat.service.js';
 import type { MapService } from '../src/modules/maps/map.service.js';
 import type { MovementCoordinatorService } from '../src/modules/movement/movement-coordinator.service.js';
 import type { MovementService } from '../src/modules/movement/movement.service.js';
@@ -30,6 +31,9 @@ const skillService = {
     skills: [],
   }),
 } as unknown as SkillService;
+const combatService = {
+  handleDisconnect: vi.fn(async () => undefined),
+} as unknown as CombatService;
 
 const characterState = (
   overrides: Partial<PersistedCharacterState> = {},
@@ -113,6 +117,7 @@ describe('SessionLifecycleService', () => {
       } as unknown as LocalizationService,
       new SessionClaimExecutor(),
       skillService,
+      combatService,
     );
 
     const initialization = service.initializeConnection(client);
@@ -232,6 +237,7 @@ describe('SessionLifecycleService', () => {
       } as unknown as LocalizationService,
       new SessionClaimExecutor(),
       skillService,
+      combatService,
     );
 
     await service.initializeConnection(client);
@@ -354,6 +360,7 @@ describe('SessionLifecycleService', () => {
       } as unknown as LocalizationService,
       new SessionClaimExecutor(),
       skillService,
+      combatService,
     );
     const createClient = (id: string) =>
       ({

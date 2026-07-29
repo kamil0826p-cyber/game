@@ -63,6 +63,18 @@ export class TradeService {
     return this.snapshot(trade.id, characterId);
   }
 
+  async hasActive(characterId: string): Promise<boolean> {
+    const trade = await this.prisma.tradeSession.findFirst({
+      where: {
+        OR: [{ initiatorCharacterId: characterId }, { recipientCharacterId: characterId }],
+        status: { in: [...ACTIVE] },
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+    return Boolean(trade);
+  }
+
   async request(
     userId: string,
     characterId: string,
@@ -71,6 +83,8 @@ export class TradeService {
     if (characterId === targetCharacterId) this.fail('TRADE_SELF', 'errors.trade.self');
     const initiator = this.online(characterId, userId);
     const recipient = this.online(targetCharacterId);
+    this.idle(initiator);
+    this.idle(recipient);
     this.near(initiator, recipient);
     const trade = await this.prisma.$transaction(async (tx) => {
       await this.lockPlayers(tx, characterId, targetCharacterId);
@@ -121,8 +135,13 @@ export class TradeService {
         this.fail('TRADE_FORBIDDEN', 'errors.trade.forbidden');
       this.expires(trade);
       if (trade.status !== 'REQUESTED') this.fail('TRADE_NOT_OPEN', 'errors.trade.notOpen');
-      if (accept)
-        this.near(this.online(trade.initiatorCharacterId), this.online(trade.recipientCharacterId));
+      if (accept) {
+        const initiator = this.online(trade.initiatorCharacterId);
+        const recipient = this.online(trade.recipientCharacterId);
+        this.idle(initiator);
+        this.idle(recipient);
+        this.near(initiator, recipient);
+      }
       await tx.tradeSession.update({
         where: { id: tradeId },
         data: accept
@@ -520,7 +539,11 @@ export class TradeService {
   private openNearby(trade: Trade): void {
     this.expires(trade);
     if (trade.status !== 'OPEN') this.fail('TRADE_NOT_OPEN', 'errors.trade.notOpen');
-    this.near(this.online(trade.initiatorCharacterId), this.online(trade.recipientCharacterId));
+    const initiator = this.online(trade.initiatorCharacterId);
+    const recipient = this.online(trade.recipientCharacterId);
+    this.idle(initiator);
+    this.idle(recipient);
+    this.near(initiator, recipient);
   }
   private expires(trade: Trade): void {
     if (trade.expiresAt.getTime() <= Date.now()) this.fail('TRADE_EXPIRED', 'errors.trade.expired');
@@ -537,6 +560,9 @@ export class TradeService {
   ): void {
     if (a.realmId !== b.realmId || !isTradeDistanceAllowed(a, b))
       this.fail('TRADE_TOO_FAR', 'errors.trade.tooFar');
+  }
+  private idle(session: { combatState: string }): void {
+    if (session.combatState !== 'IDLE') this.fail('TRADE_BUSY', 'errors.trade.busy');
   }
   private async reset(tx: Prisma.TransactionClient, tradeId: string): Promise<void> {
     await tx.tradeSession.update({
