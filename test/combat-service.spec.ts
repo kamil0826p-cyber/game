@@ -59,9 +59,11 @@ const services: CombatService[] = [];
 const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP') => {
   const first = session('first', 4);
   const second = session('second', 5);
+  const third = session('third', 6);
   const sessions = new Map([
     [first.characterId, first],
     [second.characterId, second],
+    [third.characterId, third],
   ]);
   const publisher = { emit: vi.fn() };
   const combat = new CombatService(
@@ -121,7 +123,7 @@ const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP') => {
     new KeyedSerialExecutor(),
   );
   services.push(combat);
-  return { combat, first, second, publisher };
+  return { combat, first, second, third, publisher };
 };
 
 afterEach(async () => {
@@ -157,5 +159,14 @@ describe('CombatService PVP policy', () => {
     expect(snapshot.status).toBe('ACTIVE');
     expect(first.combatState).toBe('IN_BATTLE');
     expect(second.combatState).toBe('IN_BATTLE');
+  });
+
+  it('rejects a third player attacking someone who is already in combat', async () => {
+    const { combat, first, second, third } = harness('PVP');
+    await combat.request(first.userId, first.characterId, second.characterId);
+
+    await expect(
+      combat.request(third.userId, third.characterId, second.characterId),
+    ).rejects.toMatchObject({ code: 'COMBAT_BUSY' });
   });
 });

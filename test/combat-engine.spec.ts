@@ -45,6 +45,14 @@ const activeCombat = () => {
 };
 
 describe('CombatEngine', () => {
+  it('starts without emitting a fake opening action', () => {
+    const { engine, runtime } = activeCombat();
+
+    const snapshot = engine.snapshot(runtime);
+
+    expect(snapshot.recentActions).toEqual([]);
+  });
+
   it('starts with deterministic initiative and resolves a server-side basic attack', () => {
     const { engine, runtime } = activeCombat();
 
@@ -55,6 +63,7 @@ describe('CombatEngine', () => {
     expect(snapshot.activeActorId).toBe('second');
     expect(target.hp).toBeLessThan(target.maxHp);
     expect(snapshot.recentActions.at(-1)).toMatchObject({
+      sequence: 1,
       actorId: 'first',
       action: 'BASIC_ATTACK',
       animationKey: 'basic-attack',

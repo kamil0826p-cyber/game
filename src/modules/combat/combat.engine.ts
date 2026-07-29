@@ -76,19 +76,6 @@ export class CombatEngine {
     runtime.activeActorId = firstInitiative >= secondInitiative ? first.actorId : second.actorId;
     runtime.turnStartedAt = now;
     runtime.turnEndsAt = now + COMBAT_TURN_TTL_MS;
-    this.appendEvent(runtime, {
-      actorId: runtime.activeActorId,
-      action: 'COMBAT_STARTED',
-      label: 'Combat started',
-      animationKey: 'combat-start',
-      visual: {
-        castEffectKey: 'combat-start:cast',
-        impactEffectKey: 'combat-start:impact',
-        accentColor: '#f5d88a',
-      },
-      results: [],
-      occurredAt: now,
-    });
     return this.snapshot(runtime);
   }
 

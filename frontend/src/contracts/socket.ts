@@ -156,7 +156,7 @@ export interface CombatActionResolutionPayload {
   sequence: number;
   actorId: string;
   targetActorId?: string;
-  action: 'COMBAT_STARTED' | 'BASIC_ATTACK' | 'SKILL' | 'STATUS_TICK' | 'TURN_SKIPPED';
+  action: 'BASIC_ATTACK' | 'SKILL' | 'STATUS_TICK' | 'TURN_SKIPPED';
   skillKey?: string;
   label: string;
   animationKey: string;
