@@ -2,7 +2,7 @@ import type { CharacterClass } from '../../common/domain/game.types.js';
 import type { CombatActorInput } from '../combat/combat.types.js';
 import type { MobLootEntry, MobRank } from './mob.catalog.js';
 
-export type MobRuntimeState = 'ALIVE' | 'IN_COMBAT' | 'CORPSE';
+export type MobRuntimeState = 'ALIVE' | 'IN_COMBAT' | 'RESPAWNING';
 
 export interface RuntimeMob {
   id: string;
