@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CharacterClass, Direction } from '../../contracts/game';
+import { getIdlePose, getWalkPose } from '../../game/engine/outfitAnimation';
 import { staticOutfitLoader } from '../../game/engine/StaticOutfitLoader';
 
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
@@ -65,8 +66,27 @@ export function OutfitPreview({
         const height = mobImage.naturalHeight * scale;
         context.drawImage(mobImage, (96 - width) / 2, 144 - height - 12, width, height);
       } else if (!mob && outfitSheet) {
-        const frame = animated ? Math.floor((now - start) / 120) % 4 : 0;
-        context.drawImage(outfitSheet, frame * 32, directionRows[direction] * 48, 32, 48, 0, 0, 96, 144);
+        const pose = animated
+          ? getWalkPose(now, start, 720)
+          : getIdlePose(0);
+        const frame = animated ? pose.frame : 0;
+
+        context.save();
+        context.translate(48, 144 + pose.offsetY * 3);
+        context.rotate(pose.rotation);
+        context.scale(pose.scaleX, pose.scaleY);
+        context.drawImage(
+          outfitSheet,
+          frame * 32,
+          directionRows[direction] * 48,
+          32,
+          48,
+          -48,
+          -144,
+          96,
+          144,
+        );
+        context.restore();
       } else {
         drawFallback();
       }
