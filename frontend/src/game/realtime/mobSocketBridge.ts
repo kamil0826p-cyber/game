@@ -1,6 +1,11 @@
 import type { Socket } from 'socket.io-client';
-import type { CombatSnapshot, ClientToServerEvents, ServerToClientEvents, SocketAck } from '../../contracts/socket';
 import type { MobRewardPayload, MobStatePayload } from '../../contracts/mob';
+import type {
+  ClientToServerEvents,
+  CombatSnapshot,
+  ServerToClientEvents,
+  SocketAck,
+} from '../../contracts/socket';
 import { createRequestId } from '../../utils/requestId';
 import { gameStore } from '../state/gameStore';
 import { mobStore } from '../state/mobStore';
@@ -19,6 +24,7 @@ declare module './GameSocketClient' {
   }
 }
 
+export const MOB_REWARD_EVENT = 'game:mob-reward';
 const ACK_TIMEOUT_MS = 8_000;
 
 export function installMobSocketBridge(client: GameSocketClient): void {
@@ -63,6 +69,8 @@ export function installMobSocketBridge(client: GameSocketClient): void {
       patch(patch: { self: MobRewardPayload['self'] }): void;
     };
     internal.patch({ self: reward.self });
+    window.dispatchEvent(new CustomEvent<MobRewardPayload>(MOB_REWARD_EVENT, { detail: reward }));
+    void client.getSkills().catch(() => undefined);
   };
 
   const bind = (): void => {
@@ -75,6 +83,7 @@ export function installMobSocketBridge(client: GameSocketClient): void {
       void requestMobs().catch(() => undefined);
     });
     socket.on('world:mobSpawned', (mob) => mobStore.upsert(mob));
+    socket.on('world:mobDefeated', (mob) => mobStore.upsert(mob));
     socket.on('world:mobDespawned', ({ mobId }) => mobStore.remove(mobId));
     socket.on('mob:rewards', applyReward);
     socket.on('combat:updated', (combat) => {
