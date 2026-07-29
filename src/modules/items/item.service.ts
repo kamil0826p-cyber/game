@@ -148,7 +148,7 @@ export class ItemService {
     return this.snapshot(userId, characterId, true);
   }
 
-  async discard(userId: string, characterId: string, itemId: string, quantity: number): Promise<InventorySnapshot> {
+  async destroy(userId: string, characterId: string, itemId: string, quantity: number): Promise<InventorySnapshot> {
     this.assertQuantity(quantity);
     await this.prisma.$transaction(async (tx) => {
       const item = await this.requireOwnedItem(tx, userId, characterId, itemId);
