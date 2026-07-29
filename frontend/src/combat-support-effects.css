@@ -6,9 +6,9 @@
 .combat-support-aura {
   position: absolute;
   z-index: 12;
-  bottom: 31%;
+  bottom: 29%;
   width: 10rem;
-  height: 12rem;
+  height: 13rem;
   opacity: 0;
   animation: combat-support-aura-enter 920ms ease-out both;
 }
@@ -27,36 +27,80 @@
 
 .combat-support-sigil {
   position: absolute;
-  top: 0.2rem;
+  top: 0.15rem;
   left: 50%;
-  width: 4.8rem;
-  height: 4.8rem;
+  width: 4.2rem;
+  height: 4.2rem;
   border: 3px double var(--combat-accent);
-  border-radius: 46% 46% 54% 54%;
+  border-radius: 42% 42% 58% 58%;
   background:
     linear-gradient(135deg, transparent 46%, rgba(255, 255, 255, 0.82) 48% 52%, transparent 54%),
-    radial-gradient(circle, rgba(255, 255, 255, 0.35), transparent 62%);
+    radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 64%);
   box-shadow:
-    inset 0 0 24px color-mix(in srgb, var(--combat-accent) 62%, transparent),
-    0 0 28px var(--combat-accent);
+    inset 0 0 20px color-mix(in srgb, var(--combat-accent) 58%, transparent),
+    0 0 26px var(--combat-accent);
   transform: translateX(-50%) rotate(45deg) scale(0.25);
   animation: combat-support-sigil 820ms ease-out both;
 }
 
+/* The aura is no longer a flat ellipse behind the actor. The side arcs wrap
+   around the silhouette while the bright waist wave reads as the front half. */
 .combat-support-ring {
   position: absolute;
-  right: 0.6rem;
-  bottom: 0.1rem;
-  left: 0.6rem;
-  height: 2.8rem;
-  border: 3px solid var(--combat-accent);
+  bottom: 0.55rem;
+  left: 50%;
+  width: 7.4rem;
+  height: 10.2rem;
+  border: 2px solid transparent;
+  border-right-color: color-mix(in srgb, var(--combat-accent) 72%, transparent);
+  border-left-color: color-mix(in srgb, var(--combat-accent) 72%, transparent);
   border-radius: 50%;
   opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--combat-accent) 12%, transparent),
+    transparent 62%
+  );
   box-shadow:
-    inset 0 0 18px var(--combat-accent),
-    0 0 22px var(--combat-accent);
-  transform: scale(0.25) rotateX(62deg);
-  animation: combat-support-ring 900ms 80ms ease-out both;
+    inset 0 0 24px color-mix(in srgb, var(--combat-accent) 22%, transparent),
+    0 0 20px color-mix(in srgb, var(--combat-accent) 45%, transparent);
+  transform: translateX(-50%) scale(0.35, 0.55);
+  animation: combat-support-ring 900ms 60ms ease-out both;
+}
+
+.combat-support-ring::before {
+  position: absolute;
+  top: 54%;
+  left: 50%;
+  width: 8.8rem;
+  height: 2.7rem;
+  border-bottom: 3px solid var(--combat-accent);
+  border-radius: 50%;
+  opacity: 0;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--combat-accent) 72%, transparent);
+  content: '';
+  transform: translate(-50%, -50%) rotateX(66deg) scale(0.35);
+  animation: combat-support-front-wave 820ms 105ms ease-out both;
+}
+
+.combat-support-ring::after {
+  position: absolute;
+  top: 16%;
+  right: 17%;
+  bottom: 12%;
+  left: 17%;
+  border-radius: 48%;
+  opacity: 0;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--combat-accent) 18%, transparent) 42%,
+    color-mix(in srgb, var(--combat-accent) 28%, transparent) 58%,
+    transparent
+  );
+  content: '';
+  filter: blur(7px);
+  animation: combat-support-core 780ms 80ms ease-out both;
 }
 
 .combat-support-aura i {
@@ -73,12 +117,12 @@
 }
 
 .combat-support-aura i:nth-of-type(1) {
-  margin-left: -3.8rem;
+  margin-left: -3.6rem;
   animation-delay: 40ms;
 }
 
 .combat-support-aura i:nth-of-type(2) {
-  margin-left: -2.2rem;
+  margin-left: -2.1rem;
   animation-delay: 130ms;
 }
 
@@ -93,12 +137,12 @@
 }
 
 .combat-support-aura i:nth-of-type(5) {
-  margin-left: 2.5rem;
+  margin-left: 2.4rem;
   animation-delay: 80ms;
 }
 
 .combat-support-aura i:nth-of-type(6) {
-  margin-left: 3.8rem;
+  margin-left: 3.6rem;
   animation-delay: 220ms;
 }
 
@@ -109,7 +153,7 @@
   }
   22% {
     opacity: 1;
-    filter: brightness(1.7);
+    filter: brightness(1.55);
   }
   72% {
     opacity: 1;
@@ -135,21 +179,60 @@
   }
   100% {
     opacity: 0;
-    transform: translateX(-50%) translateY(-1.2rem) rotate(205deg) scale(1.2);
+    transform: translateX(-50%) translateY(-1rem) rotate(205deg) scale(1.12);
   }
 }
 
 @keyframes combat-support-ring {
   0% {
     opacity: 0;
-    transform: scale(0.2) rotateX(62deg);
+    transform: translateX(-50%) scale(0.35, 0.55);
   }
-  35% {
-    opacity: 0.95;
+  32% {
+    opacity: 0.82;
+    transform: translateX(-50%) scale(1, 1);
+  }
+  72% {
+    opacity: 0.68;
+    transform: translateX(-50%) scale(1.04, 1.02);
   }
   100% {
     opacity: 0;
-    transform: scale(1.45) rotateX(62deg);
+    transform: translateX(-50%) scale(1.22, 1.08);
+  }
+}
+
+@keyframes combat-support-front-wave {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotateX(66deg) scale(0.35);
+  }
+  36% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotateX(66deg) scale(1);
+  }
+  72% {
+    opacity: 0.9;
+    transform: translate(-50%, -58%) rotateX(66deg) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -75%) rotateX(66deg) scale(1.3);
+  }
+}
+
+@keyframes combat-support-core {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  40% {
+    opacity: 0.8;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(1.08);
   }
 }
 
@@ -181,6 +264,8 @@
   .combat-support-aura,
   .combat-support-sigil,
   .combat-support-ring,
+  .combat-support-ring::before,
+  .combat-support-ring::after,
   .combat-support-aura i {
     animation-duration: 1ms;
   }
