@@ -15,6 +15,7 @@ export interface RuntimeMob {
   level: number;
   characterClass: CharacterClass;
   outfitKey: string;
+  renderScale: number;
   respawnMs: number;
   experience: number;
   stats: {
