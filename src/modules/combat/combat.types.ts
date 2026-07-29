@@ -29,6 +29,7 @@ export interface CombatRuntimeActor {
   characterClass: 'MAGE' | 'WARRIOR' | 'ARCHER';
   level: number;
   outfitKey: string;
+  renderScale?: number;
   hp: number;
   maxHp: number;
   energy: number;

@@ -27,9 +27,9 @@ type CatalogDefinition = { key: string; name: string; description: string; stack
 type CharacterStats = { strength: number; agility: number; intelligence: number; armor: number; maxHp: number; maxEnergy: number };
 
 const CATALOG: readonly CatalogDefinition[] = [
-  { key: 'traveler-sword', name: 'Traveler Sword', description: 'A dependable steel blade for a beginning warrior.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'COMMON', icon: '⚔', equipmentSlot: 'MAIN_HAND', requiredClass: 'WARRIOR', statBonuses: { strength: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'apprentice-staff', name: 'Apprentice Staff', description: 'A simple focus for novice spellcasters.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'ARTIFACT', icon: '✦', equipmentSlot: 'MAIN_HAND', requiredClass: 'MAGE', statBonuses: { intelligence: 3, maxEnergy: 10 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'field-bow', name: 'Field Bow', description: 'A light bow made for quick shots.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'MYTHIC', icon: '➶', equipmentSlot: 'MAIN_HAND', requiredClass: 'ARCHER', statBonuses: { agility: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
+  { key: 'traveler-sword', name: 'Traveler Sword', description: 'A dependable steel blade for a beginning warrior.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'COMMON', icon: '⚔', equipmentSlot: 'MAIN_HAND', requiredClass: 'WARRIOR', minimumLevel: 5, statBonuses: { strength: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
+  { key: 'apprentice-staff', name: 'Apprentice Staff', description: 'A simple focus for novice spellcasters.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'ARTIFACT', icon: '✦', equipmentSlot: 'MAIN_HAND', requiredClass: 'MAGE', minimumLevel: 5, statBonuses: { intelligence: 3, maxEnergy: 10 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
+  { key: 'field-bow', name: 'Field Bow', description: 'A light bow made for quick shots.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'MYTHIC', icon: '➶', equipmentSlot: 'MAIN_HAND', requiredClass: 'ARCHER', minimumLevel: 5, statBonuses: { agility: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
   { key: 'minor-health-potion', name: 'Minor Health Potion', description: 'Restores 35 health.', stackLimit: 20, metadata: { category: 'CONSUMABLE', rarity: 'COMMON', icon: '◆', effect: { hp: 35 }, buyPriceSilver: 24, sellPriceSilver: 9 } },
   { key: 'field-rations', name: 'Field Rations', description: 'Restores 30 energy.', stackLimit: 20, metadata: { category: 'CONSUMABLE', rarity: 'COMMON', icon: '●', effect: { energy: 30 }, buyPriceSilver: 18, sellPriceSilver: 7 } },
   { key: 'town-scroll', name: 'Town Scroll', description: 'A dormant scroll prepared for a future travel system.', stackLimit: 10, metadata: { category: 'QUEST', rarity: 'COMMON', icon: '▱', buyPriceSilver: 0, sellPriceSilver: 0, sellable: false } },
@@ -260,6 +260,7 @@ export class ItemService {
   private metadata(value: Prisma.JsonValue): ItemMetadata {
     const metadata = value as unknown as Partial<ItemMetadata>;
     if (!metadata.category || !metadata.icon || !metadata.rarity || !['COMMON', 'ARTIFACT', 'MYTHIC'].includes(metadata.rarity) || !Number.isInteger(metadata.buyPriceSilver) || !Number.isInteger(metadata.sellPriceSilver)) this.invalidItem();
+    if (metadata.category === 'EQUIPMENT' && (!metadata.equipmentSlot || !Number.isInteger(metadata.minimumLevel) || Number(metadata.minimumLevel) < 1)) this.invalidItem();
     return metadata as ItemMetadata;
   }
 

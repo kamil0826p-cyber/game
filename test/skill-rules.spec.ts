@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { skillsForClass } from '../src/modules/skills/skill.catalog.js';
-import { calculateSkillPoints, getSkillEligibility } from '../src/modules/skills/skill.rules.js';
+import {
+  calculateSkillPoints,
+  getSkillEligibility,
+  skillPointsGainedBetweenLevels,
+} from '../src/modules/skills/skill.rules.js';
 
 const warriorSkills = skillsForClass('WARRIOR');
 const root = warriorSkills[0]!;
@@ -18,6 +22,13 @@ describe('skill progression rules', () => {
     expect(calculateSkillPoints(10, 0).earned).toBe(1);
     expect(calculateSkillPoints(29, 1)).toMatchObject({ earned: 2, spent: 1, available: 1 });
     expect(calculateSkillPoints(80, 8)).toMatchObject({ earned: 8, spent: 8, available: 0 });
+  });
+
+  it('counts every skill point threshold crossed by a multi-level reward', () => {
+    expect(skillPointsGainedBetweenLevels(1, 26)).toBe(2);
+    expect(skillPointsGainedBetweenLevels(9, 10)).toBe(1);
+    expect(skillPointsGainedBetweenLevels(19, 30)).toBe(2);
+    expect(skillPointsGainedBetweenLevels(30, 29)).toBe(0);
   });
 
   it('never exposes a negative available balance for inconsistent legacy data', () => {

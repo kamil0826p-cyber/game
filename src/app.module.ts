@@ -8,6 +8,7 @@ import { CharacterModule } from './modules/characters/character.module.js';
 import { CombatModule } from './modules/combat/combat.module.js';
 import { ItemModule } from './modules/items/item.module.js';
 import { MapModule } from './modules/maps/map.module.js';
+import { MobModule } from './modules/mobs/mob.module.js';
 import { MovementModule } from './modules/movement/movement.module.js';
 import { NpcInteractionModule } from './modules/npcs/npc-interaction.module.js';
 import { PersistenceModule } from './modules/persistence/persistence.module.js';
@@ -26,6 +27,7 @@ import { WorldModule } from './modules/world/world.module.js';
     RealmModule,
     MapModule,
     CharacterModule,
+    MobModule,
     CombatModule,
     WorldModule,
     PersistenceModule,

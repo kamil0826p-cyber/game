@@ -20,11 +20,20 @@ const zoneLabelKey = {
 } as const;
 
 const numberFormatter = new Intl.NumberFormat('pl-PL');
+const MAX_CHARACTER_LEVEL = 100;
+
+function experienceRequiredForLevel(level: number): number {
+  const safeLevel = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Math.floor(level)));
+  return Math.floor(100 * safeLevel ** 1.55 + 35 * safeLevel);
+}
 
 export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Element {
   const { t } = useI18n();
-  const experienceTarget = Math.max(100, character.level * 250);
-  const experiencePercent = Math.min(100, (character.experience / experienceTarget) * 100);
+  const atLevelCap = character.level >= MAX_CHARACTER_LEVEL;
+  const experienceTarget = atLevelCap ? 0 : experienceRequiredForLevel(character.level);
+  const experiencePercent = atLevelCap
+    ? 100
+    : Math.min(100, (character.experience / Math.max(1, experienceTarget)) * 100);
 
   return (
     <section className="hud-panel pointer-events-none w-[min(390px,calc(100vw-24px))] p-3" aria-label="Player status">
@@ -46,7 +55,8 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
           <Meter label={t('hud.energy')} value={character.energy} max={character.maxEnergy} className="bg-sky-500" />
           <div className="mt-1.5">
             <div className="mb-0.5 flex justify-between text-[9px] uppercase tracking-wider text-slate-500">
-              <span>{t('hud.experience')}</span><span>{character.experience} / {experienceTarget}</span>
+              <span>{t('hud.experience')}</span>
+              <span>{atLevelCap ? 'MAX' : `${character.experience} / ${experienceTarget}`}</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-black/50">
               <div className="h-full bg-amber-400" style={{ width: `${experiencePercent}%` }} />
@@ -68,15 +78,7 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
   );
 }
 
-function CurrencyBadge({
-  label,
-  value,
-  variant,
-}: {
-  label: string;
-  value: number;
-  variant: 'silver' | 'gold';
-}): React.JSX.Element {
+function CurrencyBadge({ label, value, variant }: { label: string; value: number; variant: 'silver' | 'gold' }): React.JSX.Element {
   const isSilver = variant === 'silver';
   const borderClass = isSilver ? 'border-slate-300/20' : 'border-amber-300/25';
   const backgroundClass = isSilver ? 'bg-slate-300/5' : 'bg-amber-300/5';
@@ -86,22 +88,13 @@ function CurrencyBadge({
   const valueClass = isSilver ? 'text-slate-100' : 'text-amber-200';
 
   return (
-    <div
-      className={`flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 ${borderClass} ${backgroundClass}`}
-      aria-label={`${label}: ${numberFormatter.format(value)}`}
-      title={`${label}: ${numberFormatter.format(value)}`}
-    >
-      <span
-        className={`grid size-6 shrink-0 place-items-center rounded-full border font-display text-[10px] font-bold ${iconClass}`}
-        aria-hidden="true"
-      >
+    <div className={`flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 ${borderClass} ${backgroundClass}`} aria-label={`${label}: ${numberFormatter.format(value)}`} title={`${label}: ${numberFormatter.format(value)}`}>
+      <span className={`grid size-6 shrink-0 place-items-center rounded-full border font-display text-[10px] font-bold ${iconClass}`} aria-hidden="true">
         {isSilver ? 'S' : 'Z'}
       </span>
       <span className="min-w-0">
         <span className="block text-[8px] uppercase tracking-[0.14em] text-slate-500">{label}</span>
-        <span className={`block truncate font-mono text-xs font-semibold ${valueClass}`}>
-          {numberFormatter.format(value)}
-        </span>
+        <span className={`block truncate font-mono text-xs font-semibold ${valueClass}`}>{numberFormatter.format(value)}</span>
       </span>
     </div>
   );

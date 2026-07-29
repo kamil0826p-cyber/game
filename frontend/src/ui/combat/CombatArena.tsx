@@ -6,7 +6,7 @@ import {
   combatAnimationReducer,
   INITIAL_COMBAT_ANIMATION_STATE,
 } from '../../game/combat/combatAnimationQueue';
-import { combatSides } from '../../game/combat/combatPresentation';
+import { combatSides, usesAttackMotion } from '../../game/combat/combatPresentation';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
 import { COMBAT_SKILL_INTENT_EVENT, type CombatSkillIntent, ActionBar } from '../hud/ActionBar';
@@ -153,8 +153,9 @@ export function CombatArena({
   const remainingMs = Math.max(0, (combat.turnEndsAt ?? now) - now);
   const turnPercent = Math.max(0, Math.min(100, (remainingMs / 30_000) * 100));
   const actionActor = animatedAction?.actorId;
-  const ownAnimating = sides?.own.actorId === actionActor;
-  const opponentAnimating = sides?.opponent.actorId === actionActor;
+  const attackMotion = usesAttackMotion(animatedAction);
+  const ownAnimating = attackMotion && sides?.own.actorId === actionActor;
+  const opponentAnimating = attackMotion && sides?.opponent.actorId === actionActor;
   const damagingTarget = (actorId: string | undefined): boolean =>
     Boolean(
       actorId &&
@@ -210,6 +211,8 @@ export function CombatArena({
   });
 
   const ownWon = sides?.own.actorId === combat.winnerActorId;
+  const defeatedMob =
+    combat.status === 'FINISHED' && ownWon && sides?.opponent.kind === 'MOB';
   const turnLabel =
     combat.status === 'ACTIVE'
       ? isOwnTurn
@@ -271,6 +274,7 @@ export function CombatArena({
           outfitKey={sides.own.outfitKey}
           characterClass={sides.own.characterClass}
           direction="EAST"
+          renderScale={sides.own.renderScale ?? 1}
           className="combat-outfit"
         />
         <span className="combat-ground-shadow" />
@@ -281,12 +285,22 @@ export function CombatArena({
         } ${opponentHit ? 'combat-character-hit' : ''}`}
       >
         <div className="combat-character-aura" />
-        <OutfitPreview
-          outfitKey={sides.opponent.outfitKey}
-          characterClass={sides.opponent.characterClass}
-          direction="WEST"
-          className="combat-outfit"
-        />
+        {defeatedMob ? (
+          <img
+            src="/assets/mobs/mob-grave.svg"
+            alt=""
+            aria-hidden="true"
+            className="combat-outfit object-contain"
+          />
+        ) : (
+          <OutfitPreview
+            outfitKey={sides.opponent.outfitKey}
+            characterClass={sides.opponent.characterClass}
+            direction="WEST"
+            renderScale={sides.opponent.renderScale ?? 1}
+            className="combat-outfit"
+          />
+        )}
         <span className="combat-ground-shadow" />
       </div>
 

@@ -3,11 +3,45 @@ import type {
   CombatParticipantPayload,
   CombatSnapshot,
 } from '../../contracts/socket';
+import { mobStore } from '../state/mobStore';
 
 export type CombatVfxFamily =
-  'arcane' | 'fire' | 'frost' | 'physical' | 'projectile' | 'status';
+  | 'arcane'
+  | 'fire'
+  | 'frost'
+  | 'physical'
+  | 'projectile'
+  | 'status'
+  | 'support';
 
-export function getCombatVfxFamily(animationKey: string): CombatVfxFamily {
+export function isSelfCastCombatAction(
+  action: CombatActionResolutionPayload | undefined,
+): boolean {
+  return Boolean(
+    action &&
+      action.action === 'SKILL' &&
+      action.targetActorId === action.actorId &&
+      action.results.every((result) => result.targetActorId === action.actorId),
+  );
+}
+
+export function usesAttackMotion(action: CombatActionResolutionPayload | undefined): boolean {
+  if (!action) return false;
+  if (action.action === 'BASIC_ATTACK') return true;
+  return action.action === 'SKILL' && !isSelfCastCombatAction(action);
+}
+
+export function getCombatVfxFamily(
+  actionOrAnimationKey: CombatActionResolutionPayload | string,
+): CombatVfxFamily {
+  if (typeof actionOrAnimationKey !== 'string' && isSelfCastCombatAction(actionOrAnimationKey)) {
+    return 'support';
+  }
+
+  const animationKey =
+    typeof actionOrAnimationKey === 'string'
+      ? actionOrAnimationKey
+      : actionOrAnimationKey.animationKey;
   const key = animationKey.toLowerCase();
   if (
     key.includes('fire') ||
@@ -31,6 +65,14 @@ export function getCombatVfxFamily(animationKey: string): CombatVfxFamily {
   return 'physical';
 }
 
+function withMobRenderScale(participant: CombatParticipantPayload): CombatParticipantPayload {
+  if (participant.kind !== 'MOB' || participant.renderScale !== undefined) return participant;
+  const mob = Object.values(mobStore.getSnapshot()).find(
+    (candidate) => candidate.outfitKey === participant.outfitKey,
+  );
+  return mob ? { ...participant, renderScale: mob.renderScale } : participant;
+}
+
 export function combatSides(
   combat: CombatSnapshot,
   ownCharacterId: string,
@@ -41,7 +83,9 @@ export function combatSides(
   const opponent = combat.participants.find(
     (participant) => participant.characterId !== ownCharacterId,
   );
-  return own && opponent ? { own, opponent } : undefined;
+  return own && opponent
+    ? { own: withMobRenderScale(own), opponent: withMobRenderScale(opponent) }
+    : undefined;
 }
 
 export function actionDamageFor(

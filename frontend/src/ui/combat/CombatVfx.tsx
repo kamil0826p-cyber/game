@@ -1,5 +1,9 @@
 import type { CombatActionResolutionPayload } from '../../contracts/socket';
-import { actionDamageFor, getCombatVfxFamily } from '../../game/combat/combatPresentation';
+import {
+  actionDamageFor,
+  getCombatVfxFamily,
+  isSelfCastCombatAction,
+} from '../../game/combat/combatPresentation';
 
 interface CombatVfxProps {
   action: CombatActionResolutionPayload | undefined;
@@ -48,7 +52,8 @@ export function CombatVfx({
 }: CombatVfxProps): React.JSX.Element | null {
   if (!action) return null;
   const fromLeft = action.actorId === leftActorId;
-  const family = getCombatVfxFamily(action.animationKey);
+  const support = isSelfCastCombatAction(action);
+  const family = getCombatVfxFamily(action);
   const style = {
     '--combat-accent': action.visual.accentColor,
     '--combat-travel-ms': `${action.visual.travelMs ?? 420}ms`,
@@ -63,19 +68,34 @@ export function CombatVfx({
       style={style}
       aria-hidden="true"
     >
-      <div className="combat-cast-rune" />
-      <div className="combat-projectile">
-        <i />
-        <i />
-        <i />
-      </div>
-      <div className="combat-impact-burst">
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
-      <div className="combat-shockwave" />
+      {support ? (
+        <div className="combat-support-aura">
+          <span className="combat-support-sigil" />
+          <span className="combat-support-ring" />
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+      ) : (
+        <>
+          <div className="combat-cast-rune" />
+          <div className="combat-projectile">
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="combat-impact-burst">
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="combat-shockwave" />
+        </>
+      )}
       <FloatingResult action={action} actorId={leftActorId} side="left" />
       <FloatingResult action={action} actorId={rightActorId} side="right" />
     </div>

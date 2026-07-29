@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { EquipmentSlot, InventoryItemPayload, InventorySnapshot } from '../../contracts/socket';
 import { ItemTooltip, rarityClasses } from '../../components/common/ItemTooltip';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
+import { useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import { Modal } from './Modal';
 
@@ -14,11 +15,13 @@ const slotLabels: Record<EquipmentSlot, { en: string; pl: string }> = {
 export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const { t, locale } = useI18n();
   const connection = useGameConnection();
+  const self = useGameState().self;
   const [inventory, setInventory] = useState<InventorySnapshot>();
   const [selectedId, setSelectedId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const selected = inventory?.items.find((item) => item.id === selectedId);
   const slots = useMemo(() => Array.from({ length: inventory?.capacity ?? 40 }, (_, index) => inventory?.items.find((item) => item.slotIndex === index)), [inventory]);
+  const level = self?.level ?? 1;
 
   useEffect(() => {
     let mounted = true;
@@ -32,6 +35,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
     try { setInventory(await operation()); } catch { /* notification is emitted by the socket client */ } finally { setBusy(false); }
   };
   const tooltipItem = (item: InventoryItemPayload) => item;
+  const canEquip = (item: InventoryItemPayload | undefined): boolean => Boolean(item?.equipmentSlot && item.minimumLevel <= level);
   const startDrag = (event: React.DragEvent, item: InventoryItemPayload) => event.dataTransfer.setData('text/item-id', item.id);
   const droppedItem = (event: React.DragEvent) => inventory?.items.find((item) => item.id === event.dataTransfer.getData('text/item-id'));
 
@@ -54,12 +58,12 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                 onDrop={(event) => {
                   event.preventDefault();
                   const dropped = droppedItem(event);
-                  if (dropped?.equipmentSlot === slot) void mutate(() => connection.equipInventoryItem(dropped.id));
+                  if (dropped?.equipmentSlot === slot && canEquip(dropped)) void mutate(() => connection.equipInventoryItem(dropped.id));
                 }}
                 onClick={() => item && setSelectedId(item.id)}
                 className={`equipment-slot min-h-20 ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''}`}
               ><span>{slotLabels[slot][locale]}</span>{item ? <strong className="mt-1 text-lg">{item.icon}</strong> : null}</button>;
-              return item ? <ItemTooltip key={slot} item={tooltipItem(item)}>{button}</ItemTooltip> : button;
+              return item ? <ItemTooltip key={slot} item={tooltipItem(item)} currentLevel={level}>{button}</ItemTooltip> : button;
             })}
           </div>
         </section>
@@ -67,23 +71,24 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
           <h3 className="modal-section-title">{t('modal.inventory.backpack')}</h3>
           <div className="mt-3 grid grid-cols-8 gap-1.5 pb-2">
             {slots.map((item, index) => {
+              const locked = Boolean(item?.equipmentSlot && item.minimumLevel > level);
               const button = <button key={index} type="button" draggable={Boolean(item)} disabled={busy}
                 onDragStart={(event) => item && startDrag(event, item)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => { event.preventDefault(); const dropped = droppedItem(event); if (dropped) void mutate(async () => { if (dropped.equippedSlot) await connection.unequipInventoryItem(dropped.id); return connection.moveInventoryItem(dropped.id, index); }); }}
-                onClick={() => setSelectedId(item?.id)} className={`inventory-slot ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''}`}
-                aria-label={item ? `${item.name}, ${item.quantity}` : t('common.emptySlot')}>{item ? <><span className="text-xl">{item.icon}</span><small>{item.quantity}</small>{item.equippedSlot ? <i className="absolute left-1 top-1 text-[8px] text-emerald-300">E</i> : null}</> : null}</button>;
-              return item ? <ItemTooltip key={index} item={tooltipItem(item)}>{button}</ItemTooltip> : button;
+                onClick={() => setSelectedId(item?.id)} className={`inventory-slot ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''} ${locked ? 'opacity-60' : ''}`}
+                aria-label={item ? `${item.name}, ${item.quantity}` : t('common.emptySlot')}>{item ? <><span className="text-xl">{item.icon}</span><small>{item.quantity}</small>{item.equippedSlot ? <i className="absolute left-1 top-1 text-[8px] text-emerald-300">E</i> : null}{locked ? <i className="absolute right-1 top-1 text-[8px] font-bold text-red-300">Lv</i> : null}</> : null}</button>;
+              return item ? <ItemTooltip key={index} item={tooltipItem(item)} currentLevel={level}>{button}</ItemTooltip> : button;
             })}
           </div>
         </section>
       </div>
       <section className={`sticky -bottom-5 z-20 -mx-5 -mb-5 mt-5 min-h-[76px] border-t bg-slate-950/[0.98] px-5 py-3 shadow-[0_-12px_24px_rgba(2,6,23,0.75)] ${selected ? rarityClasses(selected.rarity) : 'border-white/10'}`}>
         {selected ? <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><span className="text-2xl">{selected.icon}</span><div><strong className="block">{selected.name}</strong><span className="text-[11px] text-slate-400">{locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
+          <div className="flex items-center gap-3"><span className="text-2xl">{selected.icon}</span><div><strong className="block">{selected.name}</strong><span className={`text-[11px] ${selected.minimumLevel > level ? 'text-red-300' : 'text-slate-400'}`}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymagany poziom' : 'Required level'}: ${selected.minimumLevel}` : locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
           <div className="flex flex-wrap gap-2">
             {selected.usable ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.useInventoryItem(selected.id))}>{locale === 'pl' ? 'Użyj' : 'Use'}</button> : null}
-            {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.equipInventoryItem(selected.id))}>{locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
+            {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy || !canEquip(selected)} onClick={() => void mutate(() => connection.equipInventoryItem(selected.id))}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymaga Lv.' : 'Requires Lv.'} ${selected.minimumLevel}` : locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
             {selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.unequipInventoryItem(selected.id))}>{locale === 'pl' ? 'Zdejmij' : 'Unequip'}</button> : null}
             <button className="hud-utility-button" disabled={busy || Boolean(selected.equippedSlot)} onClick={() => void mutate(() => connection.discardInventoryItem(selected.id, 1))}>{locale === 'pl' ? 'Wyrzuć 1' : 'Discard 1'}</button>
           </div>

@@ -1,5 +1,9 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
-import type { CompiledTileLayer, CompiledTileRenderDefinition, LoadedMapDefinition } from '../../contracts/tiled';
+import type {
+  CompiledTileLayer,
+  CompiledTileRenderDefinition,
+  LoadedMapDefinition,
+} from '../../contracts/tiled';
 import {
   normalizedGid,
   TILED_FLIPPED_DIAGONALLY_FLAG,
@@ -31,6 +35,15 @@ export class MapRenderer {
   constructor() {
     this.belowContainer.zIndex = 0;
     this.aboveContainer.zIndex = 3;
+
+    // Map tiles are visual decoration. Large above-layer sprites such as tree
+    // crowns often contain transparent pixels outside their visible shape.
+    // Excluding both map bands from hit testing lets clicks reach mobs, NPCs,
+    // players and the stage even when those entities render beneath a tree.
+    this.belowContainer.eventMode = 'none';
+    this.aboveContainer.eventMode = 'none';
+    this.portalLayer.eventMode = 'none';
+
     this.belowContainer.addChild(this.portalLayer);
   }
 
@@ -55,8 +68,13 @@ export class MapRenderer {
     }
   }
 
-  get pixelWidth(): number { return (this.map?.width ?? 0) * WORLD_TILE_SIZE; }
-  get pixelHeight(): number { return (this.map?.height ?? 0) * WORLD_TILE_SIZE; }
+  get pixelWidth(): number {
+    return (this.map?.width ?? 0) * WORLD_TILE_SIZE;
+  }
+
+  get pixelHeight(): number {
+    return (this.map?.height ?? 0) * WORLD_TILE_SIZE;
+  }
 
   destroy(): void {
     if (this.destroyed) return;
@@ -75,10 +93,15 @@ export class MapRenderer {
     }
   }
 
-  private renderTileLayer(map: LoadedMapDefinition, layer: CompiledTileLayer, textures?: ReadonlyMap<number, Texture>): Container {
+  private renderTileLayer(
+    map: LoadedMapDefinition,
+    layer: CompiledTileLayer,
+    textures?: ReadonlyMap<number, Texture>,
+  ): Container {
     const container = new Container();
     container.label = layer.name;
     container.alpha = layer.opacity;
+    container.eventMode = 'none';
     const scaleX = WORLD_TILE_SIZE / map.tileWidth;
     const scaleY = WORLD_TILE_SIZE / map.tileHeight;
     container.position.set(layer.offsetX * scaleX, layer.offsetY * scaleY);
@@ -108,7 +131,13 @@ export class MapRenderer {
     return yValues.flatMap((y) => xValues.map((x) => y * layer.width + x));
   }
 
-  private createTileSprite(texture: Texture, rawGid: number, x: number, y: number, definition: CompiledTileRenderDefinition): Sprite {
+  private createTileSprite(
+    texture: Texture,
+    rawGid: number,
+    x: number,
+    y: number,
+    definition: CompiledTileRenderDefinition,
+  ): Sprite {
     const width = WORLD_TILE_SIZE * definition.widthTiles;
     const height = WORLD_TILE_SIZE * definition.heightTiles;
     const left = x + WORLD_TILE_SIZE * definition.offsetXTiles - width * definition.anchorX;
@@ -144,7 +173,12 @@ export class MapRenderer {
     }
   }
 
-  private createMissingTile(gid: number, x: number, y: number, definition: CompiledTileRenderDefinition): Graphics {
+  private createMissingTile(
+    gid: number,
+    x: number,
+    y: number,
+    definition: CompiledTileRenderDefinition,
+  ): Graphics {
     const width = WORLD_TILE_SIZE * definition.widthTiles;
     const height = WORLD_TILE_SIZE * definition.heightTiles;
     const left = x + WORLD_TILE_SIZE * definition.offsetXTiles - width * definition.anchorX;
@@ -159,8 +193,14 @@ export class MapRenderer {
 
   private renderPortals(map: LoadedMapDefinition): void {
     for (const portal of map.portals) {
-      const ring = new Graphics().ellipse(0, 0, WORLD_TILE_SIZE * 0.36, WORLD_TILE_SIZE * 0.18).fill({ color: 0x7dd3fc, alpha: 0.18 }).stroke({ color: 0xa78bfa, width: 4, alpha: 0.95 });
-      ring.position.set((portal.sourceX + 0.5) * WORLD_TILE_SIZE, (portal.sourceY + 0.7) * WORLD_TILE_SIZE);
+      const ring = new Graphics()
+        .ellipse(0, 0, WORLD_TILE_SIZE * 0.36, WORLD_TILE_SIZE * 0.18)
+        .fill({ color: 0x7dd3fc, alpha: 0.18 })
+        .stroke({ color: 0xa78bfa, width: 4, alpha: 0.95 });
+      ring.position.set(
+        (portal.sourceX + 0.5) * WORLD_TILE_SIZE,
+        (portal.sourceY + 0.7) * WORLD_TILE_SIZE,
+      );
       this.portalLayer.addChild(ring);
       this.portalGraphics.push(ring);
     }
@@ -168,7 +208,11 @@ export class MapRenderer {
   }
 
   private destroyChildren(): void {
-    for (const parent of [this.belowContainer, this.aboveContainer]) for (const child of parent.removeChildren()) if (child !== this.portalLayer) child.destroy({ children: true });
+    for (const parent of [this.belowContainer, this.aboveContainer]) {
+      for (const child of parent.removeChildren()) {
+        if (child !== this.portalLayer) child.destroy({ children: true });
+      }
+    }
     this.portalLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     this.portalGraphics.length = 0;
     if (!this.portalLayer.parent) this.belowContainer.addChild(this.portalLayer);
