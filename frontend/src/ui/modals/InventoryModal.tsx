@@ -39,7 +39,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
   const canEquip = (item: InventoryItemPayload | undefined): boolean => Boolean(item?.equipmentSlot && item.minimumLevel <= level);
   const startDrag = (event: React.DragEvent, item: InventoryItemPayload) => event.dataTransfer.setData('text/item-id', item.id);
   const droppedItem = (event: React.DragEvent) => inventory?.items.find((item) => item.id === event.dataTransfer.getData('text/item-id'));
-  const destroyInventoryItem = (itemId: string): Promise<InventorySnapshot> => connection.discardInventoryItem(itemId, 1);
+  const destroyInventoryItem = (itemId: string): Promise<InventorySnapshot> => connection.destroyInventoryItem(itemId, 1);
 
   return (
     <Modal title={t('modal.inventory.title')} subtitle={locale === 'pl' ? 'Najedź po statystyki, kliknij po akcje.' : 'Hover for stats, click for actions.'} icon="▦" onClose={onClose} widthClass="max-w-4xl">
