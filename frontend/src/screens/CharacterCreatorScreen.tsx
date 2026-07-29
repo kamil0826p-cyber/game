@@ -12,6 +12,14 @@ import { CLASS_PRESENTATION, OUTFIT_CATALOG } from '../mock/outfitCatalog';
 
 const characterNamePattern = /^[A-Za-z][A-Za-z0-9 _-]{2,19}$/;
 
+function OutfitArrow({ direction }: { direction: 'left' | 'right' }): React.JSX.Element {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d={direction === 'left' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'} />
+    </svg>
+  );
+}
+
 export function CharacterCreatorScreen({ onCancel, onCreated }: { onCancel?: () => void; onCreated?: () => void }): React.JSX.Element {
   const state = useGameState();
   const client = useGameConnection();
@@ -72,7 +80,7 @@ export function CharacterCreatorScreen({ onCancel, onCreated }: { onCancel?: () 
         </Panel>
         <Panel elevated className="relative overflow-hidden p-5 sm:p-7"><div className="absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_50%_30%,rgba(251,191,36,0.12),transparent_60%)]" /><div className="relative">
           <p className="eyebrow">{t('character.outfit')}</p><div className="mt-5 flex min-h-72 items-center justify-center rounded-xl border border-white/10 bg-slate-950/45"><OutfitPreview outfitKey={preview.key} characterClass={characterClass} /></div>
-          <div className="mt-5 flex items-center justify-between gap-3"><button type="button" className="preview-arrow" onClick={() => setPreviewIndex((previewIndex - 1 + outfits.length) % outfits.length)} aria-label="Previous outfit">‹</button><div className="text-center"><h2 className="font-display text-xl text-amber-100">{preview.label}</h2><p className="mt-1 text-xs text-slate-400">{preview.description}</p><span className="mt-3 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-200">{t('character.unlocked')}</span></div><button type="button" className="preview-arrow" onClick={() => setPreviewIndex((previewIndex + 1) % outfits.length)} aria-label="Next outfit">›</button></div>
+          <div className="mt-5 flex items-center justify-between gap-3"><button type="button" className="preview-arrow" onClick={() => setPreviewIndex((previewIndex - 1 + outfits.length) % outfits.length)} aria-label="Previous outfit"><OutfitArrow direction="left" /></button><div className="text-center"><h2 className="font-display text-xl text-amber-100">{preview.label}</h2><p className="mt-1 text-xs text-slate-400">{preview.description}</p><span className="mt-3 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-200">{t('character.unlocked')}</span></div><button type="button" className="preview-arrow" onClick={() => setPreviewIndex((previewIndex + 1) % outfits.length)} aria-label="Next outfit"><OutfitArrow direction="right" /></button></div>
           <p className="mt-5 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-100/80">The selected level 1 outfit is saved immediately. More outfits unlock as the character levels up.</p><Button className="mt-6 w-full justify-center py-3" type="submit" busy={busy} disabled={!validName}>{t('character.create')}</Button>
         </div></Panel>
       </form>
