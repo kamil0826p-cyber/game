@@ -48,6 +48,7 @@ interface MobSeedDefinition {
   stats: {
     rank: 'SPAWN' | 'EXECUTIONER' | 'ARCH_EXECUTIONER' | 'REAPER' | 'ANCIENT';
     characterClass: 'MAGE' | 'WARRIOR' | 'ARCHER';
+    renderScale: number;
     experience: number;
     maxHp: number;
     maxEnergy: number;
@@ -146,6 +147,7 @@ const mobDefinitions: MobSeedDefinition[] = [
     stats: {
       rank: 'SPAWN',
       characterClass: 'ARCHER',
+      renderScale: 0.5,
       experience: 28,
       maxHp: 72,
       maxEnergy: 0,
@@ -179,6 +181,7 @@ const mobDefinitions: MobSeedDefinition[] = [
     stats: {
       rank: 'EXECUTIONER',
       characterClass: 'WARRIOR',
+      renderScale: 0.85,
       experience: 145,
       maxHp: 310,
       maxEnergy: 0,
