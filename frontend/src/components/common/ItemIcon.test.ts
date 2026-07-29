@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ITEM_ICON_KEYS, itemIconUrl } from './ItemIcon';
+import { ITEM_ICON_KEYS, itemIconUrl } from './itemIconAssets';
 
 describe('item icon assets', () => {
   it('gives every known item its own replaceable physical file path', () => {
