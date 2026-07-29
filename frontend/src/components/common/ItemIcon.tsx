@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ITEM_ICON_KEY_SET, itemIconUrl } from './itemIconAssets';
 
 interface ItemIconProps {
   definitionKey: string;
@@ -6,31 +7,12 @@ interface ItemIconProps {
   className?: string;
 }
 
-export const ITEM_ICON_KEYS = [
-  'traveler-sword',
-  'apprentice-staff',
-  'field-bow',
-  'minor-health-potion',
-  'field-rations',
-  'town-scroll',
-  'rabbit-fur',
-  'rabbit-foot',
-  'scorpion-chitin',
-  'scorpion-stinger',
-  'venom-sac',
-] as const;
-
-const knownItemKeys = new Set<string>(ITEM_ICON_KEYS);
-
-export const itemIconUrl = (definitionKey: string): string =>
-  `/assets/items/${encodeURIComponent(definitionKey)}.svg?v=2`;
-
 export function ItemIcon({ definitionKey, fallback, className = 'h-8 w-8' }: ItemIconProps): React.JSX.Element {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => setFailed(false), [definitionKey]);
 
-  if (!knownItemKeys.has(definitionKey) || failed) {
+  if (!ITEM_ICON_KEY_SET.has(definitionKey) || failed) {
     return <span className={`${className} inline-flex items-center justify-center`}>{fallback}</span>;
   }
 
