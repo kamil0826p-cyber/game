@@ -59,11 +59,12 @@ const cursorPosition = (event: MouseEvent<HTMLElement>): { x: number; y: number 
   };
 };
 
-export function ItemTooltip({ item, children }: { item: TooltipItem; children: ReactElement<HoverableProps> }): React.JSX.Element {
+export function ItemTooltip({ item, currentLevel, children }: { item: TooltipItem; currentLevel?: number; children: ReactElement<HoverableProps> }): React.JSX.Element {
   const { locale } = useI18n();
   const [position, setPosition] = useState<{ x: number; y: number }>();
   const bonuses = (Object.entries(item.statBonuses) as Array<[keyof ItemStatBonuses, number]>).filter(([, value]) => value !== 0);
   const style = rarityStyle[item.rarity];
+  const levelTooLow = currentLevel !== undefined && currentLevel < item.minimumLevel;
   const move = (event: MouseEvent<HTMLElement>) => setPosition(cursorPosition(event));
   const child = cloneElement(children, {
     onMouseEnter: (event) => { children.props.onMouseEnter?.(event); move(event); },
@@ -80,7 +81,7 @@ export function ItemTooltip({ item, children }: { item: TooltipItem; children: R
           <p className="mt-3 text-xs leading-relaxed text-slate-300">{item.description}</p>
           <div className="mt-3 space-y-1 border-t border-white/10 pt-2 text-xs">
             {item.requiredClass ? <p className="text-slate-300">{locale === 'pl' ? 'Klasa' : 'Class'}: {classLabels[item.requiredClass][locale]}</p> : null}
-            {item.minimumLevel > 1 ? <p className="text-slate-300">{locale === 'pl' ? 'Poziom' : 'Level'}: {item.minimumLevel}</p> : null}
+            {item.minimumLevel > 1 ? <p className={levelTooLow ? 'font-bold text-red-300' : 'text-slate-300'}>{locale === 'pl' ? 'Wymagany poziom' : 'Required level'}: {item.minimumLevel}{levelTooLow ? ` (${locale === 'pl' ? 'za niski' : 'too low'})` : ''}</p> : null}
             {bonuses.map(([stat, value]) => <p key={stat} className="text-emerald-300">{statLabels[stat][locale]}: +{value}</p>)}
             {item.effect?.hp ? <p className="text-rose-300">{locale === 'pl' ? 'Przywraca zdrowie' : 'Restores health'}: {item.effect.hp}</p> : null}
             {item.effect?.energy ? <p className="text-sky-300">{locale === 'pl' ? 'Przywraca energię' : 'Restores energy'}: {item.effect.energy}</p> : null}
