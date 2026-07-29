@@ -552,6 +552,7 @@
   inset: 0;
   pointer-events: none;
   filter: drop-shadow(0 0 12px var(--combat-accent));
+  animation: combat-vfx-shake 420ms calc(var(--combat-travel-ms, 420ms) + 120ms) ease-out both;
 }
 
 .combat-cast-rune {
@@ -778,10 +779,6 @@
     0 0 16px rgba(114, 218, 103, 0.65);
 }
 
-.combat-arena-action {
-  animation: combat-arena-shake 420ms calc(var(--combat-travel-ms, 420ms) + 120ms) ease-out both;
-}
-
 @keyframes combat-arena-enter {
   from {
     opacity: 0;
@@ -995,7 +992,7 @@
   }
 }
 
-@keyframes combat-arena-shake {
+@keyframes combat-vfx-shake {
   0%,
   100% {
     transform: translate(0, 0);

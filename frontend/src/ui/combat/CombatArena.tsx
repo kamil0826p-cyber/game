@@ -229,10 +229,7 @@ export function CombatArena({
 
   if (!sides) return null;
   return (
-    <div
-      className={`combat-arena-root ${animatedAction ? 'combat-arena-action' : ''}`}
-      style={arenaStyle}
-    >
+    <div className="combat-arena-root" style={arenaStyle}>
       <div className="combat-arena-backdrop" />
       <div className="combat-atmosphere">
         <i />
