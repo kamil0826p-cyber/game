@@ -102,7 +102,7 @@ export function ActionBar(): React.JSX.Element {
               ].join(' ')}
               style={{ '--skill-accent': skill.visual.accentColor } as React.CSSProperties}
             >
-              <span className="text-xl">{skill.rank > 0 ? skill.icon : '◆'}</span>
+              <span className="text-xl">{skill.icon}</span>
               <kbd>{index + 1}</kbd>
             </button>
             <span className="hud-tooltip-bubble hud-tooltip-bubble-top" role="tooltip">
