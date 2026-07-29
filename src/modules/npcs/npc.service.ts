@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { ACTOR_INTERACTION_RADIUS, isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 import type { NpcDialogueChoiceResult, NpcDialogueSnapshot, NpcStatePayload } from '../../contracts/socket.events.js';
@@ -17,7 +17,7 @@ const tileKey = (x: number, y: number): string => `${x},${y}`;
 export class NpcService {
   private readonly mapNpcCache = new Map<string, Promise<readonly NpcStatePayload[]>>();
   private readonly occupiedTileCache = new Map<string, Promise<ReadonlySet<string>>>();
-  constructor(private readonly prisma: PrismaService, private readonly quests: QuestService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly quests?: QuestService) {}
 
   async getMapNpcs(mapId: string): Promise<NpcStatePayload[]> {
     let loading = this.mapNpcCache.get(mapId);
@@ -30,16 +30,14 @@ export class NpcService {
     return loading;
   }
   async isTileOccupied(mapId: string, x: number, y: number): Promise<boolean> { return (await this.getOccupiedTiles(mapId)).has(tileKey(x, y)); }
-  clearMapCache(mapId?: string): void {
-    if (mapId) { this.mapNpcCache.delete(mapId); this.occupiedTileCache.delete(mapId); return; }
-    this.mapNpcCache.clear(); this.occupiedTileCache.clear();
-  }
+  clearMapCache(mapId?: string): void { if (mapId) { this.mapNpcCache.delete(mapId); this.occupiedTileCache.delete(mapId); return; } this.mapNpcCache.clear(); this.occupiedTileCache.clear(); }
 
   async startDialogue(npcId: string, position: NpcInteractionPosition, locale: SupportedLocale): Promise<NpcDialogueSnapshot> {
     const { npc, dialogue } = await this.requireAvailableNpc(npcId, position);
-    await this.quests.recordNpcTalk(position.characterId, npc.key);
+    if (this.quests) await this.quests.recordNpcTalk(position.characterId, npc.key);
     let nodeId = dialogue.rootNodeId;
     if (dialogue.quest) {
+      if (!this.quests) throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
       const state = await this.quests.getDialogueState(position.characterId, dialogue.quest.questKey);
       nodeId = dialogue.quest.rootNodes[state === 'NOT_STARTED' ? 'notStarted' : state === 'ACTIVE' ? 'active' : state === 'READY' ? 'ready' : 'rewarded'];
     }
@@ -48,20 +46,14 @@ export class NpcService {
 
   async chooseDialogue(npcId: string, nodeId: string, choiceId: string, position: NpcInteractionPosition, locale: SupportedLocale): Promise<NpcDialogueResult> {
     const { npc, dialogue } = await this.requireAvailableNpc(npcId, position);
-    const node = dialogue.nodes[nodeId];
-    const choice = node?.choices.find((candidate) => candidate.id === choiceId);
+    const node = dialogue.nodes[nodeId]; const choice = node?.choices.find((candidate) => candidate.id === choiceId);
     if (!node || !choice) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_STATE_INVALID, 'errors.npcs.dialogueStateInvalid');
     if (choice.nextNodeId) return { type: 'NODE', dialogue: this.toDialogueSnapshot(npc, dialogue, choice.nextNodeId, locale) };
     if (choice.questAction) {
+      if (!this.quests) throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
       const session = position as PlayerSession;
-      const questUpdate = choice.questAction.type === 'ACCEPT'
-        ? await this.quests.accept(session, choice.questAction.questKey)
-        : await this.quests.turnIn(session, choice.questAction.questKey, locale);
-      const targetNodeId = questUpdate.completed
-        ? choice.questAction.successNodeId
-        : choice.questAction.type === 'TURN_IN'
-          ? choice.questAction.incompleteNodeId ?? choice.questAction.successNodeId
-          : choice.questAction.successNodeId;
+      const questUpdate = choice.questAction.type === 'ACCEPT' ? await this.quests.accept(session, choice.questAction.questKey) : await this.quests.turnIn(session, choice.questAction.questKey, locale);
+      const targetNodeId = questUpdate.completed ? choice.questAction.successNodeId : choice.questAction.type === 'TURN_IN' ? choice.questAction.incompleteNodeId ?? choice.questAction.successNodeId : choice.questAction.successNodeId;
       return { type: 'NODE', dialogue: this.toDialogueSnapshot(npc, dialogue, targetNodeId, locale), questUpdate };
     }
     return { type: 'ACTION', action: { type: choice.action!, npcId: npc.id } };
@@ -69,11 +61,7 @@ export class NpcService {
 
   private async loadMapNpcs(mapId: string): Promise<readonly NpcStatePayload[]> {
     const records = await this.prisma.npcDefinition.findMany({ where: { mapId }, orderBy: [{ y: 'asc' }, { x: 'asc' }, { key: 'asc' }] });
-    return records.map((npc) => {
-      const dialogue = npc.dialogue as unknown as NpcDialogue | null;
-      const interactionType = dialogue?.type === 'MERCHANT' || dialogue?.type === 'QUEST' ? dialogue.type : 'DIALOGUE';
-      return { id: npc.id, key: npc.key, name: npc.name, mapId: npc.mapId, x: npc.x, y: npc.y, outfitKey: npc.outfitKey, interactionType, interactionRadius: ACTOR_INTERACTION_RADIUS };
-    });
+    return records.map((npc) => { const dialogue = npc.dialogue as unknown as NpcDialogue | null; const interactionType = dialogue?.type === 'MERCHANT' || dialogue?.type === 'QUEST' ? dialogue.type : 'DIALOGUE'; return { id: npc.id, key: npc.key, name: npc.name, mapId: npc.mapId, x: npc.x, y: npc.y, outfitKey: npc.outfitKey, interactionType, interactionRadius: ACTOR_INTERACTION_RADIUS }; });
   }
   private async requireAvailableNpc(npcId: string, position: NpcInteractionPosition) {
     const npc = await this.prisma.npcDefinition.findUnique({ where: { id: npcId } });
@@ -84,8 +72,7 @@ export class NpcService {
     return { npc, dialogue };
   }
   private toDialogueSnapshot(npc: { id: string; key: string; name: string }, dialogue: NpcDialogueDefinition, nodeId: string, locale: SupportedLocale): NpcDialogueSnapshot {
-    const node = dialogue.nodes[nodeId];
-    if (!node) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_UNAVAILABLE, 'errors.npcs.dialogueUnavailable', { npcId: npc.id, nodeId });
+    const node = dialogue.nodes[nodeId]; if (!node) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_UNAVAILABLE, 'errors.npcs.dialogueUnavailable', { npcId: npc.id, nodeId });
     return { npc: { id: npc.id, key: npc.key, name: npc.name }, node: { id: nodeId, text: localizeDialogueText(node.text, locale), choices: node.choices.map((choice) => ({ id: choice.id, label: localizeDialogueText(choice.label, locale) })) } };
   }
 }
