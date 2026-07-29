@@ -10,6 +10,7 @@ interface OutfitPreviewProps {
   direction?: Direction;
   size?: 'small' | 'large';
   animated?: boolean;
+  renderScale?: number;
   className?: string;
 }
 export function OutfitPreview({
@@ -18,6 +19,7 @@ export function OutfitPreview({
   direction = 'SOUTH',
   size = 'large',
   animated = true,
+  renderScale = 1,
   className = '',
 }: OutfitPreviewProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -28,6 +30,7 @@ export function OutfitPreview({
     context.imageSmoothingEnabled = false;
     const image = new Image();
     const mob = outfitKey.startsWith('mob-');
+    const safeRenderScale = Math.max(0.2, Math.min(3, renderScale));
     let frameId = 0;
     let start = performance.now();
     let cancelled = false;
@@ -50,7 +53,8 @@ export function OutfitPreview({
       context.clearRect(0, 0, canvas.width, canvas.height);
       if (image.complete && image.naturalWidth > 0) {
         if (mob) {
-          const scale = Math.min(88 / image.naturalWidth, 112 / image.naturalHeight);
+          const scale =
+            Math.min(88 / image.naturalWidth, 112 / image.naturalHeight) * safeRenderScale;
           const width = image.naturalWidth * scale;
           const height = image.naturalHeight * scale;
           context.drawImage(image, (96 - width) / 2, 144 - height - 12, width, height);
@@ -66,7 +70,7 @@ export function OutfitPreview({
     image.src = mob ? `/assets/mobs/${encodeURIComponent(outfitKey)}.svg` : outfitImageUrl(outfitKey);
     frameId = requestAnimationFrame(draw);
     return () => { cancelled = true; cancelAnimationFrame(frameId); };
-  }, [animated, characterClass, direction, outfitKey]);
+  }, [animated, characterClass, direction, outfitKey, renderScale]);
   return (
     <canvas
       ref={canvasRef}
