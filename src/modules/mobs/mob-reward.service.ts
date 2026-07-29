@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { CharacterClass } from '../../common/domain/game.types.js';
+import type { CharacterClass, EquipmentSlot } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { ItemRarity, ItemStatBonuses } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -14,6 +14,7 @@ import type { RuntimeMob } from './mob.types.js';
 type RewardItemMetadata = {
   rarity?: ItemRarity;
   icon?: string;
+  equipmentSlot?: EquipmentSlot;
   requiredClass?: CharacterClass;
   minimumLevel?: number;
   statBonuses?: ItemStatBonuses;
@@ -28,6 +29,7 @@ export interface SettledLoot {
   icon: string;
   quantity: number;
   stackLimit: number;
+  equipmentSlot?: EquipmentSlot;
   requiredClass?: CharacterClass;
   minimumLevel: number;
   statBonuses: ItemStatBonuses;
@@ -72,10 +74,7 @@ export class MobRewardService {
       }
 
       const progression = applyExperience(character.level, character.experience, mob.experience);
-      const skillPointsGained = skillPointsGainedBetweenLevels(
-        character.level,
-        progression.level,
-      );
+      const skillPointsGained = skillPointsGainedBetweenLevels(character.level, progression.level);
       const growth = statGrowthForLevels(progression.levelsGained);
       const maxHp = character.maxHp + growth.maxHp;
       const maxEnergy = character.maxEnergy + growth.maxEnergy;
@@ -191,12 +190,8 @@ export class MobRewardService {
         grantedQuantity += quantity;
       }
 
-      if (grantedQuantity > 0) {
-        granted.push(this.toSettledLoot(definition, grantedQuantity));
-      }
-      if (remaining > 0) {
-        skipped.push(this.toSettledLoot(definition, remaining));
-      }
+      if (grantedQuantity > 0) granted.push(this.toSettledLoot(definition, grantedQuantity));
+      if (remaining > 0) skipped.push(this.toSettledLoot(definition, remaining));
     }
 
     return { granted, skipped };
@@ -227,6 +222,7 @@ export class MobRewardService {
       icon: typeof metadata.icon === 'string' && metadata.icon ? metadata.icon : '?',
       quantity,
       stackLimit: definition.stackLimit,
+      equipmentSlot: metadata.equipmentSlot,
       requiredClass: metadata.requiredClass,
       minimumLevel,
       statBonuses: metadata.statBonuses ?? {},
