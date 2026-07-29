@@ -13,6 +13,7 @@ import { MovementModule } from './modules/movement/movement.module.js';
 import { NpcInteractionModule } from './modules/npcs/npc-interaction.module.js';
 import { PersistenceModule } from './modules/persistence/persistence.module.js';
 import { TradeModule } from './modules/player/trade/trade.module.js';
+import { QuestModule } from './modules/quests/quest.module.js';
 import { RealmModule } from './modules/realm/realm.module.js';
 import { RealtimeModule } from './modules/realtime/realtime.module.js';
 import { SkillModule } from './modules/skills/skill.module.js';
@@ -27,6 +28,7 @@ import { WorldModule } from './modules/world/world.module.js';
     RealmModule,
     MapModule,
     CharacterModule,
+    QuestModule,
     MobModule,
     CombatModule,
     WorldModule,

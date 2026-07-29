@@ -1,37 +1,77 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { getQuestLog } from '../../game/quests/questClient';
+import { replaceQuestMarkerStates } from '../../game/quests/questMarkerState';
+import type { QuestLogEntryPayload } from '../../game/quests/quest.types';
+import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useI18n } from '../../i18n/I18nProvider';
 import { Modal } from './Modal';
 
-const quests = [
-  { id: 'light', title: 'modal.quests.light.title', category: 'modal.quests.light.category', objective: 'modal.quests.light.objective', progress: '0 / 1' },
-  { id: 'greenfields', title: 'modal.quests.greenfields.title', category: 'modal.quests.greenfields.category', objective: 'modal.quests.greenfields.objective', progress: '1 / 3' },
-  { id: 'supplies', title: 'modal.quests.supplies.title', category: 'modal.quests.supplies.category', objective: 'modal.quests.supplies.objective', progress: '3 / 8' },
-] as const;
+const statusLabel = (status: QuestLogEntryPayload['status'], locale: 'pl' | 'en'): string => {
+  if (status === 'READY') return locale === 'pl' ? 'Gotowe do oddania' : 'Ready to turn in';
+  if (status === 'REWARDED') return locale === 'pl' ? 'Ukończone' : 'Completed';
+  return locale === 'pl' ? 'W toku' : 'In progress';
+};
 
 export function QuestModal({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const { t } = useI18n();
-  const [selected, setSelected] = useState(0);
-  const quest = quests[selected] ?? quests[0];
+  const connection = useGameConnection();
+  const { t, locale } = useI18n();
+  const [quests, setQuests] = useState<QuestLogEntryPayload[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void getQuestLog(connection)
+      .then((snapshot) => {
+        if (cancelled) return;
+        setQuests(snapshot.quests);
+        replaceQuestMarkerStates(snapshot.quests);
+        setSelectedKey((current) => current && snapshot.quests.some((quest) => quest.key === current) ? current : snapshot.quests[0]?.key);
+        setError(undefined);
+      })
+      .catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [connection]);
+
+  const selected = useMemo(() => quests.find((quest) => quest.key === selectedKey) ?? quests[0], [quests, selectedKey]);
   return (
     <Modal title={t('modal.quests.title')} subtitle={t('modal.quests.subtitle')} icon="▱" onClose={onClose} widthClass="max-w-3xl">
-      <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
-        <nav className="space-y-2">
-          {quests.map((entry, index) => (
-            <button key={entry.id} type="button" onClick={() => setSelected(index)} className={`quest-row ${selected === index ? 'quest-row-selected' : ''}`}>
-              <strong>{t(entry.title)}</strong><span>{t(entry.category)}</span>
+      {loading ? <p className="py-10 text-center text-sm text-slate-400">{locale === 'pl' ? 'Wczytywanie dziennika zadań…' : 'Loading quest log…'}</p> : null}
+      {!loading && error ? <p className="rounded-lg border border-rose-400/25 bg-rose-950/30 p-4 text-sm text-rose-200">{error}</p> : null}
+      {!loading && !error && quests.length === 0 ? <p className="py-10 text-center text-sm text-slate-400">{locale === 'pl' ? 'Nie masz jeszcze żadnych rozpoczętych zadań.' : 'You have not started any quests yet.'}</p> : null}
+      {!loading && !error && selected ? (
+        <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
+          <nav className="space-y-2">{quests.map((entry) => (
+            <button key={entry.key} type="button" onClick={() => setSelectedKey(entry.key)} className={`quest-row ${selected.key === entry.key ? 'quest-row-selected' : ''}`}>
+              <strong>{entry.name}</strong><span>{statusLabel(entry.status, locale)}</span>
             </button>
-          ))}
-        </nav>
-        <article className="rounded-xl border border-white/10 bg-slate-950/45 p-5">
-          <p className="eyebrow">{t(quest.category)}</p>
-          <h3 className="font-display mt-2 text-2xl text-amber-100">{t(quest.title)}</h3>
-          <p className="mt-4 text-sm leading-6 text-slate-300">{t(quest.objective)}</p>
-          <div className="mt-6 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
-            <span className="text-slate-400">{t('modal.quests.progress')}</span><strong className="text-amber-200">{quest.progress}</strong>
-          </div>
-        </article>
-      </div>
-      <p className="mock-banner mt-5">{t('modal.quests.banner')}</p>
+          ))}</nav>
+          <article className="rounded-xl border border-white/10 bg-slate-950/45 p-5">
+            <p className="eyebrow">{statusLabel(selected.status, locale)}</p>
+            <h3 className="font-display mt-2 text-2xl text-amber-100">{selected.name}</h3>
+            <p className="mt-4 text-sm leading-6 text-slate-300">{selected.description}</p>
+            {selected.status === 'REWARDED' ? (
+              <div className="mt-5 rounded-lg border border-emerald-300/20 bg-emerald-950/20 p-4 text-sm text-emerald-200">
+                {locale === 'pl' ? 'Zadanie zostało ukończone, a nagroda odebrana.' : 'The quest is complete and the reward has been claimed.'}
+              </div>
+            ) : (
+              <div className="mt-5 space-y-2">{selected.objectives.map((objective) => (
+                <div key={objective.id} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+                  <span className={objective.completed ? 'text-emerald-300' : 'text-slate-300'}>{objective.completed ? '✓ ' : ''}{objective.label}</span>
+                  <strong className="shrink-0 text-amber-200">{objective.current} / {objective.target}</strong>
+                </div>
+              ))}</div>
+            )}
+            <div className="mt-5 rounded-lg border border-amber-300/15 bg-amber-950/15 p-3 text-sm text-slate-300">
+              <strong className="text-amber-200">{locale === 'pl' ? 'Nagrody' : 'Rewards'}:</strong>{' '}{selected.rewards.experience} XP
+              {selected.rewards.silver > 0 ? ` · ${selected.rewards.silver} ${locale === 'pl' ? 'srebra' : 'silver'}` : ''}
+            </div>
+          </article>
+        </div>
+      ) : null}
     </Modal>
   );
 }
