@@ -8,6 +8,7 @@ import { I18nProvider } from './i18n/I18nProvider';
 import './styles.css';
 import './ui-refresh.css';
 import './medieval-gold-theme.css';
+import './outfit-navigation.css';
 import './hud-tooltips.css';
 import './combat.css';
 import './combat-support-effects.css';

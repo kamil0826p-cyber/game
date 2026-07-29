@@ -14,6 +14,14 @@ import { CharacterCreatorScreen } from './CharacterCreatorScreen';
 
 const classLabelKey = { MAGE: 'class.mage', WARRIOR: 'class.warrior', ARCHER: 'class.archer' } as const;
 
+function OutfitArrow({ direction }: { direction: 'left' | 'right' }): React.JSX.Element {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d={direction === 'left' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'} />
+    </svg>
+  );
+}
+
 export function CharacterSelectScreen(): React.JSX.Element {
   const state = useGameState();
   const connection = useGameConnection();
@@ -109,9 +117,9 @@ export function CharacterSelectScreen(): React.JSX.Element {
             <div>
               <div className="character-pedestal"><OutfitPreview outfitKey={selected.outfitKey} characterClass={selected.characterClass} /></div>
               <div className="mt-4 flex items-center justify-between gap-3">
-                <button type="button" className="preview-arrow" disabled={busy} onClick={() => void changeOutfit(-1)} aria-label="Previous outfit">‹</button>
+                <button type="button" className="preview-arrow" disabled={busy} onClick={() => void changeOutfit(-1)} aria-label="Previous outfit"><OutfitArrow direction="left" /></button>
                 <div className="text-center"><p className="eyebrow">Outfit</p><h3 className="font-display text-lg text-amber-100">{unlockedOutfits.find((outfit) => outfit.key === selected.outfitKey)?.label ?? selected.outfitKey}</h3><p className="mt-1 text-xs text-slate-400">{unlockedOutfits.length} of 10 unlocked</p></div>
-                <button type="button" className="preview-arrow" disabled={busy} onClick={() => void changeOutfit(1)} aria-label="Next outfit">›</button>
+                <button type="button" className="preview-arrow" disabled={busy} onClick={() => void changeOutfit(1)} aria-label="Next outfit"><OutfitArrow direction="right" /></button>
               </div>
             </div>
             <div className="flex flex-col justify-center">
