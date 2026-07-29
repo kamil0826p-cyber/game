@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/destroy-item
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
