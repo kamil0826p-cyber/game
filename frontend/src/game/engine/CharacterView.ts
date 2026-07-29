@@ -1,8 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
-import type { PublicPlayerState } from '../../contracts/game';
+import type { Direction, PublicPlayerState } from '../../contracts/game';
 import { WORLD_TILE_SIZE } from './constants';
-import { getIdlePose, getWalkPose } from './outfitAnimation';
-import { staticOutfitLoader, type StaticOutfitFrames } from './StaticOutfitLoader';
+import { gameAssetLoader, type OutfitFrames } from './GameAssetLoader';
 
 const classColors = { MAGE: 0x6d5bd0, WARRIOR: 0xb45454, ARCHER: 0x4f9467 } as const;
 export const PLAYER_CONTEXT_EVENT = 'game:player-interaction';
@@ -15,7 +14,7 @@ export class CharacterView {
   private readonly sprite = new Sprite();
   private readonly nameplate = new Container();
   private readonly nameText: Text;
-  private frames: StaticOutfitFrames | undefined = undefined;
+  private frames: OutfitFrames | undefined = undefined;
   private destroyed = false;
   private state: PublicPlayerState;
   private startX = 0; private startY = 0; private targetX = 0; private targetY = 0;
@@ -49,39 +48,13 @@ export class CharacterView {
     const nextX = (state.x + 0.5) * WORLD_TILE_SIZE; const nextY = (state.y + 1) * WORLD_TILE_SIZE; const distance = Math.hypot(nextX - this.targetX, nextY - this.targetY);
     this.state = state; this.nameText.text = `${state.name}  Lv. ${state.level}`; if (state.outfitKey !== this.lastOutfitKey) this.loadOutfit(state.outfitKey);
     if (immediate || distance > WORLD_TILE_SIZE * 1.6) { this.startX = this.targetX = nextX; this.startY = this.targetY = nextY; this.container.position.set(nextX, nextY); this.moving = false; return; }
-    if (nextX !== this.targetX || nextY !== this.targetY) { this.startX = this.container.x; this.startY = this.container.y; this.targetX = nextX; this.targetY = nextY; this.movementStartedAt = performance.now(); this.movementDuration = Math.max(120, stepMs * 1.05); this.moving = true; }
+    if (nextX !== this.targetX || nextY !== this.targetY) { this.startX = this.container.x; this.startY = this.container.y; this.targetX = nextX; this.targetY = nextY; this.movementStartedAt = performance.now(); this.movementDuration = Math.max(80, stepMs * 1.05); this.moving = true; }
   }
-
-  update(now: number): void {
-    if (this.moving) {
-      const progress = Math.min(1, (now - this.movementStartedAt) / this.movementDuration);
-      this.container.position.set(this.startX + (this.targetX - this.startX) * progress, this.startY + (this.targetY - this.startY) * progress);
-      if (progress >= 1) this.moving = false;
-    }
-    this.container.zIndex = Math.round(this.container.y);
-    this.updateFrame(now);
-  }
-
+  update(now: number): void { if (this.moving) { const progress = Math.min(1, (now - this.movementStartedAt) / this.movementDuration); this.container.position.set(this.startX + (this.targetX - this.startX) * progress, this.startY + (this.targetY - this.startY) * progress); if (progress >= 1) this.moving = false; } this.container.zIndex = Math.round(this.container.y); this.shadow.scale.x = this.moving ? 1.08 : 1; this.updateFrame(now); }
   get worldX(): number { return this.container.x; }
   get worldY(): number { return this.container.y - WORLD_TILE_SIZE * 0.5; }
   destroy(): void { this.destroyed = true; this.container.destroy({ children: true }); }
-
-  private updateFrame(now: number): void {
-    const frames = this.frames?.frames[this.state.direction];
-    if (!frames?.length) return;
-
-    const pose = this.moving
-      ? getWalkPose(now, this.movementStartedAt, this.movementDuration)
-      : getIdlePose(now);
-    const texture = frames[pose.frame % frames.length];
-    if (texture && this.sprite.texture !== texture) this.sprite.texture = texture;
-
-    this.sprite.position.y = pose.offsetY;
-    this.sprite.rotation = pose.rotation;
-    this.sprite.scale.set(1.5 * pose.scaleX, 1.5 * pose.scaleY);
-    this.shadow.scale.set(this.moving ? 1.08 - pose.offsetY * 0.025 : 1, this.moving ? 0.94 : 1);
-  }
-
-  private loadOutfit(outfitKey: string): void { this.lastOutfitKey = outfitKey; this.frames = undefined; this.sprite.visible = false; this.fallback.visible = true; void staticOutfitLoader.getFrames(outfitKey).then((frames) => { if (this.destroyed || this.lastOutfitKey !== outfitKey || !frames) return; const initialTexture = frames.frames[this.state.direction]?.[0]; if (!initialTexture) return; this.frames = frames; this.sprite.texture = initialTexture as Texture; this.sprite.visible = true; this.fallback.visible = false; }); }
+  private updateFrame(now: number): void { const frames = this.frames?.frames[this.state.direction]; if (!frames?.length) return; const duration = this.frames?.definition.frameDurationMs ?? 120; const index = this.moving ? Math.floor((now - this.movementStartedAt) / duration) % frames.length : 0; const texture = frames[index]; if (texture && this.sprite.texture !== texture) this.sprite.texture = texture; }
+  private loadOutfit(outfitKey: string): void { this.lastOutfitKey = outfitKey; this.frames = undefined; this.sprite.visible = false; this.fallback.visible = true; void gameAssetLoader.getOutfitFrames(outfitKey).then((frames) => { if (this.destroyed || this.lastOutfitKey !== outfitKey || !frames) return; const initialTexture = frames.frames[this.state.direction]?.[0]; if (!initialTexture) return; this.frames = frames; this.sprite.texture = initialTexture as Texture; this.sprite.visible = true; this.fallback.visible = false; }); }
   private createFallback(state: PublicPlayerState): Graphics { const primary = classColors[state.characterClass]; const accent = state.outfitKey.includes('archmage') || state.outfitKey.includes('champion') || state.outfitKey.includes('ranger') ? 0xfacc15 : 0xdbeafe; return new Graphics().circle(0, -51, 10).fill({ color: 0xe8b98f }).roundRect(-12, -43, 24, 31, 7).fill({ color: primary }).rect(-11, -29, 22, 4).fill({ color: accent }).rect(-9, -14, 7, 14).fill({ color: 0x1f2937 }).rect(2, -14, 7, 14).fill({ color: 0x1f2937 }); }
 }
