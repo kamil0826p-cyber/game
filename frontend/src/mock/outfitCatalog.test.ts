@@ -14,14 +14,13 @@ describe('outfit catalog', () => {
     }
   });
 
-  it('maps every class to exactly two committed sprite sheets', () => {
-    const allPaths = new Set<string>();
-    for (const outfits of Object.values(OUTFIT_CATALOG)) {
-      const paths = outfits.map((outfit) => outfitImageUrl(outfit.key));
-      expect(new Set(paths).size).toBe(2);
-      expect(paths.every((path) => path.endsWith('.svg?v=9'))).toBe(true);
-      paths.forEach((path) => allPaths.add(path));
-    }
-    expect(allPaths.size).toBe(6);
+  it('gives every outfit its own replaceable physical file path', () => {
+    const keys = Object.values(OUTFIT_CATALOG).flat().map((outfit) => outfit.key);
+    const paths = keys.map(outfitImageUrl);
+
+    expect(keys).toHaveLength(33);
+    expect(new Set(keys).size).toBe(33);
+    expect(new Set(paths).size).toBe(33);
+    expect(paths.every((path) => path.endsWith('.svg?v=10'))).toBe(true);
   });
 });
