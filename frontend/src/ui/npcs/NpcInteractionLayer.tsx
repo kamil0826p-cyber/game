@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { NpcDialogueSnapshot, NpcStatePayload } from '../../contracts/socket';
 import { NPC_CONTEXT_EVENT } from '../../game/engine/NpcView';
 import { canInteractWithNpc } from '../../game/npc/npcInteraction';
+import { getQuestLog } from '../../game/quests/questClient';
+import { replaceQuestMarkerStates, resetQuestMarkerStates } from '../../game/quests/questMarkerState';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { gameStore, useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -28,6 +30,20 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
   const [dialogue, setDialogue] = useState<NpcDialogueSnapshot>();
   const [merchant, setMerchant] = useState<ActiveMerchant>();
   const [busy, setBusy] = useState(false);
+
+  const refreshQuestMarkers = useCallback(async () => {
+    try {
+      const snapshot = await getQuestLog(connection);
+      replaceQuestMarkerStates(snapshot.quests);
+    } catch {
+      resetQuestMarkerStates();
+    }
+  }, [connection]);
+
+  useEffect(() => {
+    if (state.phase === 'in-world' && state.socketConnected) void refreshQuestMarkers();
+    else resetQuestMarkerStates();
+  }, [refreshQuestMarkers, state.phase, state.socketConnected, state.self?.characterId]);
 
   useEffect(() => {
     const open = (event: Event) => {
@@ -107,6 +123,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
         dialogue.node.id,
         choiceId,
       );
+      await refreshQuestMarkers();
       if (gameStore.getSnapshot().activeModal !== 'npc-dialogue') return;
       if (result.type === 'NODE') {
         setDialogue(result.dialogue);
