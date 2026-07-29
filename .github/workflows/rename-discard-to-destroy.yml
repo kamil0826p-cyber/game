@@ -1,0 +1,65 @@
+name: Rename discard to destroy
+
+on:
+  push:
+    branches:
+      - agent/destroy-item
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/destroy-item
+          fetch-depth: 0
+
+      - name: Rename destroy item flow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = (
+              ('InventoryDiscardPayload', 'InventoryDestroyPayload'),
+              ('inventoryDiscardSchema', 'inventoryDestroySchema'),
+              ('discardInventoryItem', 'destroyInventoryItem'),
+              ("'inventory:discard'", "'inventory:destroy'"),
+              ('inventory-discard', 'inventory-destroy'),
+              ('this.items.discard(', 'this.items.destroy('),
+              ('async discard(', 'async destroy('),
+          )
+
+          allowed_suffixes = {'.ts', '.tsx', '.js', '.jsx', '.json', '.md'}
+          for path in Path('.').rglob('*'):
+              if not path.is_file() or '.git' in path.parts or path.suffix not in allowed_suffixes:
+                  continue
+              original = path.read_text(encoding='utf-8')
+              updated = original
+              for old, new in replacements:
+                  updated = updated.replace(old, new)
+              if path.as_posix() == 'frontend/src/ui/modals/InventoryModal.tsx':
+                  updated = updated.replace('() => destroyInventoryItem(selected.id)', '() => connection.destroyInventoryItem(selected.id)')
+              if updated != original:
+                  path.write_text(updated, encoding='utf-8')
+          PY
+
+          rm .github/workflows/rename-discard-to-destroy.yml
+
+          if git grep -niE 'discard|wyrzu[cć]' -- ':!package-lock.json'; then
+            echo 'Old discard naming remains.' >&2
+            exit 1
+          fi
+
+      - name: Commit rename
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Rename discard item flow to destroy'
+          git push origin HEAD:agent/destroy-item
