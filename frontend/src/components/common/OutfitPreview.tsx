@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CharacterClass, Direction } from '../../contracts/game';
-import { outfitImageUrl } from '../../mock/outfitCatalog';
+import { outfitImageCandidates } from '../../mock/outfitCatalog';
 
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
 
@@ -35,10 +35,24 @@ export function OutfitPreview({
     image.decoding = 'async';
     const mob = outfitKey.startsWith('mob-');
     const safeRenderScale = Math.max(0.2, Math.min(3, renderScale));
+    const candidates = mob
+      ? [`${import.meta.env.BASE_URL}assets/mobs/${encodeURIComponent(outfitKey)}.svg`]
+      : [...outfitImageCandidates(outfitKey)];
+    let candidateIndex = 0;
     let frameId = 0;
     let start = performance.now();
     let loaded = false;
     let cancelled = false;
+
+    const tryNextCandidate = () => {
+      loaded = false;
+      const next = candidates[candidateIndex++];
+      if (next) {
+        image.src = next;
+        return;
+      }
+      console.error(`No outfit image candidate could be loaded for ${outfitKey}.`);
+    };
 
     const draw = (now: number) => {
       if (cancelled) return;
@@ -74,18 +88,19 @@ export function OutfitPreview({
       const validSheet = mob || (image.naturalWidth === 128 && image.naturalHeight === 192);
       if (!validSheet) {
         console.error(`Outfit ${outfitKey} has invalid dimensions ${image.naturalWidth}x${image.naturalHeight}. Expected 128x192.`);
+        tryNextCandidate();
         return;
       }
       loaded = true;
       start = performance.now();
     };
     image.onerror = () => {
-      console.error(`Outfit image failed to load: ${image.src}`);
+      if (cancelled) return;
+      console.warn(`Outfit image failed to load: ${image.src}`);
+      tryNextCandidate();
     };
-    image.src = mob
-      ? `${import.meta.env.BASE_URL}assets/mobs/${encodeURIComponent(outfitKey)}.svg`
-      : outfitImageUrl(outfitKey);
 
+    tryNextCandidate();
     frameId = requestAnimationFrame(draw);
     return () => {
       cancelled = true;
