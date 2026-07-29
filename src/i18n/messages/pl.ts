@@ -1,5 +1,4 @@
 import type { MessageKey } from './en.js';
-
 export const polishMessages = {
   'errors.auth.required': 'Wymagane jest uwierzytelnienie.',
   'errors.auth.invalid': 'Token uwierzytelniający jest nieprawidłowy lub wygasł.',
@@ -30,6 +29,12 @@ export const polishMessages = {
   'errors.npcs.notAvailable': 'Podejdź bliżej do NPC, aby porozmawiać.',
   'errors.npcs.dialogueUnavailable': 'Ten NPC nie może teraz rozmawiać.',
   'errors.npcs.dialogueStateInvalid': 'Ta rozmowa nie jest już aktywna.',
+  'errors.quests.notFound': 'Nie znaleziono tego zadania.',
+  'errors.quests.levelRequired': 'Poziom twojej postaci jest zbyt niski, aby rozpocząć to zadanie.',
+  'errors.quests.alreadyCompleted': 'To zadanie zostało już ukończone.',
+  'errors.quests.notActive': 'To zadanie nie jest aktywne.',
+  'errors.quests.incomplete': 'Cele zadania nie zostały jeszcze wykonane.',
+  'errors.quests.definitionInvalid': 'Definicja zadania jest nieprawidłowa.',
   'errors.trade.self': 'Nie możesz handlować z własną postacią.',
   'errors.trade.busy': 'Jeden z graczy prowadzi już handel.',
   'errors.trade.tooFar': 'Podejdź bliżej do drugiego gracza, aby handlować.',
