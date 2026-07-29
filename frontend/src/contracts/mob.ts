@@ -7,7 +7,6 @@ import type {
 } from './socket';
 
 export type MobRank = 'SPAWN' | 'EXECUTIONER' | 'ARCH_EXECUTIONER' | 'REAPER' | 'ANCIENT';
-export type MobDisplayState = 'ALIVE' | 'CORPSE';
 
 export interface MobStatePayload {
   id: string;
@@ -20,7 +19,6 @@ export interface MobStatePayload {
   level: number;
   outfitKey: string;
   renderScale: number;
-  state: MobDisplayState;
 }
 
 export interface MobLootRewardPayload {
@@ -79,7 +77,6 @@ declare module './socket' {
   }
   interface ServerToClientEvents {
     'world:mobSpawned': (payload: MobStatePayload) => void;
-    'world:mobDefeated': (payload: MobStatePayload & { respawnsAt: number }) => void;
     'world:mobDespawned': (payload: { mobId: string; respawnsAt: number }) => void;
     'mob:rewards': (payload: MobRewardPayload) => void;
   }
