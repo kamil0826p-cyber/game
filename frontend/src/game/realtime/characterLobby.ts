@@ -27,7 +27,10 @@ const socketFor = (client: GameSocketClient): LobbySocket => {
   return socket;
 };
 
-const command = <T>(emit: (socket: LobbySocket, ack: (response: SocketAck<T>) => void) => void): Promise<T> =>
+const command = <T>(
+  client: GameSocketClient,
+  emit: (socket: LobbySocket, ack: (response: SocketAck<T>) => void) => void,
+): Promise<T> =>
   new Promise<T>((resolve, reject) => {
     const timeout = window.setTimeout(() => reject(new Error('Server acknowledgement timed out.')), 8_000);
     const ack = (response: SocketAck<T>) => {
@@ -40,34 +43,45 @@ const command = <T>(emit: (socket: LobbySocket, ack: (response: SocketAck<T>) =>
       resolve(response.data);
     };
     try {
-      emit(socketFor(currentClient!), ack);
+      emit(socketFor(client), ack);
     } catch (error) {
       window.clearTimeout(timeout);
       reject(error);
     }
   });
 
-let currentClient: GameSocketClient | undefined;
-const run = async <T>(client: GameSocketClient, emit: (socket: LobbySocket, ack: (response: SocketAck<T>) => void) => void): Promise<T> => {
-  currentClient = client;
-  try {
-    return await command(emit);
-  } finally {
-    currentClient = undefined;
-  }
-};
-
 export const listCharacters = (client: GameSocketClient): Promise<CharacterLobbySummary[]> =>
-  run(client, (socket, ack) => socket.emit('character:list', { requestId: createRequestId('character-list') }, ack));
+  command(client, (socket, ack) =>
+    socket.emit('character:list', { requestId: createRequestId('character-list') }, ack),
+  );
 
-export const selectCharacter = async (client: GameSocketClient, characterId: string): Promise<WorldSpawnPayload> => {
-  const spawn = await run(client, (socket, ack) => socket.emit('character:select', { requestId: createRequestId('character-select'), characterId }, ack));
+export const selectCharacter = async (
+  client: GameSocketClient,
+  characterId: string,
+): Promise<WorldSpawnPayload> => {
+  const spawn = await command(client, (socket, ack) =>
+    socket.emit(
+      'character:select',
+      { requestId: createRequestId('character-select'), characterId },
+      ack,
+    ),
+  );
   gameStore.spawn(spawn);
   return spawn;
 };
 
-export const changeCharacterOutfit = async (client: GameSocketClient, characterId: string, outfitKey: string): Promise<WorldSpawnPayload> => {
-  const spawn = await run(client, (socket, ack) => socket.emit('character:outfit', { requestId: createRequestId('character-outfit'), characterId, outfitKey }, ack));
+export const changeCharacterOutfit = async (
+  client: GameSocketClient,
+  characterId: string,
+  outfitKey: string,
+): Promise<WorldSpawnPayload> => {
+  const spawn = await command(client, (socket, ack) =>
+    socket.emit(
+      'character:outfit',
+      { requestId: createRequestId('character-outfit'), characterId, outfitKey },
+      ack,
+    ),
+  );
   gameStore.spawn(spawn);
   return spawn;
 };
