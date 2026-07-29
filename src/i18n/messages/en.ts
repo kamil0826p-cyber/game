@@ -28,6 +28,12 @@ export const englishMessages = {
   'errors.npcs.notAvailable': 'Move closer to the NPC to talk.',
   'errors.npcs.dialogueUnavailable': 'This NPC cannot talk right now.',
   'errors.npcs.dialogueStateInvalid': 'This conversation is no longer active.',
+  'errors.quests.notFound': 'This quest could not be found.',
+  'errors.quests.levelRequired': 'Your character level is too low to start this quest.',
+  'errors.quests.alreadyCompleted': 'This quest has already been completed.',
+  'errors.quests.notActive': 'This quest is not active.',
+  'errors.quests.incomplete': 'The quest objectives are not complete yet.',
+  'errors.quests.definitionInvalid': 'The quest definition is invalid.',
   'errors.trade.self': 'You cannot trade with yourself.',
   'errors.trade.busy': 'One of the players is already trading.',
   'errors.trade.tooFar': 'Move closer to the other player to trade.',
@@ -59,5 +65,4 @@ export const englishMessages = {
   'errors.internal': 'An internal server error occurred.',
   'notifications.sessionReplaced': 'This character connected from another session.',
 } as const;
-
 export type MessageKey = keyof typeof englishMessages;
