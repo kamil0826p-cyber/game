@@ -14,13 +14,18 @@ describe('outfit catalog', () => {
     }
   });
 
-  it('gives every outfit its own replaceable physical PNG path', () => {
+  it('gives every outfit its own directly loadable PNG path', () => {
     const keys = Object.values(OUTFIT_CATALOG).flat().map((outfit) => outfit.key);
     const paths = keys.map(outfitImageUrl);
 
     expect(keys).toHaveLength(33);
     expect(new Set(keys).size).toBe(33);
     expect(new Set(paths).size).toBe(33);
-    expect(paths.every((path) => path.endsWith('.png?v=11'))).toBe(true);
+    expect(paths.every((path) => path.includes('assets/sprites/'))).toBe(true);
+    expect(paths.every((path) => path.endsWith('.png?v=12'))).toBe(true);
+  });
+
+  it('encodes outfit keys before building the asset URL', () => {
+    expect(outfitImageUrl('future outfit')).toContain('future%20outfit.png?v=12');
   });
 });
