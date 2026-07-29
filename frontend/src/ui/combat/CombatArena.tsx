@@ -271,6 +271,7 @@ export function CombatArena({
           outfitKey={sides.own.outfitKey}
           characterClass={sides.own.characterClass}
           direction="EAST"
+          renderScale={sides.own.renderScale ?? 1}
           className="combat-outfit"
         />
         <span className="combat-ground-shadow" />
@@ -285,6 +286,7 @@ export function CombatArena({
           outfitKey={sides.opponent.outfitKey}
           characterClass={sides.opponent.characterClass}
           direction="WEST"
+          renderScale={sides.opponent.renderScale ?? 1}
           className="combat-outfit"
         />
         <span className="combat-ground-shadow" />
