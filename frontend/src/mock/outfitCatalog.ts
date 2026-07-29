@@ -8,13 +8,7 @@ export interface ClientOutfitDefinition {
   description: string;
 }
 
-const outfit = (
-  key: string,
-  label: string,
-  characterClass: CharacterClass,
-  unlockLevel: number,
-  description: string,
-): ClientOutfitDefinition => ({ key, label, characterClass, unlockLevel, description });
+const outfit = (key: string, label: string, characterClass: CharacterClass, unlockLevel: number, description: string): ClientOutfitDefinition => ({ key, label, characterClass, unlockLevel, description });
 
 export const OUTFIT_CATALOG: Readonly<Record<CharacterClass, readonly ClientOutfitDefinition[]>> = {
   MAGE: [
@@ -55,13 +49,26 @@ export const OUTFIT_CATALOG: Readonly<Record<CharacterClass, readonly ClientOutf
   ],
 };
 
-export const CLASS_PRESENTATION: Readonly<
-  Record<CharacterClass, { label: string; role: string; description: string; accent: string }>
-> = {
+export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string; role: string; description: string; accent: string }>> = {
   MAGE: { label: 'Mage', role: 'Arcane specialist', description: 'High energy and intelligence with fragile defenses.', accent: 'text-violet-300' },
   WARRIOR: { label: 'Warrior', role: 'Armored vanguard', description: 'High health, strength, and armor for close combat.', accent: 'text-rose-300' },
   ARCHER: { label: 'Archer', role: 'Agile marksman', description: 'High agility with balanced health and energy.', accent: 'text-emerald-300' },
 };
 
-export const outfitImageUrl = (outfitKey: string): string =>
-  `/assets/sprites/${encodeURIComponent(outfitKey)}.png`;
+const spriteSourceByOutfit: Readonly<Record<string, string>> = {
+  'mage-archmage': 'mage-archmage',
+  'warrior-champion': 'warrior-champion',
+  'archer-ranger': 'archer-ranger',
+};
+
+export const outfitImageUrl = (outfitKey: string): string => {
+  const defaultSource = outfitKey.startsWith('mage-') ? 'mage-apprentice' : outfitKey.startsWith('warrior-') ? 'warrior-recruit' : 'archer-scout';
+  return `/assets/sprites/${encodeURIComponent(spriteSourceByOutfit[outfitKey] ?? defaultSource)}.png`;
+};
+
+export const outfitTint = (outfitKey: string): string | undefined => {
+  if (['mage-apprentice', 'mage-archmage', 'warrior-recruit', 'warrior-champion', 'archer-scout', 'archer-ranger'].includes(outfitKey)) return undefined;
+  let hash = 0;
+  for (const character of outfitKey) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return `hsl(${hash % 360} 52% 54% / 0.3)`;
+};
