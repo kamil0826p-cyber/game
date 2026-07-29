@@ -113,8 +113,10 @@ export class SessionLifecycleService {
       this.assertSocketConnected(client);
       return await this.prepareCharacterSelection(client, character);
     } catch (error) {
-      if (client.connected && !this.worldState.getBySocketId(client.id)) {
-        client.data.sessionState = previousState === 'CHARACTER_SELECT' ? 'CHARACTER_REQUIRED' : previousState;
+      if (client.connected) {
+        client.data.sessionState = this.worldState.getBySocketId(client.id)
+          ? 'CHARACTER_SELECT'
+          : previousState;
       }
       throw error;
     }
@@ -137,9 +139,9 @@ export class SessionLifecycleService {
     if (!current || current.characterId !== characterId) {
       throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.notFound');
     }
+    const character = await this.characters.changeOutfit(client.data.userId!, characterId, outfitKey);
     client.data.sessionState = 'INITIALIZING';
     await this.releaseCurrentSelection(client);
-    const character = await this.characters.changeOutfit(client.data.userId!, characterId, outfitKey);
     return this.prepareCharacterSelection(client, character);
   }
 
