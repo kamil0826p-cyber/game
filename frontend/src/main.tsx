@@ -9,6 +9,7 @@ import './ui-refresh.css';
 import './medieval-gold-theme.css';
 import './hud-tooltips.css';
 import './combat.css';
+import './combat-support-effects.css';
 
 const root = document.getElementById('root');
 if (!root) {
