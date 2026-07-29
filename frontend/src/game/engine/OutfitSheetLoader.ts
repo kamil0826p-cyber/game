@@ -23,44 +23,20 @@ const loadImage = (url: string): Promise<HTMLImageElement> => new Promise((resol
   image.src = url;
 });
 
-export const extractEmbeddedPng = (svgText: string): Uint8Array | undefined => {
-  const match = svgText.match(/(?:href|xlink:href)=["']data:image\/png;base64,([^"']+)["']/i);
-  if (!match?.[1]) return undefined;
+const createSheetCanvas = async (outfitKey: string): Promise<HTMLCanvasElement> => {
+  const image = await loadImage(outfitImageUrl(outfitKey));
+  if (image.naturalWidth !== SHEET_WIDTH || image.naturalHeight !== SHEET_HEIGHT) {
+    throw new Error(`Outfit ${outfitKey} must be ${SHEET_WIDTH}x${SHEET_HEIGHT}px.`);
+  }
 
-  const binary = atob(match[1].replace(/\s+/g, ''));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-};
-
-const drawSheet = (image: CanvasImageSource): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   canvas.width = SHEET_WIDTH;
   canvas.height = SHEET_HEIGHT;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas 2D context is required for outfit rendering.');
   context.imageSmoothingEnabled = false;
-  context.drawImage(image, 0, 0, SHEET_WIDTH, SHEET_HEIGHT);
+  context.drawImage(image, 0, 0);
   return canvas;
-};
-
-const createSheetCanvas = async (outfitKey: string): Promise<HTMLCanvasElement> => {
-  const url = outfitImageUrl(outfitKey);
-  if (new URL(url, window.location.origin).pathname.toLowerCase().endsWith('.svg')) {
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Outfit ${url} could not be loaded (${response.status}).`);
-    const embeddedPng = extractEmbeddedPng(await response.text());
-    if (!embeddedPng) throw new Error(`Outfit ${url} does not contain an embedded PNG sheet.`);
-
-    const objectUrl = URL.createObjectURL(new Blob([embeddedPng], { type: 'image/png' }));
-    try {
-      return drawSheet(await loadImage(objectUrl));
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
-  }
-
-  return drawSheet(await loadImage(url));
 };
 
 export const getOutfitSheetCanvas = (outfitKey: string): Promise<HTMLCanvasElement | undefined> => {
