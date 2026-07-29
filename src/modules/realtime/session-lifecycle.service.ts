@@ -5,7 +5,7 @@ import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { GameConfigService } from '../../config/game-config.service.js';
 import type { GameSocket, WorldSpawnPayload } from '../../contracts/socket.events.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
-import { CharacterService } from '../characters/character.service.js';
+import { CharacterService, MAX_CHARACTERS_PER_REALM } from '../characters/character.service.js';
 import { CombatService } from '../combat/combat.service.js';
 import type { CreateCharacterInput } from '../characters/character.types.js';
 import { getUnlockedOutfits } from '../characters/outfit.catalog.js';
@@ -22,6 +22,27 @@ import { VisibilityService } from '../world/visibility.service.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { SessionClaimExecutor } from './session-claim.executor.js';
+
+export interface CharacterRosterEntry {
+  characterId: string;
+  name: string;
+  characterClass: PersistedCharacterState['characterClass'];
+  level: number;
+  experience: number;
+  outfitKey: string;
+  mapId: string;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  energy: number;
+  maxEnergy: number;
+}
+
+export interface CharacterRosterPayload {
+  characters: CharacterRosterEntry[];
+  maxCharacters: number;
+}
 
 @Injectable()
 export class SessionLifecycleService {
@@ -51,58 +72,74 @@ export class SessionLifecycleService {
     const auth = client.data.auth;
     if (!auth) throw new GameError(GAME_ERROR_CODES.AUTH_REQUIRED, 'errors.auth.required');
 
-    client.data.locale = this.localization.resolveLocale(
-      client.handshake.auth?.locale ?? client.handshake.query.locale,
-    );
+    client.data.locale = this.localization.resolveLocale(client.handshake.auth?.locale ?? client.handshake.query.locale);
     const user = await this.characters.synchronizeFirebaseUser(auth);
     client.data.userId = user.id;
     const realm = await this.realms.getCurrentRealm();
-    let character = await this.characters.findCharacterForCurrentRealm(user.id);
-
-    if (character) {
-      await this.persistence.flushDetachedCharacter(character.id);
-      character = await this.characters.findCharacterForCurrentRealm(user.id);
-    }
+    const roster = await this.characters.listCharactersForCurrentRealm(user.id);
 
     this.assertSocketConnected(client);
     client.emit('session:ready', {
       realm: { id: realm.id, slug: realm.slug, name: realm.name },
-      requiresCharacter: !character,
+      requiresCharacter: roster.length === 0,
       serverTime: Date.now(),
     });
 
-    if (!character) {
+    if (roster.length === 0) {
       client.data.sessionState = 'CHARACTER_REQUIRED';
       client.emit('character:required', { allowedClasses: ['MAGE', 'WARRIOR', 'ARCHER'] });
       return;
     }
 
-    await this.prepareCharacterSelection(client, character);
+    await this.prepareCharacterSelection(client, roster[0]!);
   }
 
-  async createCharacter(
-    client: GameSocket,
-    input: CreateCharacterInput,
-  ): Promise<WorldSpawnPayload> {
+  async listCharacters(client: GameSocket): Promise<CharacterRosterPayload> {
     this.assertSocketConnected(client);
-    if (!client.data.userId || client.data.sessionState !== 'CHARACTER_REQUIRED') {
+    if (!client.data.userId) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    const characters = await this.characters.listCharactersForCurrentRealm(client.data.userId);
+    return { characters: characters.map((character) => this.toRosterEntry(character)), maxCharacters: MAX_CHARACTERS_PER_REALM };
+  }
+
+  async createCharacter(client: GameSocket, input: CreateCharacterInput): Promise<WorldSpawnPayload> {
+    this.assertSocketConnected(client);
+    if (!client.data.userId || !['CHARACTER_REQUIRED', 'CHARACTER_SELECT'].includes(client.data.sessionState ?? '')) {
       throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
     }
-    if (this.worldState.getBySocketId(client.id)) {
-      throw new GameError(GAME_ERROR_CODES.CHARACTER_ALREADY_EXISTS, 'errors.character.exists');
-    }
 
+    await this.clearPreparedSelection(client);
     client.data.sessionState = 'INITIALIZING';
     try {
       const character = await this.characters.createCharacter(client.data.userId, input);
       this.assertSocketConnected(client);
       return await this.prepareCharacterSelection(client, character);
     } catch (error) {
-      if (client.connected && !this.worldState.getBySocketId(client.id)) {
-        client.data.sessionState = 'CHARACTER_REQUIRED';
-      }
+      if (client.connected && !this.worldState.getBySocketId(client.id)) client.data.sessionState = 'CHARACTER_REQUIRED';
       throw error;
     }
+  }
+
+  async selectCharacter(client: GameSocket, characterId: string): Promise<WorldSpawnPayload> {
+    this.assertSocketConnected(client);
+    if (!client.data.userId || client.data.sessionState === 'IN_WORLD') {
+      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    }
+    const character = await this.characters.findCharacterForCurrentRealm(client.data.userId, characterId);
+    if (!character) throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
+    await this.clearPreparedSelection(client);
+    client.data.sessionState = 'INITIALIZING';
+    return this.prepareCharacterSelection(client, character);
+  }
+
+  async updateCharacterOutfit(client: GameSocket, characterId: string, outfitKey: string): Promise<CharacterRosterEntry> {
+    this.assertSocketConnected(client);
+    if (!client.data.userId || client.data.sessionState === 'IN_WORLD') {
+      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    }
+    const character = await this.characters.updateOutfit(client.data.userId, characterId, outfitKey);
+    const selected = this.worldState.getBySocketId(client.id);
+    if (selected?.characterId === character.id) selected.outfitKey = character.outfitKey;
+    return this.toRosterEntry(character);
   }
 
   async enterWorld(client: GameSocket): Promise<WorldSpawnPayload> {
@@ -116,16 +153,10 @@ export class SessionLifecycleService {
     const position = this.maps.findNearestWalkable(
       map,
       { x: session.x, y: session.y },
-      (x, y) =>
-        map.zoneType !== 'SAFE' && this.worldState.isOccupied(map.id, x, y, session.characterId),
+      (x, y) => map.zoneType !== 'SAFE' && this.worldState.isOccupied(map.id, x, y, session.characterId),
     );
     if (position.x !== session.x || position.y !== session.y) {
-      this.worldState.updatePosition(session, {
-        mapId: map.id,
-        x: position.x,
-        y: position.y,
-        direction: session.direction,
-      });
+      this.worldState.updatePosition(session, { mapId: map.id, x: position.x, y: position.y, direction: session.direction });
     }
 
     this.worldState.activateSession(session);
@@ -153,19 +184,11 @@ export class SessionLifecycleService {
     if (snapshot) await this.persistence.queueDetachedSnapshot(snapshot);
   }
 
-  private prepareCharacterSelection(
-    client: GameSocket,
-    character: PersistedCharacterState,
-  ): Promise<WorldSpawnPayload> {
-    return this.sessionClaims.run(character.id, () =>
-      this.prepareWithExclusiveClaim(client, character),
-    );
+  private prepareCharacterSelection(client: GameSocket, character: PersistedCharacterState): Promise<WorldSpawnPayload> {
+    return this.sessionClaims.run(character.id, () => this.prepareWithExclusiveClaim(client, character));
   }
 
-  private async prepareWithExclusiveClaim(
-    client: GameSocket,
-    initialCharacter: PersistedCharacterState,
-  ): Promise<WorldSpawnPayload> {
+  private async prepareWithExclusiveClaim(client: GameSocket, initialCharacter: PersistedCharacterState): Promise<WorldSpawnPayload> {
     this.assertSocketConnected(client);
     await this.persistence.flushDetachedCharacter(initialCharacter.id);
 
@@ -173,10 +196,8 @@ export class SessionLifecycleService {
     if (existing) await this.replaceExistingSession(existing);
 
     await this.persistence.flushDetachedCharacter(initialCharacter.id);
-    const character = await this.characters.findCharacterForCurrentRealm(initialCharacter.userId);
-    if (!character) {
-      throw new GameError(GAME_ERROR_CODES.CHARACTER_REQUIRED, 'errors.character.required');
-    }
+    const character = await this.characters.findCharacterForCurrentRealm(initialCharacter.userId, initialCharacter.id);
+    if (!character) throw new GameError(GAME_ERROR_CODES.CHARACTER_REQUIRED, 'errors.character.required');
 
     this.assertSocketConnected(client);
     const resolved = await this.resolveSpawn(character);
@@ -193,9 +214,7 @@ export class SessionLifecycleService {
       activeInWorld: false,
     });
     const collision = this.worldState.addSession(session);
-    if (collision) {
-      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
-    }
+    if (collision) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
 
     client.data.characterId = session.characterId;
     client.data.sessionState = 'CHARACTER_SELECT';
@@ -204,66 +223,69 @@ export class SessionLifecycleService {
 
     if (session.dirty) {
       const snapshot = this.persistence.capture(session);
-      void this.persistence
-        .persistSnapshot(snapshot, 'repair')
-        .then(() => {
-          this.worldState.markPersisted(
-            snapshot.characterId,
-            snapshot.connectionId,
-            snapshot.revision,
-          );
-        })
-        .catch((error: unknown) => {
-          this.logger.error(
-            `Initial position repair failed for character ${snapshot.characterId}.`,
-            error instanceof Error ? error.stack : undefined,
-          );
-        });
+      void this.persistence.persistSnapshot(snapshot, 'repair').then(() => {
+        this.worldState.markPersisted(snapshot.characterId, snapshot.connectionId, snapshot.revision);
+      }).catch((error: unknown) => {
+        this.logger.error(`Initial position repair failed for character ${snapshot.characterId}.`, error instanceof Error ? error.stack : undefined);
+      });
     }
 
     return payload;
   }
 
-  private async buildPayload(
-    session: PlayerSession,
-    map: RuntimeMap,
-    nearbyPlayers: ReturnType<VisibilityService['addSession']>,
-  ): Promise<WorldSpawnPayload> {
+  private async clearPreparedSelection(client: GameSocket): Promise<void> {
+    const session = this.worldState.getBySocketId(client.id);
+    if (!session) return;
+    if (session.activeInWorld) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    const snapshot = this.persistence.capture(session);
+    this.worldState.removeSessionBySocket(client.id);
+    client.data.characterId = undefined;
+    if (session.dirty) await this.persistence.queueDetachedSnapshot(snapshot);
+  }
+
+  private async buildPayload(session: PlayerSession, map: RuntimeMap, nearbyPlayers: ReturnType<VisibilityService['addSession']>): Promise<WorldSpawnPayload> {
     return {
       self: this.worldState.toSelfState(session),
       map: this.movementService.toMapState(map),
       npcs: await this.npcs.getMapNpcs(map.id),
       nearbyPlayers,
-      unlockedOutfits: getUnlockedOutfits(session.characterClass, session.level).map((outfit) => ({
-        key: outfit.key,
-        unlockLevel: outfit.unlockLevel,
-      })),
+      unlockedOutfits: getUnlockedOutfits(session.characterClass, session.level).map((outfit) => ({ key: outfit.key, unlockLevel: outfit.unlockLevel })),
       skillTree: await this.skills.getSnapshot(session.userId, session.characterId),
       movementStepMs: this.config.values.MOVE_STEP_MS,
       serverTime: Date.now(),
     };
   }
 
-  private async resolveSpawn(
-    character: PersistedCharacterState,
-  ): Promise<{ map: RuntimeMap; x: number; y: number }> {
+  private toRosterEntry(character: PersistedCharacterState): CharacterRosterEntry {
+    return {
+      characterId: character.id,
+      name: character.name,
+      characterClass: character.characterClass,
+      level: character.level,
+      experience: character.experience,
+      outfitKey: character.outfitKey,
+      mapId: character.mapId,
+      x: character.x,
+      y: character.y,
+      hp: character.hp,
+      maxHp: character.maxHp,
+      energy: character.energy,
+      maxEnergy: character.maxEnergy,
+    };
+  }
+
+  private async resolveSpawn(character: PersistedCharacterState): Promise<{ map: RuntimeMap; x: number; y: number }> {
     const realm = await this.realms.getCurrentRealm();
     let map: RuntimeMap;
     try {
       map = await this.maps.getMap(character.mapId);
-      if (map.realmId !== realm.id) {
-        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid');
-      }
+      if (map.realmId !== realm.id) throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid');
     } catch (error) {
       if (!(error instanceof GameError) || error.code !== GAME_ERROR_CODES.MAP_INVALID) throw error;
       map = await this.maps.getMap(realm.defaultMapId);
     }
 
-    const position = this.maps.findNearestWalkable(
-      map,
-      map.id === character.mapId ? { x: character.x, y: character.y } : map.spawn,
-      () => false,
-    );
+    const position = this.maps.findNearestWalkable(map, map.id === character.mapId ? { x: character.x, y: character.y } : map.spawn, () => false);
     return { map, x: position.x, y: position.y };
   }
 
@@ -291,8 +313,6 @@ export class SessionLifecycleService {
   }
 
   private assertSocketConnected(client: GameSocket): void {
-    if (!client.connected) {
-      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
-    }
+    if (!client.connected) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
   }
 }

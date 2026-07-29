@@ -173,8 +173,8 @@ model Character {
   receivedTrades   TradeSession[]            @relation("TradeRecipient")
   tradeOffers      TradeOfferItem[]
 
-  @@unique([userId, realmId])
   @@unique([realmId, name])
+  @@index([userId, realmId])
   @@index([realmId, mapId])
   @@index([mapId, x, y])
 }

@@ -15,14 +15,35 @@ const tileset = `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="32"
 </svg>
 `;
 
-const outfits = {
-  'mage-apprentice': ['MAGE', 1],
-  'mage-archmage': ['MAGE', 10],
-  'warrior-recruit': ['WARRIOR', 1],
-  'warrior-champion': ['WARRIOR', 10],
-  'archer-scout': ['ARCHER', 1],
-  'archer-ranger': ['ARCHER', 10],
+const outfitRows = {
+  MAGE: [
+    ['mage-apprentice', 1, 'mage-apprentice'], ['mage-scholar', 1, 'mage-apprentice'],
+    ['mage-evoker', 5, 'mage-apprentice'], ['mage-archmage', 10, 'mage-archmage'],
+    ['mage-illusionist', 15, 'mage-archmage'], ['mage-elementalist', 20, 'mage-apprentice'],
+    ['mage-runekeeper', 30, 'mage-archmage'], ['mage-starcaller', 40, 'mage-archmage'],
+    ['mage-chronomancer', 50, 'mage-apprentice'], ['mage-voidseer', 75, 'mage-archmage'],
+  ],
+  WARRIOR: [
+    ['warrior-recruit', 1, 'warrior-recruit'], ['warrior-guard', 1, 'warrior-recruit'],
+    ['warrior-vanguard', 5, 'warrior-recruit'], ['warrior-champion', 10, 'warrior-champion'],
+    ['warrior-berserker', 15, 'warrior-recruit'], ['warrior-templar', 20, 'warrior-champion'],
+    ['warrior-warlord', 30, 'warrior-champion'], ['warrior-dreadnought', 40, 'warrior-recruit'],
+    ['warrior-kingsguard', 50, 'warrior-champion'], ['warrior-titan', 75, 'warrior-champion'],
+  ],
+  ARCHER: [
+    ['archer-scout', 1, 'archer-scout'], ['archer-hunter', 1, 'archer-scout'],
+    ['archer-pathfinder', 5, 'archer-scout'], ['archer-ranger', 10, 'archer-ranger'],
+    ['archer-sharpshooter', 15, 'archer-ranger'], ['archer-beaststalker', 20, 'archer-scout'],
+    ['archer-windrunner', 30, 'archer-ranger'], ['archer-nightstalker', 40, 'archer-ranger'],
+    ['archer-warden', 50, 'archer-scout'], ['archer-legend', 75, 'archer-ranger'],
+  ],
 };
+
+const outfits = Object.fromEntries(
+  Object.entries(outfitRows).flatMap(([characterClass, rows]) =>
+    rows.map(([key, unlockLevel, imageKey]) => [key, { characterClass, unlockLevel, imageKey }]),
+  ),
+);
 
 const tileDefinition = {
   image: '/assets/tiles/tiled-world.svg',
@@ -33,27 +54,21 @@ const tileDefinition = {
 };
 
 const manifest = {
-  version: 2,
-  tilesets: {
-    greenfields: tileDefinition,
-    'crystal-cave': tileDefinition,
-  },
+  version: 3,
+  tilesets: { greenfields: tileDefinition, 'crystal-cave': tileDefinition },
   outfits: Object.fromEntries(
-    Object.entries(outfits).map(([key, [characterClass, unlockLevel]]) => [
-      key,
-      {
-        image: `/assets/sprites/${key}.png`,
-        frameWidth: 32,
-        frameHeight: 48,
-        columns: 4,
-        rows: 4,
-        framesPerDirection: 4,
-        frameDurationMs: 120,
-        directionRows: { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 },
-        characterClass,
-        unlockLevel,
-      },
-    ]),
+    Object.entries(outfits).map(([key, definition]) => [key, {
+      image: `/assets/sprites/${definition.imageKey}.png`,
+      frameWidth: 32,
+      frameHeight: 48,
+      columns: 4,
+      rows: 4,
+      framesPerDirection: 4,
+      frameDurationMs: 120,
+      directionRows: { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 },
+      characterClass: definition.characterClass,
+      unlockLevel: definition.unlockLevel,
+    }]),
   ),
 };
 
