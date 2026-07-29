@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getQuestLog } from '../../game/quests/questClient';
+import { replaceQuestMarkerStates } from '../../game/quests/questMarkerState';
 import type { QuestLogEntryPayload } from '../../game/quests/quest.types';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -26,6 +27,7 @@ export function QuestModal({ onClose }: { onClose: () => void }): React.JSX.Elem
       .then((snapshot) => {
         if (cancelled) return;
         setQuests(snapshot.quests);
+        replaceQuestMarkerStates(snapshot.quests);
         setSelectedKey((current) => current && snapshot.quests.some((quest) => quest.key === current) ? current : snapshot.quests[0]?.key);
         setError(undefined);
       })
@@ -51,15 +53,20 @@ export function QuestModal({ onClose }: { onClose: () => void }): React.JSX.Elem
             <p className="eyebrow">{statusLabel(selected.status, locale)}</p>
             <h3 className="font-display mt-2 text-2xl text-amber-100">{selected.name}</h3>
             <p className="mt-4 text-sm leading-6 text-slate-300">{selected.description}</p>
-            <div className="mt-5 space-y-2">{selected.objectives.map((objective) => (
-              <div key={objective.id} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
-                <span className={objective.completed ? 'text-emerald-300' : 'text-slate-300'}>{objective.completed ? '✓ ' : ''}{objective.label}</span>
-                <strong className="shrink-0 text-amber-200">{objective.current} / {objective.target}</strong>
+            {selected.status === 'REWARDED' ? (
+              <div className="mt-5 rounded-lg border border-emerald-300/20 bg-emerald-950/20 p-4 text-sm text-emerald-200">
+                {locale === 'pl' ? 'Zadanie zostało ukończone, a nagroda odebrana.' : 'The quest is complete and the reward has been claimed.'}
               </div>
-            ))}</div>
+            ) : (
+              <div className="mt-5 space-y-2">{selected.objectives.map((objective) => (
+                <div key={objective.id} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+                  <span className={objective.completed ? 'text-emerald-300' : 'text-slate-300'}>{objective.completed ? '✓ ' : ''}{objective.label}</span>
+                  <strong className="shrink-0 text-amber-200">{objective.current} / {objective.target}</strong>
+                </div>
+              ))}</div>
+            )}
             <div className="mt-5 rounded-lg border border-amber-300/15 bg-amber-950/15 p-3 text-sm text-slate-300">
               <strong className="text-amber-200">{locale === 'pl' ? 'Nagrody' : 'Rewards'}:</strong>{' '}{selected.rewards.experience} XP
-              {selected.rewards.gold > 0 ? ` · ${selected.rewards.gold} ${locale === 'pl' ? 'złota' : 'gold'}` : ''}
               {selected.rewards.silver > 0 ? ` · ${selected.rewards.silver} ${locale === 'pl' ? 'srebra' : 'silver'}` : ''}
             </div>
           </article>
