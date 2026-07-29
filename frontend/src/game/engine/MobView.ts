@@ -46,9 +46,12 @@ export class MobView {
     this.container.label = mob.outfitKey;
 
     const shadow = new Graphics().ellipse(0, 13, 17, 7).fill({ color: 0x000000, alpha: 0.38 });
+    shadow.scale.set(Math.max(0.45, mob.renderScale));
     shadow.zIndex = 0;
 
     this.fallback = this.createFallback();
+    this.fallback.scale.set(mob.renderScale);
+    this.fallback.position.y = 18 * (1 - mob.renderScale);
     this.fallback.zIndex = 1;
 
     this.sprite.anchor.set(0.5, 1);
@@ -105,8 +108,8 @@ export class MobView {
 
       texture.source.scaleMode = 'nearest';
       this.sprite.texture = texture;
-      const maxWidth = this.mob.rank === 'EXECUTIONER' ? 66 : 58;
-      const maxHeight = 58;
+      const maxWidth = 66 * this.mob.renderScale;
+      const maxHeight = 58 * this.mob.renderScale;
       const scale = Math.min(
         maxWidth / Math.max(1, texture.width),
         maxHeight / Math.max(1, texture.height),
@@ -115,7 +118,7 @@ export class MobView {
       this.sprite.visible = true;
       this.fallback.visible = false;
     } catch {
-      // Keep the visible fallback when the asset cannot be loaded or decoded.
+      // Keep the scaled fallback when the asset cannot be loaded or decoded.
     }
   }
 
