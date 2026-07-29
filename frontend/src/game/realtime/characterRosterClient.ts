@@ -28,7 +28,14 @@ export interface CharacterRosterPayload {
 type InternalClient = {
   requireSocket(): { emit(event: string, ...args: unknown[]): void };
   withAck<T>(emit: (ack: (response: SocketAck<T>) => void) => void): Promise<SocketAck<T>>;
-  assertOk<T>(response: SocketAck<T>): asserts response is { ok: true; data: T };
+};
+
+const unwrap = <T>(response: SocketAck<T>): T => {
+  if (!response.ok) {
+    gameStore.addNotification(response.error);
+    throw new Error(response.error.message);
+  }
+  return response.data;
 };
 
 declare module './GameSocketClient' {
@@ -42,24 +49,21 @@ declare module './GameSocketClient' {
 
 GameSocketClient.prototype.listCharacters = async function (): Promise<CharacterRosterPayload> {
   const internal = this as unknown as InternalClient;
-  const response = await internal.withAck<CharacterRosterPayload>((ack) =>
+  return unwrap(await internal.withAck<CharacterRosterPayload>((ack) =>
     internal.requireSocket().emit('character:list', ack),
-  );
-  internal.assertOk(response);
-  return response.data;
+  ));
 };
 
 GameSocketClient.prototype.selectCharacter = async function (characterId: string): Promise<void> {
   const internal = this as unknown as InternalClient;
-  const response = await internal.withAck<WorldSpawnPayload>((ack) =>
+  const payload = unwrap(await internal.withAck<WorldSpawnPayload>((ack) =>
     internal.requireSocket().emit(
       'character:select',
       { requestId: createRequestId('character-select'), characterId },
       ack,
     ),
-  );
-  internal.assertOk(response);
-  gameStore.spawn(response.data);
+  ));
+  gameStore.spawn(payload);
 };
 
 GameSocketClient.prototype.updateCharacterOutfit = async function (
@@ -67,15 +71,13 @@ GameSocketClient.prototype.updateCharacterOutfit = async function (
   outfitKey: string,
 ): Promise<CharacterRosterEntry> {
   const internal = this as unknown as InternalClient;
-  const response = await internal.withAck<CharacterRosterEntry>((ack) =>
+  return unwrap(await internal.withAck<CharacterRosterEntry>((ack) =>
     internal.requireSocket().emit(
       'character:outfit',
       { requestId: createRequestId('character-outfit'), characterId, outfitKey },
       ack,
     ),
-  );
-  internal.assertOk(response);
-  return response.data;
+  ));
 };
 
 GameSocketClient.prototype.createCharacterWithOutfit = async function (
