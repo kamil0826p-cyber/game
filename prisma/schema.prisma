@@ -42,6 +42,12 @@ enum CombatState {
   IN_BATTLE
 }
 
+enum SkillTargeting {
+  SELF
+  ENEMY
+  AREA
+}
+
 enum EquipmentSlot {
   HEAD
   CHEST
@@ -122,14 +128,14 @@ model User {
 }
 
 model Character {
-  id          String         @id @default(uuid()) @db.Uuid
-  userId      String         @db.Uuid
-  realmId     String         @db.Uuid
-  name        String         @db.VarChar(24)
-  class       CharacterClass
-  level       Int            @default(1)
-  experience  Int            @default(0)
-  outfitKey   String         @db.VarChar(64)
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @db.Uuid
+  realmId    String         @db.Uuid
+  name       String         @db.VarChar(24)
+  class      CharacterClass
+  level      Int            @default(1)
+  experience Int            @default(0)
+  outfitKey  String         @db.VarChar(64)
 
   mapId       String      @db.Uuid
   x           Int
@@ -157,15 +163,15 @@ model Character {
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Restrict)
   map   Map   @relation(fields: [mapId], references: [id], onDelete: Restrict)
 
-  skills             CharacterSkill[]
-  inventoryItems     InventoryItem[]
-  quests             CharacterQuest[]
-  currencyLedger     CharacterCurrencyLedger[]
-  sentChatMessages   ChatMessage[] @relation("ChatSender")
-  receivedWhispers   ChatMessage[] @relation("ChatTarget")
-  initiatedTrades    TradeSession[] @relation("TradeInitiator")
-  receivedTrades     TradeSession[] @relation("TradeRecipient")
-  tradeOffers        TradeOfferItem[]
+  skills           CharacterSkill[]
+  inventoryItems   InventoryItem[]
+  quests           CharacterQuest[]
+  currencyLedger   CharacterCurrencyLedger[]
+  sentChatMessages ChatMessage[]             @relation("ChatSender")
+  receivedWhispers ChatMessage[]             @relation("ChatTarget")
+  initiatedTrades  TradeSession[]            @relation("TradeInitiator")
+  receivedTrades   TradeSession[]            @relation("TradeRecipient")
+  tradeOffers      TradeOfferItem[]
 
   @@unique([userId, realmId])
   @@unique([realmId, name])
@@ -238,28 +244,52 @@ model Portal {
 }
 
 model SkillDefinition {
-  id            String          @id @default(uuid()) @db.Uuid
-  key           String          @unique @db.VarChar(96)
-  name          String          @db.VarChar(120)
-  description   String          @db.Text
-  requiredClass CharacterClass?
-  minimumLevel  Int             @default(1)
-  energyCost    Int             @default(0)
-  metadata      Json            @default("{}") @db.JsonB
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id               String          @id @default(uuid()) @db.Uuid
+  key              String          @unique @db.VarChar(96)
+  name             String          @db.VarChar(120)
+  description      String          @db.Text
+  requiredClass    CharacterClass?
+  minimumLevel     Int             @default(1)
+  energyCost       Int             @default(0)
+  cooldownTurns    Int             @default(0)
+  targeting        SkillTargeting  @default(ENEMY)
+  maxRank          Int             @default(1)
+  displayOrder     Int             @default(0)
+  treeRow          Int             @default(0)
+  treeColumn       Int             @default(0)
+  icon             String          @default("✦") @db.VarChar(16)
+  animationKey     String          @default("none") @db.VarChar(96)
+  effectDefinition Json            @default("{}") @db.JsonB
+  visualDefinition Json            @default("{}") @db.JsonB
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   characterSkills CharacterSkill[]
+  prerequisites   SkillPrerequisite[] @relation("SkillPrerequisites")
+  prerequisiteFor SkillPrerequisite[] @relation("PrerequisiteForSkills")
+
+  @@index([requiredClass, displayOrder])
+}
+
+model SkillPrerequisite {
+  skillDefinitionId             String @db.Uuid
+  prerequisiteSkillDefinitionId String @db.Uuid
+
+  skill        SkillDefinition @relation("SkillPrerequisites", fields: [skillDefinitionId], references: [id], onDelete: Cascade)
+  prerequisite SkillDefinition @relation("PrerequisiteForSkills", fields: [prerequisiteSkillDefinitionId], references: [id], onDelete: Cascade)
+
+  @@id([skillDefinitionId, prerequisiteSkillDefinitionId])
+  @@index([prerequisiteSkillDefinitionId])
 }
 
 model CharacterSkill {
-  id                String   @id @default(uuid()) @db.Uuid
-  characterId       String   @db.Uuid
-  skillDefinitionId String   @db.Uuid
-  rank              Int      @default(1)
-  cooldownEndsAt    DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                     String   @id @default(uuid()) @db.Uuid
+  characterId            String   @db.Uuid
+  skillDefinitionId      String   @db.Uuid
+  rank                   Int      @default(1)
+  cooldownTurnsRemaining Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
   skillDefinition SkillDefinition @relation(fields: [skillDefinitionId], references: [id], onDelete: Restrict)
@@ -291,8 +321,8 @@ model InventoryItem {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  itemDefinition  ItemDefinition  @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
+  character       Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  itemDefinition  ItemDefinition   @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
   tradeOfferItems TradeOfferItem[]
 
   @@unique([characterId, slotIndex])

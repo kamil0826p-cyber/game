@@ -27,23 +27,22 @@ export const MOCK_QUESTS = [
   },
 ] as const;
 
-export const MOCK_SKILLS = [
-  { id: 'focus', label: 'Focus', rank: 1, x: 50, y: 10 },
-  { id: 'survival', label: 'Survival', rank: 0, x: 25, y: 42 },
-  { id: 'precision', label: 'Precision', rank: 0, x: 75, y: 42 },
-  { id: 'mastery', label: 'Class Mastery', rank: 0, x: 50, y: 75 },
-] as const;
-
 export const MOCK_CHAT_MESSAGES = {
   Global: [
     { author: 'Realm', text: 'Welcome to World 1.', tone: 'system' },
     { author: 'Wayfarer', text: 'Has anyone explored the cave portal?', tone: 'player' },
   ],
-  Local: [
-    { author: 'Village Guard', text: 'The eastern road is quiet today.', tone: 'npc' },
-  ],
+  Local: [{ author: 'Village Guard', text: 'The eastern road is quiet today.', tone: 'npc' }],
   System: [
-    { author: 'System', text: 'Movement and visibility are connected to the live server.', tone: 'system' },
-    { author: 'System', text: 'Combat, inventory, quests, and skills are visual mocks.', tone: 'warning' },
+    {
+      author: 'System',
+      text: 'Movement and visibility are connected to the live server.',
+      tone: 'system',
+    },
+    {
+      author: 'System',
+      text: 'Combat, inventory, quests, and skills are visual mocks.',
+      tone: 'warning',
+    },
   ],
 } as const;

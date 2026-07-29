@@ -1,57 +1,116 @@
-import { useEffect, useState } from 'react';
-import type { TranslationKey } from '../../i18n/dictionaries';
+import { useEffect, useMemo, useState } from 'react';
+import type { SkillDefinitionPayload } from '../../contracts/socket';
+import { getSkillCopy } from '../../game/skills/skillCopy';
+import { getSkillUseBlockReason } from '../../game/skills/skillUi';
+import { useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 
-const slots: ReadonlyArray<{ icon: string; labelKey: TranslationKey }> = [
-  { icon: '✦', labelKey: 'hud.action.arcaneSpark' },
-  { icon: '◆', labelKey: 'hud.action.healthPotion' },
-  { icon: '➶', labelKey: 'hud.action.quickShot' },
-  { icon: '✥', labelKey: 'hud.action.guard' },
-  { icon: '☄', labelKey: 'hud.action.meteor' },
-  { icon: '◈', labelKey: 'hud.action.focus' },
-  { icon: '▱', labelKey: 'hud.action.townScroll' },
-  { icon: '●', labelKey: 'hud.action.rations' },
-];
+export const COMBAT_SKILL_INTENT_EVENT = 'game:combat-skill-intent';
+
+export interface CombatSkillIntent {
+  skillKey: string;
+}
+
+const blockReasonLabelKey = {
+  LOCKED: 'hud.action.locked',
+  OUT_OF_COMBAT: 'hud.action.combatOnly',
+  COOLDOWN: 'hud.action.cooldown',
+  INSUFFICIENT_ENERGY: 'hud.action.noEnergy',
+} as const;
 
 const isEditable = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+  target instanceof HTMLElement &&
+  (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 
 export function ActionBar(): React.JSX.Element {
-  const { t } = useI18n();
-  const [active, setActive] = useState<number | undefined>(undefined);
+  const { locale, t } = useI18n();
+  const state = useGameState();
+  const [active, setActive] = useState<number>();
+  const slots = useMemo(
+    () => [...(state.skillTree?.skills ?? [])].sort((a, b) => a.displayOrder - b.displayOrder),
+    [state.skillTree],
+  );
+
+  const activate = (skill: SkillDefinitionPayload, index: number): void => {
+    if (
+      !state.self ||
+      getSkillUseBlockReason(skill, state.self.combatState, state.self.energy)
+    ) {
+      return;
+    }
+    setActive(index);
+    window.dispatchEvent(
+      new CustomEvent<CombatSkillIntent>(COMBAT_SKILL_INTENT_EVENT, {
+        detail: { skillKey: skill.key },
+      }),
+    );
+    window.setTimeout(
+      () => setActive((current) => (current === index ? undefined : current)),
+      180,
+    );
+  };
+
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if (isEditable(event.target)) return;
       const index = Number(event.key) - 1;
-      if (index >= 0 && index < slots.length) {
-        setActive(index);
-        window.setTimeout(() => setActive((current) => current === index ? undefined : current), 180);
-      }
+      const skill = slots[index];
+      if (skill) activate(skill, index);
     };
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
-  }, []);
+  });
 
   return (
-    <section className="hud-panel hud-tooltip-container pointer-events-auto flex gap-1.5 p-2" aria-label="Quick actions">
-      {slots.map((slot, index) => {
-        const label = t(slot.labelKey);
-        return (
-          <button
-            key={slot.labelKey}
-            type="button"
-            aria-label={`${label} (${index + 1})`}
-            onClick={() => {
-              setActive(index);
-              window.setTimeout(() => setActive(undefined), 180);
-            }}
-            className={`action-slot hud-tooltip-anchor ${active === index ? 'action-slot-active' : ''}`}
-          >
-            <span className="text-xl">{slot.icon}</span><kbd>{index + 1}</kbd>
-            <span className="hud-tooltip-bubble hud-tooltip-bubble-top" role="tooltip">
-              <span>{label}</span><kbd>{index + 1}</kbd>
+    <section
+      className="hud-panel hud-tooltip-container pointer-events-auto flex gap-1.5 p-2"
+      aria-label={t('hud.skills')}
+    >
+      {Array.from({ length: 8 }, (_, index) => {
+        const skill = slots[index];
+        if (!skill || !state.self) {
+          return (
+            <span key={index} className="action-slot action-slot-locked">
+              <span>⌑</span>
+              <kbd>{index + 1}</kbd>
             </span>
-          </button>
+          );
+        }
+
+        const localized = getSkillCopy(skill.key, locale, skill);
+        const blockReason = getSkillUseBlockReason(
+          skill,
+          state.self.combatState,
+          state.self.energy,
+        );
+        const reason = blockReason
+          ? t(blockReasonLabelKey[blockReason])
+          : t('hud.action.ready');
+
+        return (
+          <span key={skill.key} className="hud-tooltip-anchor">
+            <button
+              type="button"
+              aria-label={`${localized.name} (${index + 1}): ${reason}`}
+              disabled={blockReason !== undefined}
+              onClick={() => activate(skill, index)}
+              className={[
+                'action-slot',
+                skill.rank < 1 ? 'action-slot-locked' : '',
+                blockReason && skill.rank > 0 ? 'action-slot-disabled' : '',
+                active === index ? 'action-slot-active' : '',
+              ].join(' ')}
+              style={{ '--skill-accent': skill.visual.accentColor } as React.CSSProperties}
+            >
+              <span className="text-xl">{skill.rank > 0 ? skill.icon : '◆'}</span>
+              <kbd>{index + 1}</kbd>
+            </button>
+            <span className="hud-tooltip-bubble hud-tooltip-bubble-top" role="tooltip">
+              <span>{localized.name}</span>
+              <small>{reason}</small>
+              <kbd>{index + 1}</kbd>
+            </span>
+          </span>
         );
       })}
     </section>

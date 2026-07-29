@@ -9,35 +9,73 @@ const tradeQuantity = z.number().int().min(0).max(9999);
 const tradeId = z.string().uuid();
 const characterId = z.string().uuid();
 const npcId = z.string().uuid();
-const dialogueIdentifier = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
+const dialogueIdentifier = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9_-]+$/);
 const silver = z.number().int().min(0).max(2_147_483_647);
+const skillKey = z
+  .string()
+  .trim()
+  .min(1)
+  .max(96)
+  .regex(/^[a-z0-9-]+$/);
 
 export const createCharacterSchema = z.object({
   requestId,
-  name: z.string().trim().min(3).max(20).regex(/^[A-Za-z][A-Za-z0-9 _-]*$/),
+  name: z
+    .string()
+    .trim()
+    .min(3)
+    .max(20)
+    .regex(/^[A-Za-z][A-Za-z0-9 _-]*$/),
   characterClass: z.enum(CHARACTER_CLASSES),
 });
 export const moveStepSchema = z.object({ requestId, direction: z.enum(DIRECTIONS) });
-export const moveTargetSchema = z.object({ requestId, targetX: z.number().int(), targetY: z.number().int() });
+export const moveTargetSchema = z.object({
+  requestId,
+  targetX: z.number().int(),
+  targetY: z.number().int(),
+});
 export const moveStopSchema = z.object({ requestId: requestId.optional() });
-export const viewportUpdateSchema = z.object({ requestId, halfWidth: z.number().int().min(1).max(128), halfHeight: z.number().int().min(1).max(128) });
-export const chatSendSchema = z.object({ requestId, channel: z.enum(['GLOBAL', 'LOCAL']), text: z.string().trim().min(1).max(160) });
+export const viewportUpdateSchema = z.object({
+  requestId,
+  halfWidth: z.number().int().min(1).max(128),
+  halfHeight: z.number().int().min(1).max(128),
+});
+export const chatSendSchema = z.object({
+  requestId,
+  channel: z.enum(['GLOBAL', 'LOCAL']),
+  text: z.string().trim().min(1).max(160),
+});
 export const inventoryRequestSchema = z.object({ requestId });
 export const inventoryItemSchema = z.object({ requestId, itemId });
-export const inventoryMoveSchema = z.object({ requestId, itemId, targetSlotIndex: z.number().int().min(0).max(39) });
+export const inventoryMoveSchema = z.object({
+  requestId,
+  itemId,
+  targetSlotIndex: z.number().int().min(0).max(39),
+});
 export const inventoryDiscardSchema = z.object({ requestId, itemId, quantity });
 export const merchantRequestSchema = z.object({ requestId, npcId }).strict();
 export const merchantBuySchema = z.object({ requestId, npcId, itemKey, quantity }).strict();
 export const merchantSellSchema = z.object({ requestId, npcId, itemId, quantity }).strict();
 export const npcDialogueStartSchema = z.object({ requestId, npcId }).strict();
-export const npcDialogueChoiceSchema = z.object({ requestId, npcId, nodeId: dialogueIdentifier, choiceId: dialogueIdentifier }).strict();
+export const npcDialogueChoiceSchema = z
+  .object({ requestId, npcId, nodeId: dialogueIdentifier, choiceId: dialogueIdentifier })
+  .strict();
 export const npcDialogueEndSchema = z.object({ requestId, npcId }).strict();
 export const tradeRequestSchema = z.object({ requestId, targetCharacterId: characterId }).strict();
 export const tradeGetActiveSchema = z.object({ requestId }).strict();
 export const tradeRespondSchema = z.object({ requestId, tradeId, accept: z.boolean() }).strict();
-export const tradeSetItemSchema = z.object({ requestId, tradeId, itemId, quantity: tradeQuantity }).strict();
+export const tradeSetItemSchema = z
+  .object({ requestId, tradeId, itemId, quantity: tradeQuantity })
+  .strict();
 export const tradeSetSilverSchema = z.object({ requestId, tradeId, silver }).strict();
 export const tradeActionSchema = z.object({ requestId, tradeId }).strict();
+export const skillRequestSchema = z.object({ requestId }).strict();
+export const skillUnlockSchema = z.object({ requestId, skillKey }).strict();
 
 export type CreateCharacterPayload = z.infer<typeof createCharacterSchema>;
 export type MoveStepPayload = z.infer<typeof moveStepSchema>;
@@ -61,3 +99,5 @@ export type TradeRespondPayload = z.infer<typeof tradeRespondSchema>;
 export type TradeSetItemPayload = z.infer<typeof tradeSetItemSchema>;
 export type TradeSetSilverPayload = z.infer<typeof tradeSetSilverSchema>;
 export type TradeActionPayload = z.infer<typeof tradeActionSchema>;
+export type SkillRequestPayload = z.infer<typeof skillRequestSchema>;
+export type SkillUnlockPayload = z.infer<typeof skillUnlockSchema>;
