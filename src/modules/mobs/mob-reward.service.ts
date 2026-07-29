@@ -1,22 +1,43 @@
 import { Injectable } from '@nestjs/common';
+import type { CharacterClass } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
+import type { ItemRarity, ItemStatBonuses } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { INVENTORY_CAPACITY } from '../items/item.service.js';
+import { skillPointsGainedBetweenLevels } from '../skills/skill.rules.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { applyExperience, statGrowthForLevels } from './character-progression.js';
 import { rollMobLoot, type AwardedLoot } from './mob-rewards.js';
 import type { RuntimeMob } from './mob.types.js';
 
+type RewardItemMetadata = {
+  rarity?: ItemRarity;
+  icon?: string;
+  requiredClass?: CharacterClass;
+  minimumLevel?: number;
+  statBonuses?: ItemStatBonuses;
+  effect?: { hp?: number; energy?: number };
+};
+
 export interface SettledLoot {
   itemKey: string;
   name: string;
+  description: string;
+  rarity: ItemRarity;
+  icon: string;
   quantity: number;
+  stackLimit: number;
+  requiredClass?: CharacterClass;
+  minimumLevel: number;
+  statBonuses: ItemStatBonuses;
+  effect?: { hp?: number; energy?: number };
 }
 
 export interface MobRewardSettlement {
   experienceGained: number;
   levelsGained: number;
+  skillPointsGained: number;
   nextLevelExperience: number | null;
   loot: SettledLoot[];
   skippedLoot: SettledLoot[];
@@ -51,6 +72,10 @@ export class MobRewardService {
       }
 
       const progression = applyExperience(character.level, character.experience, mob.experience);
+      const skillPointsGained = skillPointsGainedBetweenLevels(
+        character.level,
+        progression.level,
+      );
       const growth = statGrowthForLevels(progression.levelsGained);
       const maxHp = character.maxHp + growth.maxHp;
       const maxEnergy = character.maxEnergy + growth.maxEnergy;
@@ -85,7 +110,7 @@ export class MobRewardService {
         },
       });
       const loot = await this.grantLoot(transaction, character.id, rolled);
-      return { progression, updated, ...loot };
+      return { progression, skillPointsGained, updated, ...loot };
     });
 
     session.level = result.updated.level;
@@ -105,6 +130,7 @@ export class MobRewardService {
     return {
       experienceGained: mob.experience,
       levelsGained: result.progression.levelsGained,
+      skillPointsGained: result.skillPointsGained,
       nextLevelExperience: result.progression.nextLevelExperience,
       loot: result.granted,
       skippedLoot: result.skipped,
@@ -166,13 +192,45 @@ export class MobRewardService {
       }
 
       if (grantedQuantity > 0) {
-        granted.push({ itemKey: definition.key, name: definition.name, quantity: grantedQuantity });
+        granted.push(this.toSettledLoot(definition, grantedQuantity));
       }
       if (remaining > 0) {
-        skipped.push({ itemKey: definition.key, name: definition.name, quantity: remaining });
+        skipped.push(this.toSettledLoot(definition, remaining));
       }
     }
 
     return { granted, skipped };
+  }
+
+  private toSettledLoot(
+    definition: {
+      key: string;
+      name: string;
+      description: string;
+      stackLimit: number;
+      metadata: Prisma.JsonValue;
+    },
+    quantity: number,
+  ): SettledLoot {
+    const metadata = definition.metadata as unknown as RewardItemMetadata;
+    const rarity = ['COMMON', 'ARTIFACT', 'MYTHIC'].includes(String(metadata.rarity))
+      ? (metadata.rarity as ItemRarity)
+      : 'COMMON';
+    const minimumLevel = Number.isInteger(metadata.minimumLevel)
+      ? Math.max(1, Number(metadata.minimumLevel))
+      : 1;
+    return {
+      itemKey: definition.key,
+      name: definition.name,
+      description: definition.description,
+      rarity,
+      icon: typeof metadata.icon === 'string' && metadata.icon ? metadata.icon : '?',
+      quantity,
+      stackLimit: definition.stackLimit,
+      requiredClass: metadata.requiredClass,
+      minimumLevel,
+      statBonuses: metadata.statBonuses ?? {},
+      effect: metadata.effect,
+    };
   }
 }
