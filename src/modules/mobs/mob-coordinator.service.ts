@@ -13,6 +13,8 @@ import { MobRewardService } from './mob-reward.service.js';
 import type { ClaimedMob, RuntimeMob } from './mob.types.js';
 
 const RESPAWN_OCCUPIED_RETRY_MS = 1_000;
+const MIN_RENDER_SCALE = 0.2;
+const MAX_RENDER_SCALE = 3;
 
 @Injectable()
 export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
@@ -101,6 +103,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
         characterClass: mob.characterClass,
         level: mob.level,
         outfitKey: mob.outfitKey,
+        renderScale: mob.renderScale,
         hp: mob.stats.maxHp,
         maxHp: mob.stats.maxHp,
         energy: mob.stats.maxEnergy,
@@ -271,6 +274,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       y: mob.y,
       level: mob.level,
       outfitKey: mob.outfitKey,
+      renderScale: mob.renderScale,
     };
   }
 
@@ -291,21 +295,27 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       rank?: unknown;
       experience?: unknown;
       characterClass?: unknown;
+      renderScale?: unknown;
     };
     const rank = stats.rank;
     const characterClass = stats.characterClass;
+    const renderScale = stats.renderScale;
     const loot = Array.isArray(record.lootTable) ? record.lootTable : [];
     if (
       typeof rank !== 'string' ||
       !MOB_RANKS.includes(rank as MobRank) ||
       !['MAGE', 'WARRIOR', 'ARCHER'].includes(String(characterClass)) ||
+      typeof renderScale !== 'number' ||
+      !Number.isFinite(renderScale) ||
+      renderScale < MIN_RENDER_SCALE ||
+      renderScale > MAX_RENDER_SCALE ||
       !Number.isInteger(stats.experience) ||
       Number(stats.experience) < 0 ||
       !this.validStats(stats) ||
       !loot.every((entry) => this.validLootEntry(entry))
     ) {
       throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-        reason: `Mob definition ${record.key} has malformed stats or loot.`,
+        reason: `Mob definition ${record.key} has malformed stats, scale or loot.`,
       });
     }
     return {
@@ -319,6 +329,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       level: record.level,
       characterClass: characterClass as RuntimeMob['characterClass'],
       outfitKey: record.outfitKey,
+      renderScale,
       respawnMs: Math.max(1_000, record.respawnMs),
       experience: Number(stats.experience),
       stats: {
