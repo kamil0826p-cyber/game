@@ -19,7 +19,7 @@ export const createCharacterSchema = z.object({
   requestId,
   name: z.string().trim().min(3).max(20).regex(/^[A-Za-z][A-Za-z0-9 _-]*$/),
   characterClass: z.enum(CHARACTER_CLASSES),
-  outfitKey,
+  outfitKey: outfitKey.optional(),
 }).strict();
 export const selectCharacterSchema = z.object({ requestId, characterId }).strict();
 export const updateCharacterOutfitSchema = z.object({ requestId, characterId, outfitKey }).strict();
