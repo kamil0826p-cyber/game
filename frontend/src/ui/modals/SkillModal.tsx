@@ -1,118 +1,214 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Button } from '../../components/common/Button';
+import type { SkillDefinitionPayload, SkillUnlockState } from '../../contracts/socket';
+import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
+import { getSkillCopy } from '../../game/skills/skillCopy';
+import { getTreePosition } from '../../game/skills/skillUi';
+import { useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
-import { MOCK_SKILLS } from '../../mock/mockData';
 import { Modal } from './Modal';
 
-const skillLabelKey = {
-  focus: 'modal.skills.focus',
-  survival: 'modal.skills.survival',
-  precision: 'modal.skills.precision',
-  mastery: 'modal.skills.mastery',
+const stateLabelKey: Record<SkillUnlockState, Parameters<ReturnType<typeof useI18n>['t']>[0]> =
+  {
+    UNLOCKED: 'modal.skills.state.unlocked',
+    AVAILABLE: 'modal.skills.state.available',
+    LOCKED_LEVEL: 'modal.skills.state.level',
+    LOCKED_PREREQUISITE: 'modal.skills.state.prerequisite',
+    LOCKED_POINTS: 'modal.skills.state.points',
+  };
+
+const classLabelKey = {
+  MAGE: 'class.mage',
+  WARRIOR: 'class.warrior',
+  ARCHER: 'class.archer',
 } as const;
 
-interface SkillTooltipState {
-  id: string;
-  label: string;
-  rankLabel: string;
-  left: number;
-  top: number;
-  placement: 'top' | 'bottom';
-}
+const targetLabelKey = {
+  SELF: 'modal.skills.target.self',
+  ENEMY: 'modal.skills.target.enemy',
+  AREA: 'modal.skills.target.area',
+} as const;
 
-const TOOLTIP_EDGE_PADDING = 140;
+const getInitialSelection = (skills: readonly SkillDefinitionPayload[]): string =>
+  skills.find((skill) => skill.unlockState === 'AVAILABLE')?.key ?? skills[0]?.key ?? '';
 
 export function SkillModal({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const { t } = useI18n();
-  const [tooltip, setTooltip] = useState<SkillTooltipState>();
+  const { locale, t } = useI18n();
+  const connection = useGameConnection();
+  const tree = useGameState().skillTree;
+  const [selectedKey, setSelectedKey] = useState(() => getInitialSelection(tree?.skills ?? []));
+  const [unlocking, setUnlocking] = useState(false);
 
   useEffect(() => {
-    if (!tooltip) return;
+    if (!tree || tree.skills.some((skill) => skill.key === selectedKey)) return;
+    setSelectedKey(getInitialSelection(tree.skills));
+  }, [selectedKey, tree]);
 
-    const hideTooltip = () => setTooltip(undefined);
-    window.addEventListener('resize', hideTooltip);
-    window.addEventListener('scroll', hideTooltip, true);
-    return () => {
-      window.removeEventListener('resize', hideTooltip);
-      window.removeEventListener('scroll', hideTooltip, true);
-    };
-  }, [tooltip]);
+  const skillsByKey = useMemo(
+    () => new Map(tree?.skills.map((skill) => [skill.key, skill]) ?? []),
+    [tree],
+  );
+  const selected = skillsByKey.get(selectedKey) ?? tree?.skills[0];
 
-  const showTooltip = (
-    anchor: HTMLElement,
-    skillId: string,
-    label: string,
-    rank: number,
-  ): void => {
-    const bounds = anchor.getBoundingClientRect();
-    const placement = bounds.top >= 72 ? 'top' : 'bottom';
-    const minimumLeft = Math.min(TOOLTIP_EDGE_PADDING, window.innerWidth / 2);
-    const maximumLeft = Math.max(minimumLeft, window.innerWidth - TOOLTIP_EDGE_PADDING);
+  if (!tree || !selected) {
+    return (
+      <Modal
+        title={t('modal.skills.title')}
+        subtitle={t('modal.skills.subtitle')}
+        icon="✦"
+        onClose={onClose}
+      >
+        <p className="py-12 text-center text-sm text-slate-400">{t('common.loading')}…</p>
+      </Modal>
+    );
+  }
 
-    setTooltip({
-      id: `skill-tooltip-${skillId}`,
-      label,
-      rankLabel: `${t('common.rank')} ${rank} / 5`,
-      left: Math.max(minimumLeft, Math.min(maximumLeft, bounds.left + bounds.width / 2)),
-      top: placement === 'top' ? bounds.top : bounds.bottom,
-      placement,
-    });
+  const selectedCopy = getSkillCopy(selected.key, locale, selected);
+  const missingNames = selected.missingPrerequisiteKeys.map((key) => {
+    const prerequisite = skillsByKey.get(key);
+    return prerequisite ? getSkillCopy(key, locale, prerequisite).name : key;
+  });
+
+  const unlock = async (): Promise<void> => {
+    if (selected.unlockState !== 'AVAILABLE' || unlocking) return;
+    setUnlocking(true);
+    try {
+      await connection.unlockSkill(selected.key);
+    } finally {
+      setUnlocking(false);
+    }
   };
 
   return (
-    <Modal title={t('modal.skills.title')} subtitle={t('modal.skills.subtitle')} icon="✦" onClose={onClose} widthClass="max-w-3xl">
-      <div className="relative h-[430px] overflow-hidden rounded-xl border border-white/10 bg-[radial-gradient(circle_at_center,rgba(124,58,237,0.12),rgba(2,6,23,0.75)_60%)]">
-        <svg className="absolute inset-0 size-full" aria-hidden="true">
-          <line x1="50%" y1="18%" x2="25%" y2="48%" stroke="rgba(148,163,184,.3)" strokeWidth="2" />
-          <line x1="50%" y1="18%" x2="75%" y2="48%" stroke="rgba(148,163,184,.3)" strokeWidth="2" />
-          <line x1="25%" y1="48%" x2="50%" y2="80%" stroke="rgba(148,163,184,.3)" strokeWidth="2" />
-          <line x1="75%" y1="48%" x2="50%" y2="80%" stroke="rgba(148,163,184,.3)" strokeWidth="2" />
-        </svg>
-        {MOCK_SKILLS.map((skill) => {
-          const label = t(skillLabelKey[skill.id]);
-          const rankLabel = `${t('common.rank')} ${skill.rank} / 5`;
-          const tooltipId = `skill-tooltip-${skill.id}`;
-
-          return (
-            <button
-              key={skill.id}
-              type="button"
-              className={`skill-node ${skill.rank > 0 ? 'skill-node-active' : ''}`}
-              style={{ left: `${skill.x}%`, top: `${skill.y}%` }}
-              aria-label={`${label}, ${rankLabel}`}
-              aria-describedby={tooltip?.id === tooltipId ? tooltipId : undefined}
-              onPointerEnter={(event) => showTooltip(event.currentTarget, skill.id, label, skill.rank)}
-              onPointerLeave={() => setTooltip(undefined)}
-              onFocus={(event) => showTooltip(event.currentTarget, skill.id, label, skill.rank)}
-              onBlur={() => setTooltip(undefined)}
-            >
-              <span>✦</span><strong>{label}</strong><small>{rankLabel}</small>
-            </button>
-          );
-        })}
+    <Modal
+      title={t('modal.skills.title')}
+      subtitle={`${t(classLabelKey[tree.characterClass])} · ${t('common.level')} ${tree.characterLevel}`}
+      icon="✦"
+      onClose={onClose}
+      widthClass="max-w-6xl"
+    >
+      <div className="skill-summary">
+        <div>
+          <span>{t('modal.skills.pointsAvailable')}</span>
+          <strong>{tree.points.available}</strong>
+        </div>
+        <div>
+          <span>{t('modal.skills.pointsEarned')}</span>
+          <strong>{tree.points.earned}</strong>
+        </div>
+        <div>
+          <span>{t('modal.skills.nextPoint')}</span>
+          <strong>{tree.points.nextPointAtLevel ?? '—'}</strong>
+        </div>
+        <p>{t('modal.skills.pointRule')}</p>
       </div>
-      <p className="mock-banner mt-5">{t('modal.skills.banner')}</p>
-      {tooltip ? createPortal(
-        <span
-          id={tooltip.id}
-          className="hud-tooltip-bubble"
-          role="tooltip"
-          style={{
-            position: 'fixed',
-            left: tooltip.left,
-            top: tooltip.top,
-            opacity: 1,
-            visibility: 'visible',
-            transform: tooltip.placement === 'top'
-              ? 'translate(-50%, calc(-100% - 10px))'
-              : 'translate(-50%, 10px)',
-          }}
-        >
-          <span>{tooltip.label}</span>
-          <kbd>{tooltip.rankLabel}</kbd>
-        </span>,
-        document.body,
-      ) : null}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="skill-tree-canvas">
+          <svg className="absolute inset-0 size-full" aria-hidden="true">
+            {tree.skills.flatMap((skill) => {
+              const target = getTreePosition(skill);
+              return skill.prerequisiteKeys.flatMap((key) => {
+                const prerequisite = skillsByKey.get(key);
+                if (!prerequisite) return [];
+                const source = getTreePosition(prerequisite);
+                const active = prerequisite.rank > 0 && skill.rank > 0;
+                return (
+                  <line
+                    key={`${key}:${skill.key}`}
+                    x1={`${source.x}%`}
+                    y1={`${source.y}%`}
+                    x2={`${target.x}%`}
+                    y2={`${target.y}%`}
+                    className={active ? 'skill-link skill-link-active' : 'skill-link'}
+                  />
+                );
+              });
+            })}
+          </svg>
+
+          {tree.skills.map((skill) => {
+            const position = getTreePosition(skill);
+            const localized = getSkillCopy(skill.key, locale, skill);
+            const selectedNode = skill.key === selected.key;
+            return (
+              <button
+                key={skill.key}
+                type="button"
+                className={[
+                  'skill-node',
+                  `skill-node-${skill.unlockState.toLowerCase().replaceAll('_', '-')}`,
+                  selectedNode ? 'skill-node-selected' : '',
+                ].join(' ')}
+                style={
+                  {
+                    left: `${position.x}%`,
+                    top: `${position.y}%`,
+                    '--skill-accent': skill.visual.accentColor,
+                  } as React.CSSProperties
+                }
+                aria-pressed={selectedNode}
+                aria-label={`${localized.name}: ${t(stateLabelKey[skill.unlockState])}`}
+                onClick={() => setSelectedKey(skill.key)}
+              >
+                <span aria-hidden="true">{skill.icon}</span>
+                <strong>{localized.name}</strong>
+                <small>
+                  {skill.rank > 0
+                    ? t('modal.skills.state.unlocked')
+                    : `${t('common.level')} ${skill.minimumLevel}`}
+                </small>
+              </button>
+            );
+          })}
+        </div>
+
+        <aside className="skill-detail" aria-live="polite">
+          <div className="skill-detail-icon" style={{ color: selected.visual.accentColor }}>
+            {selected.icon}
+          </div>
+          <p className="skill-detail-state">{t(stateLabelKey[selected.unlockState])}</p>
+          <h3>{selectedCopy.name}</h3>
+          <p className="skill-detail-description">{selectedCopy.description}</p>
+
+          <dl className="skill-detail-stats">
+            <div>
+              <dt>{t('modal.skills.energy')}</dt>
+              <dd>{selected.energyCost}</dd>
+            </div>
+            <div>
+              <dt>{t('modal.skills.cooldown')}</dt>
+              <dd>{selected.cooldownTurns}</dd>
+            </div>
+            <div>
+              <dt>{t('modal.skills.target')}</dt>
+              <dd>{t(targetLabelKey[selected.targeting])}</dd>
+            </div>
+            <div>
+              <dt>{t('modal.skills.requiredLevel')}</dt>
+              <dd>{selected.minimumLevel}</dd>
+            </div>
+          </dl>
+
+          {missingNames.length > 0 ? (
+            <p className="skill-requirement">
+              {t('modal.skills.requires')}: {missingNames.join(', ')}
+            </p>
+          ) : null}
+
+          <Button
+            className="mt-auto w-full"
+            busy={unlocking}
+            disabled={selected.unlockState !== 'AVAILABLE'}
+            onClick={() => void unlock()}
+          >
+            {selected.unlockState === 'UNLOCKED'
+              ? t('modal.skills.unlocked')
+              : t('modal.skills.unlock')}
+          </Button>
+        </aside>
+      </div>
+
     </Modal>
   );
 }

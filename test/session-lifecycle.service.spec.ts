@@ -13,6 +13,7 @@ import type { PlayerPersistenceService } from '../src/modules/persistence/player
 import type { RealmService } from '../src/modules/realm/realm.service.js';
 import { SessionClaimExecutor } from '../src/modules/realtime/session-claim.executor.js';
 import { SessionLifecycleService } from '../src/modules/realtime/session-lifecycle.service.js';
+import type { SkillService } from '../src/modules/skills/skill.service.js';
 import type { VisibilityService } from '../src/modules/world/visibility.service.js';
 import type { WorldEventsPublisher } from '../src/modules/world/world-events.publisher.js';
 import type { WorldStateService } from '../src/modules/world/world-state.service.js';
@@ -20,6 +21,15 @@ import { SpatialIndexService } from '../src/modules/world/spatial-index.service.
 import { WorldStateService as RealWorldStateService } from '../src/modules/world/world-state.service.js';
 import { capturePlayerState } from '../src/modules/persistence/player-state-snapshot.js';
 import { createRuntimeMap } from './helpers/runtime-map.js';
+
+const skillService = {
+  getSnapshot: async () => ({
+    characterClass: 'WARRIOR',
+    characterLevel: 1,
+    points: { earned: 0, spent: 0, available: 0, nextPointAtLevel: 10 },
+    skills: [],
+  }),
+} as unknown as SkillService;
 
 const characterState = (
   overrides: Partial<PersistedCharacterState> = {},
@@ -102,6 +112,7 @@ describe('SessionLifecycleService', () => {
         resolveLocale: () => 'en',
       } as unknown as LocalizationService,
       new SessionClaimExecutor(),
+      skillService,
     );
 
     const initialization = service.initializeConnection(client);
@@ -220,6 +231,7 @@ describe('SessionLifecycleService', () => {
         translate: (key: string) => key,
       } as unknown as LocalizationService,
       new SessionClaimExecutor(),
+      skillService,
     );
 
     await service.initializeConnection(client);
@@ -341,6 +353,7 @@ describe('SessionLifecycleService', () => {
         translate: (key: string) => key,
       } as unknown as LocalizationService,
       new SessionClaimExecutor(),
+      skillService,
     );
     const createClient = (id: string) =>
       ({

@@ -15,6 +15,7 @@ import { MovementService } from '../movement/movement.service.js';
 import { NpcService } from '../npcs/npc.service.js';
 import { PlayerPersistenceService } from '../persistence/player-persistence.service.js';
 import { RealmService } from '../realm/realm.service.js';
+import { SkillService } from '../skills/skill.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { VisibilityService } from '../world/visibility.service.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
@@ -39,6 +40,7 @@ export class SessionLifecycleService {
     private readonly publisher: WorldEventsPublisher,
     private readonly localization: LocalizationService,
     private readonly sessionClaims: SessionClaimExecutor,
+    private readonly skills: SkillService,
   ) {}
 
   async initializeConnection(client: GameSocket): Promise<void> {
@@ -112,7 +114,8 @@ export class SessionLifecycleService {
     const position = this.maps.findNearestWalkable(
       map,
       { x: session.x, y: session.y },
-      (x, y) => map.zoneType !== 'SAFE' && this.worldState.isOccupied(map.id, x, y, session.characterId),
+      (x, y) =>
+        map.zoneType !== 'SAFE' && this.worldState.isOccupied(map.id, x, y, session.characterId),
     );
     if (position.x !== session.x || position.y !== session.y) {
       this.worldState.updatePosition(session, {
@@ -198,14 +201,21 @@ export class SessionLifecycleService {
 
     if (session.dirty) {
       const snapshot = this.persistence.capture(session);
-      void this.persistence.persistSnapshot(snapshot, 'repair').then(() => {
-        this.worldState.markPersisted(snapshot.characterId, snapshot.connectionId, snapshot.revision);
-      }).catch((error: unknown) => {
-        this.logger.error(
-          `Initial position repair failed for character ${snapshot.characterId}.`,
-          error instanceof Error ? error.stack : undefined,
-        );
-      });
+      void this.persistence
+        .persistSnapshot(snapshot, 'repair')
+        .then(() => {
+          this.worldState.markPersisted(
+            snapshot.characterId,
+            snapshot.connectionId,
+            snapshot.revision,
+          );
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Initial position repair failed for character ${snapshot.characterId}.`,
+            error instanceof Error ? error.stack : undefined,
+          );
+        });
     }
 
     return payload;
@@ -225,6 +235,7 @@ export class SessionLifecycleService {
         key: outfit.key,
         unlockLevel: outfit.unlockLevel,
       })),
+      skillTree: await this.skills.getSnapshot(session.userId, session.characterId),
       movementStepMs: this.config.values.MOVE_STEP_MS,
       serverTime: Date.now(),
     };

@@ -35,6 +35,10 @@ export const englishMessages = {
   'errors.trade.expired': 'The trade request has expired.',
   'errors.trade.itemInvalid': 'The selected item cannot be offered.',
   'errors.trade.changed': 'The offer changed and must be reviewed again.',
+  'errors.skills.notAvailable': 'This skill is not available to your character.',
+  'errors.skills.levelRequired': 'Your character level is too low to unlock this skill.',
+  'errors.skills.prerequisiteRequired': 'Unlock the prerequisite skills first.',
+  'errors.skills.pointsUnavailable': 'You do not have an available skill point.',
   'errors.internal': 'An internal server error occurred.',
   'notifications.sessionReplaced': 'This character connected from another session.',
 } as const;

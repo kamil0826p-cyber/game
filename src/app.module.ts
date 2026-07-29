@@ -13,9 +13,27 @@ import { PersistenceModule } from './modules/persistence/persistence.module.js';
 import { TradeModule } from './modules/player/trade/trade.module.js';
 import { RealmModule } from './modules/realm/realm.module.js';
 import { RealtimeModule } from './modules/realtime/realtime.module.js';
+import { SkillModule } from './modules/skills/skill.module.js';
 import { WorldModule } from './modules/world/world.module.js';
 
 @Module({
-  imports: [GameConfigModule, DatabaseModule, LocalizationModule, AuthModule, RealmModule, MapModule, CharacterModule, WorldModule, PersistenceModule, MovementModule, RealtimeModule, ItemModule, NpcInteractionModule, TradeModule, HealthModule],
+  imports: [
+    GameConfigModule,
+    DatabaseModule,
+    LocalizationModule,
+    AuthModule,
+    RealmModule,
+    MapModule,
+    CharacterModule,
+    WorldModule,
+    PersistenceModule,
+    MovementModule,
+    SkillModule,
+    RealtimeModule,
+    ItemModule,
+    NpcInteractionModule,
+    TradeModule,
+    HealthModule,
+  ],
 })
 export class AppModule {}

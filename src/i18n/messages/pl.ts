@@ -9,7 +9,8 @@ export const polishMessages = {
   'errors.character.nameTaken': 'Ta nazwa postaci jest już zajęta.',
   'errors.payload.invalid': 'Wysłane dane są nieprawidłowe.',
   'errors.session.notReady': 'Sesja gry nie jest jeszcze gotowa.',
-  'errors.movement.tooFast': 'Ruch został odrzucony, ponieważ nie upłynął jeszcze wymagany czas między krokami.',
+  'errors.movement.tooFast':
+    'Ruch został odrzucony, ponieważ nie upłynął jeszcze wymagany czas między krokami.',
   'errors.movement.outOfBounds': 'Nie można wyjść poza granice mapy.',
   'errors.movement.collision': 'Docelowy kafel jest zablokowany.',
   'errors.movement.occupied': 'Docelowy kafel jest zajęty przez innego gracza.',
@@ -37,6 +38,10 @@ export const polishMessages = {
   'errors.trade.expired': 'Prośba o handel wygasła.',
   'errors.trade.itemInvalid': 'Wybranego przedmiotu nie można dodać do oferty.',
   'errors.trade.changed': 'Oferta uległa zmianie i wymaga ponownego sprawdzenia.',
+  'errors.skills.notAvailable': 'Ta umiejętność nie jest dostępna dla twojej postaci.',
+  'errors.skills.levelRequired': 'Poziom postaci jest zbyt niski, aby odblokować tę umiejętność.',
+  'errors.skills.prerequisiteRequired': 'Najpierw odblokuj wymagane umiejętności.',
+  'errors.skills.pointsUnavailable': 'Nie masz dostępnego punktu umiejętności.',
   'errors.internal': 'Wystąpił wewnętrzny błąd serwera.',
   'notifications.sessionReplaced': 'Ta postać połączyła się z innej sesji.',
 } satisfies Record<MessageKey, string>;
