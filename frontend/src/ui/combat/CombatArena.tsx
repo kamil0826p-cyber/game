@@ -210,6 +210,8 @@ export function CombatArena({
   });
 
   const ownWon = sides?.own.actorId === combat.winnerActorId;
+  const defeatedMob =
+    combat.status === 'FINISHED' && ownWon && sides?.opponent.kind === 'MOB';
   const turnLabel =
     combat.status === 'ACTIVE'
       ? isOwnTurn
@@ -282,13 +284,22 @@ export function CombatArena({
         } ${opponentHit ? 'combat-character-hit' : ''}`}
       >
         <div className="combat-character-aura" />
-        <OutfitPreview
-          outfitKey={sides.opponent.outfitKey}
-          characterClass={sides.opponent.characterClass}
-          direction="WEST"
-          renderScale={sides.opponent.renderScale ?? 1}
-          className="combat-outfit"
-        />
+        {defeatedMob ? (
+          <img
+            src="/assets/mobs/mob-grave.svg"
+            alt=""
+            aria-hidden="true"
+            className="combat-outfit object-contain"
+          />
+        ) : (
+          <OutfitPreview
+            outfitKey={sides.opponent.outfitKey}
+            characterClass={sides.opponent.characterClass}
+            direction="WEST"
+            renderScale={sides.opponent.renderScale ?? 1}
+            className="combat-outfit"
+          />
+        )}
         <span className="combat-ground-shadow" />
       </div>
 
