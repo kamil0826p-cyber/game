@@ -413,7 +413,7 @@ export interface ClientToServerEvents {
     payload: { requestId: string; itemId: string },
     acknowledgement: (response: SocketAck<InventorySnapshot>) => void,
   ) => void;
-  'inventory:discard': (
+  'inventory:destroy': (
     payload: { requestId: string; itemId: string; quantity: number },
     acknowledgement: (response: SocketAck<InventorySnapshot>) => void,
   ) => void;

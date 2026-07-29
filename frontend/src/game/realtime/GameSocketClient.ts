@@ -189,11 +189,11 @@ export class GameSocketClient {
       ),
     );
   }
-  async discardInventoryItem(itemId: string, quantity = 1): Promise<InventorySnapshot> {
+  async destroyInventoryItem(itemId: string, quantity = 1): Promise<InventorySnapshot> {
     return this.inventoryCommand((socket, ack) =>
       socket.emit(
-        'inventory:discard',
-        { requestId: createRequestId('inventory-discard'), itemId, quantity },
+        'inventory:destroy',
+        { requestId: createRequestId('inventory-destroy'), itemId, quantity },
         ack,
       ),
     );

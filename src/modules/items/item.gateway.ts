@@ -4,14 +4,14 @@ import { ZodError, type ZodType } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, InventorySnapshot, MerchantSnapshot, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
 import {
-  inventoryDiscardSchema,
+  inventoryDestroySchema,
   inventoryItemSchema,
   inventoryMoveSchema,
   inventoryRequestSchema,
   merchantBuySchema,
   merchantRequestSchema,
   merchantSellSchema,
-  type InventoryDiscardPayload,
+  type InventoryDestroyPayload,
   type InventoryItemPayload,
   type InventoryMovePayload,
   type InventoryRequestPayload,
@@ -61,9 +61,9 @@ export class ItemGateway {
     return this.handle(client, inventoryItemSchema, raw, async (session, payload) => this.syncSession(session, await this.items.use(session.userId, session.characterId, payload.itemId)));
   }
 
-  @SubscribeMessage('inventory:discard')
-  discard(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryDiscardSchema, raw, async (session, payload) => this.syncSession(session, await this.items.discard(session.userId, session.characterId, payload.itemId, payload.quantity)));
+  @SubscribeMessage('inventory:destroy')
+  destroy(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
+    return this.handle(client, inventoryDestroySchema, raw, async (session, payload) => this.syncSession(session, await this.items.destroy(session.userId, session.characterId, payload.itemId, payload.quantity)));
   }
 
   @SubscribeMessage('merchant:get')
