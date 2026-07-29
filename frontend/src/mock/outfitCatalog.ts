@@ -58,4 +58,4 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
   ARCHER: { label: 'Archer', role: 'Agile marksman', description: 'High agility with balanced health and energy.', accent: 'text-emerald-300' },
 };
 
-export const outfitImageUrl = (outfitKey: string): string => `/assets/sprites/${encodeURIComponent(outfitKey)}.png?v=5`;
+export const outfitImageUrl = (outfitKey: string): string => `/assets/sprites/${encodeURIComponent(outfitKey)}.svg?v=8`;
