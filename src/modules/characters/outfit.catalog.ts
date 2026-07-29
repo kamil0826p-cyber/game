@@ -6,19 +6,23 @@ export interface OutfitDefinition {
   unlockLevel: number;
 }
 
+const levels = [1, 1, 1, 1, 1, 5, 10, 15, 20, 25] as const;
+const createOutfits = (characterClass: CharacterClass, keys: readonly string[]): readonly OutfitDefinition[] =>
+  keys.map((key, index) => ({ key, characterClass, unlockLevel: levels[index] ?? 1 }));
+
 export const OUTFIT_CATALOG: Readonly<Record<CharacterClass, readonly OutfitDefinition[]>> = {
-  MAGE: [
-    { key: 'mage-apprentice', characterClass: 'MAGE', unlockLevel: 1 },
-    { key: 'mage-archmage', characterClass: 'MAGE', unlockLevel: 10 },
-  ],
-  WARRIOR: [
-    { key: 'warrior-recruit', characterClass: 'WARRIOR', unlockLevel: 1 },
-    { key: 'warrior-champion', characterClass: 'WARRIOR', unlockLevel: 10 },
-  ],
-  ARCHER: [
-    { key: 'archer-scout', characterClass: 'ARCHER', unlockLevel: 1 },
-    { key: 'archer-ranger', characterClass: 'ARCHER', unlockLevel: 10 },
-  ],
+  MAGE: createOutfits('MAGE', [
+    'mage-apprentice', 'mage-scholar', 'mage-ember', 'mage-frost', 'mage-storm',
+    'mage-enchanter', 'mage-archmage', 'mage-astral', 'mage-void', 'mage-royal',
+  ]),
+  WARRIOR: createOutfits('WARRIOR', [
+    'warrior-recruit', 'warrior-iron', 'warrior-guardian', 'warrior-raider', 'warrior-templar',
+    'warrior-veteran', 'warrior-champion', 'warrior-warlord', 'warrior-dragon', 'warrior-royal',
+  ]),
+  ARCHER: createOutfits('ARCHER', [
+    'archer-scout', 'archer-hunter', 'archer-forest', 'archer-desert', 'archer-shadow',
+    'archer-marksman', 'archer-ranger', 'archer-wind', 'archer-moon', 'archer-royal',
+  ]),
 };
 
 export const getDefaultOutfit = (characterClass: CharacterClass): OutfitDefinition =>
