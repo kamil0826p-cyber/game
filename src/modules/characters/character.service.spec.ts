@@ -43,6 +43,7 @@ describe('CharacterService', () => {
       $executeRaw: vi.fn().mockResolvedValue(1),
       character: {
         count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue(baseCharacter),
       },
       map: {
@@ -70,7 +71,16 @@ describe('CharacterService', () => {
     expect(transaction.character.create).not.toHaveBeenCalled();
   });
 
-  it('creates a character while below the limit', async () => {
+  it('rejects a name that is already used in the realm', async () => {
+    transaction.character.findFirst.mockResolvedValue({ id: baseCharacter.id });
+
+    await expect(
+      service.createCharacter(baseCharacter.userId, { name: baseCharacter.name, characterClass: 'MAGE' }),
+    ).rejects.toMatchObject({ code: GAME_ERROR_CODES.CHARACTER_NAME_TAKEN });
+    expect(transaction.character.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a character while below the limit with a free name', async () => {
     const created = await service.createCharacter(baseCharacter.userId, {
       name: 'New Hero',
       characterClass: 'MAGE',
@@ -80,29 +90,49 @@ describe('CharacterService', () => {
     expect(transaction.character.count).toHaveBeenCalledWith({
       where: { userId: baseCharacter.userId, realmId: realm.id },
     });
+    expect(transaction.character.findFirst).toHaveBeenCalledWith({
+      where: { realmId: realm.id, name: 'New Hero' },
+      select: { id: true },
+    });
     expect(created.id).toBe(baseCharacter.id);
+  });
+
+  it('does not misreport an unrelated unique constraint as a taken name', async () => {
+    prisma.$transaction.mockRejectedValue({ code: 'P2002', meta: { target: ['userId', 'realmId'] } });
+
+    await expect(
+      service.createCharacter(baseCharacter.userId, { name: 'Free Hero', characterClass: 'MAGE' }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('maps a database name constraint race to the name-taken error', async () => {
+    prisma.$transaction.mockRejectedValue({ code: 'P2002', meta: { target: ['realmId', 'name'] } });
+
+    await expect(
+      service.createCharacter(baseCharacter.userId, { name: 'Racing Hero', characterClass: 'MAGE' }),
+    ).rejects.toMatchObject({ code: GAME_ERROR_CODES.CHARACTER_NAME_TAKEN });
   });
 
   it('rejects a locked outfit', async () => {
     await expect(
-      service.changeOutfit(baseCharacter.userId, baseCharacter.id, 'mage-archmage'),
+      service.changeOutfit(baseCharacter.userId, baseCharacter.id, 'mage-scholar'),
     ).rejects.toBeInstanceOf(GameError);
     await expect(
-      service.changeOutfit(baseCharacter.userId, baseCharacter.id, 'mage-archmage'),
+      service.changeOutfit(baseCharacter.userId, baseCharacter.id, 'mage-scholar'),
     ).rejects.toMatchObject({ code: GAME_ERROR_CODES.CHARACTER_OUTFIT_LOCKED });
     expect(prisma.character.update).not.toHaveBeenCalled();
   });
 
-  it('persists an unlocked outfit', async () => {
-    prisma.character.update.mockResolvedValue({ ...baseCharacter, outfitKey: 'mage-frost', stateVersion: 1 });
+  it('persists the starting outfit', async () => {
+    prisma.character.update.mockResolvedValue({ ...baseCharacter, stateVersion: 1 });
 
-    const updated = await service.changeOutfit(baseCharacter.userId, baseCharacter.id, 'mage-frost');
+    const updated = await service.changeOutfit(baseCharacter.userId, baseCharacter.id, 'mage-apprentice');
 
-    expect(updated.outfitKey).toBe('mage-frost');
+    expect(updated.outfitKey).toBe('mage-apprentice');
     expect(prisma.character.update).toHaveBeenCalledWith({
       where: { id: baseCharacter.id },
       data: {
-        outfitKey: 'mage-frost',
+        outfitKey: 'mage-apprentice',
         stateVersion: { increment: 1 },
         lastSavedAt: expect.any(Date),
       },
