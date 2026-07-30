@@ -10,19 +10,12 @@ import {
 } from 'pixi.js';
 import type { MobStatePayload } from '../../contracts/mob';
 import { WORLD_TILE_SIZE } from './constants';
+import { formatMobLabel, mobRankColor } from './mobPresentation';
 
 export interface MobInteractionPoint {
   x: number;
   y: number;
 }
-
-const rankLabel: Record<MobStatePayload['rank'], string> = {
-  SPAWN: 'Pomiot',
-  EXECUTIONER: 'Kat',
-  ARCH_EXECUTIONER: 'Arcykat',
-  REAPER: 'Żniwiarz',
-  ANCIENT: 'Przedwieczny',
-};
 
 export class MobView {
   readonly container = new Container();
@@ -59,23 +52,10 @@ export class MobView {
     this.sprite.visible = false;
     this.sprite.zIndex = 2;
 
-    const level = new Text({
-      text: `Lv. ${mob.level} · ${rankLabel[mob.rank]}`,
-      style: {
-        fill: mob.rank === 'SPAWN' ? 0xd9f99d : 0xfca5a5,
-        fontSize: 9,
-        fontWeight: 'bold',
-        stroke: { color: 0x111827, width: 3 },
-      },
-    });
-    level.anchor.set(0.5, 1);
-    level.position.set(0, -29);
-    level.zIndex = 3;
-
     const name = new Text({
-      text: mob.name,
+      text: formatMobLabel(mob),
       style: {
-        fill: 0xfef3c7,
+        fill: mobRankColor[mob.rank],
         fontSize: 10,
         fontWeight: 'bold',
         stroke: { color: 0x111827, width: 3 },
@@ -85,7 +65,7 @@ export class MobView {
     name.position.set(0, 21);
     name.zIndex = 3;
 
-    this.container.addChild(shadow, this.fallback, this.sprite, level, name);
+    this.container.addChild(shadow, this.fallback, this.sprite, name);
     this.container.on('pointerdown', (event: FederatedPointerEvent) => event.stopPropagation());
     this.container.on('pointertap', (event: FederatedPointerEvent) => {
       event.stopPropagation();
