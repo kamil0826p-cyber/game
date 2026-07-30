@@ -15,6 +15,7 @@ The group implementation extends these points instead of creating another combat
 ## Team rules
 
 - A combat contains exactly two teams; each team contains between 1 and 10 actors.
+- Team sizes are independent. Group-versus-group, group-versus-solo and solo-versus-group use the same flow and do not require equal numbers.
 - When an anchor player starts a fight, the roster is built from online, idle group members on the same realm and map.
 - Offline members, members on another map, members already fighting and members currently trading are not added.
 - The anchor must always be eligible. Otherwise the request fails.
@@ -57,16 +58,23 @@ PVP and PVE previously maintained separate actor-to-combat maps. That allowed a 
 
 This is intentionally personal loot rather than a race to pick up one shared item. It is inspired by party-oriented MMORPG loot, but is explicitly defined here so the economy behavior is deterministic.
 
-## UI for up to 10 actors per team
+## Battlefield UI for up to 10 actors per team
 
-- Both teams are shown as compact rosters on the left and right.
-- Rosters use one column for up to five actors and two columns for six to ten actors.
-- Every card shows outfit, name, level, HP, energy, statuses and active/defeated/withdrawn state.
-- Only the acting actor and selected target are rendered at full size in the center, preserving the existing large combat animations.
-- Living enemy cards can be selected as targets. The selection automatically falls back when the target dies or withdraws.
-- The turn banner distinguishes the local player's turn, an ally turn and an enemy turn.
-- The challenge modal shows both frozen roster sizes and names.
+- Every participant now has an individual sprite on the ring; the roster is no longer represented by only two central substitute models.
+- Each side uses a deterministic formation: up to five actors in the front row and actors six through ten in a smaller back row.
+- The two formations are mirrored and keep a clear central lane even in a 10-versus-10 fight.
+- Every sprite has its own name, level, HP, energy, active-turn marker, selected-target marker and defeated/withdrawn state.
+- Living enemy sprites are the actual target controls. Selection automatically falls back when the selected actor dies or withdraws.
+- Attack movement, projectiles, impact bursts, shockwaves, support effects and floating values are positioned from the acting sprite to the actual target sprite.
+- `AREA` actions produce impacts and floating results on every affected enemy sprite.
+- The victory/defeat modal uses the existing `combat.result.return` translation, replacing the missing key that rendered an empty button.
+- The challenge modal still shows both frozen roster sizes and names.
 - The existing action bar, keyboard shortcuts, VFX queue and combat log remain the single implementation for PVP and PVE.
+
+## Additional UI fixes found during review
+
+- The group kick action is visually transparent and borderless, with a separate layout position below the online indicator so it cannot cover the green status dot.
+- Item tooltips measure their real rendered width and height before collision handling. They now stay adjacent to the cursor instead of subtracting a hard-coded 320-pixel height and jumping toward the top of the screen.
 
 ## Self-review cases
 
@@ -76,16 +84,18 @@ Covered by focused tests or direct code-path review:
 - area skills damage every living enemy;
 - one member withdrawing does not end a multi-member fight;
 - a team result is produced only after the full opposing team is eliminated;
-- the local/enemy roster split and 10-person two-column layout rule;
-- target fallback after the selected enemy is defeated;
 - complete groups are reserved and activated in immediate PVP;
+- an available group can fight a solo player, with a dedicated 2-versus-1 regression test;
+- a ten-actor team receives ten unique formation slots and both sides remain on their own half of the arena;
+- target fallback after the selected enemy is defeated;
 - same-group overlap, stale membership, map changes, trades and shared PVP/PVE occupancy are rejected server-side;
 - pending cancellation and server shutdown release every reservation;
 - the PVE socket bridge preserves target selection instead of accidentally sending the command to the PVP event;
 - Nest module imports were checked for a `CombatModule` / `MobModule` / `MovementModule` cycle;
-- frontend roster props were hardened for `exactOptionalPropertyTypes` so explicit `undefined` identifiers remain type-safe;
-- client combat state is calculated per participant, so a withdrawn member returns to `IDLE` while their teammates continue fighting; this has a dedicated regression test.
+- frontend combat props remain compatible with `exactOptionalPropertyTypes`;
+- client combat state is calculated per participant, so a withdrawn member returns to `IDLE` while their teammates continue fighting; this has a dedicated regression test;
+- the new `CombatVfx` contract has one call site and receives battlefield coordinates from the same formation map used to render the sprites.
 
 ## Verification limits
 
-A complete `npm run check:all` still cannot be executed in the connector environment because a local checkout cannot resolve GitHub. The prepared TypeScript and TSX changes were parsed with the installed TypeScript compiler before publication, the published diff and module wiring were reviewed, and focused unit tests were added. The repository currently has no GitHub workflow run for this branch, so CI validation remains unavailable until the repository runs its own checks.
+A complete `npm run check:all` still cannot be executed in the connector environment because a local checkout cannot resolve GitHub. The published TypeScript/TSX and CSS changes were reviewed through the final branch content and pull-request patches, and focused unit tests were added. The repository currently has no GitHub workflow run for this branch, so CI validation remains unavailable until the repository runs its own checks.
