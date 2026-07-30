@@ -6,6 +6,7 @@ import type { GroupSnapshot } from '../../contracts/group.events.js';
 import {
   groupGetSchema,
   groupInviteSchema,
+  groupKickSchema,
   groupLeaveSchema,
   groupRespondSchema,
 } from '../../contracts/group.schemas.js';
@@ -59,6 +60,16 @@ export class GroupGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<GroupSnapshot>> {
     return this.handle(client, groupLeaveSchema, raw, (session) => this.groups.leave(session));
+  }
+
+  @SubscribeMessage('group:kick')
+  kick(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<GroupSnapshot>> {
+    return this.handle(client, groupKickSchema, raw, (session, payload) =>
+      this.groups.kick(session, payload.targetCharacterId),
+    );
   }
 
   private async handle<TPayload, TResult>(
