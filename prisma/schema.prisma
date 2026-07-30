@@ -77,6 +77,20 @@ enum ChatChannelType {
   SYSTEM
 }
 
+enum GuildRole {
+  LEADER
+  OFFICER
+  MEMBER
+}
+
+enum GuildInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  EXPIRED
+}
+
 enum TradeStatus {
   REQUESTED
   OPEN
@@ -109,6 +123,7 @@ model Realm {
   maps         Map[]         @relation("RealmMaps")
   characters   Character[]
   chatMessages ChatMessage[]
+  guilds       Guild[]
 
   @@index([isActive])
 }
@@ -163,15 +178,18 @@ model Character {
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Restrict)
   map   Map   @relation(fields: [mapId], references: [id], onDelete: Restrict)
 
-  skills           CharacterSkill[]
-  inventoryItems   InventoryItem[]
-  quests           CharacterQuest[]
-  currencyLedger   CharacterCurrencyLedger[]
-  sentChatMessages ChatMessage[]             @relation("ChatSender")
-  receivedWhispers ChatMessage[]             @relation("ChatTarget")
-  initiatedTrades  TradeSession[]            @relation("TradeInitiator")
-  receivedTrades   TradeSession[]            @relation("TradeRecipient")
-  tradeOffers      TradeOfferItem[]
+  skills               CharacterSkill[]
+  inventoryItems       InventoryItem[]
+  quests               CharacterQuest[]
+  currencyLedger       CharacterCurrencyLedger[]
+  sentChatMessages     ChatMessage[]             @relation("ChatSender")
+  receivedWhispers     ChatMessage[]             @relation("ChatTarget")
+  initiatedTrades      TradeSession[]            @relation("TradeInitiator")
+  receivedTrades       TradeSession[]            @relation("TradeRecipient")
+  tradeOffers          TradeOfferItem[]
+  guildMembership      GuildMember?
+  sentGuildInvites     GuildInvite[]              @relation("GuildInviteSender")
+  receivedGuildInvites GuildInvite[]              @relation("GuildInviteTarget")
 
   @@unique([realmId, name])
   @@index([userId, realmId])
@@ -397,6 +415,59 @@ model MobDefinition {
 
   @@unique([mapId, key])
   @@index([mapId, x, y])
+}
+
+model Guild {
+  id          String   @id @default(uuid()) @db.Uuid
+  realmId     String   @db.Uuid
+  name        String   @db.VarChar(32)
+  nameKey     String   @db.VarChar(32)
+  tag         String   @db.VarChar(5)
+  description String   @default("") @db.VarChar(280)
+  level       Int      @default(1)
+  experience  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  realm   Realm         @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  members GuildMember[]
+  invites GuildInvite[]
+
+  @@unique([realmId, nameKey])
+  @@unique([realmId, tag])
+  @@index([realmId, level])
+}
+
+model GuildMember {
+  id          String    @id @default(uuid()) @db.Uuid
+  guildId     String    @db.Uuid
+  characterId String    @unique @db.Uuid
+  role        GuildRole @default(MEMBER)
+  joinedAt    DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  guild     Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, role, joinedAt])
+}
+
+model GuildInvite {
+  id                 String            @id @default(uuid()) @db.Uuid
+  guildId            String            @db.Uuid
+  inviterCharacterId String            @db.Uuid
+  targetCharacterId  String            @db.Uuid
+  status             GuildInviteStatus @default(PENDING)
+  expiresAt          DateTime
+  createdAt          DateTime          @default(now())
+  respondedAt        DateTime?
+
+  guild   Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  inviter Character @relation("GuildInviteSender", fields: [inviterCharacterId], references: [id], onDelete: Cascade)
+  target  Character @relation("GuildInviteTarget", fields: [targetCharacterId], references: [id], onDelete: Cascade)
+
+  @@index([targetCharacterId, status, expiresAt])
+  @@index([guildId, status])
 }
 
 model ChatMessage {

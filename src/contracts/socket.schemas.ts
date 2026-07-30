@@ -10,6 +10,7 @@ const tradeId = z.string().uuid();
 const combatId = z.string().uuid();
 const characterId = z.string().uuid();
 const npcId = z.string().uuid();
+const inviteId = z.string().uuid();
 const outfitKey = z.string().trim().min(1).max(64).regex(/^[a-z0-9-]+$/);
 const dialogueIdentifier = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const silver = z.number().int().min(0).max(2_147_483_647);
@@ -28,6 +29,7 @@ export const moveTargetSchema = z.object({ requestId, targetX: z.number().int(),
 export const moveStopSchema = z.object({ requestId: requestId.optional() });
 export const viewportUpdateSchema = z.object({ requestId, halfWidth: z.number().int().min(1).max(128), halfHeight: z.number().int().min(1).max(128) });
 export const chatSendSchema = z.object({ requestId, channel: z.enum(['GLOBAL', 'LOCAL']), text: z.string().trim().min(1).max(160) });
+export const guildChatSchema = z.object({ requestId, text: z.string().trim().min(1).max(160) }).strict();
 export const inventoryRequestSchema = z.object({ requestId });
 export const inventoryItemSchema = z.object({ requestId, itemId });
 export const inventoryMoveSchema = z.object({ requestId, itemId, targetSlotIndex: z.number().int().min(0).max(39) });
@@ -54,6 +56,21 @@ export const combatActionSchema = z.discriminatedUnion('action', [
   z.object({ requestId, combatId, action: z.literal('SKILL'), skillKey }).strict(),
 ]);
 export const combatLeaveSchema = z.object({ requestId, combatId }).strict();
+export const guildGetSchema = z.object({ requestId }).strict();
+export const guildCreateSchema = z.object({
+  requestId,
+  name: z.string().trim().min(3).max(32),
+  tag: z.string().trim().min(2).max(5),
+  description: z.string().max(280).default(''),
+}).strict();
+export const guildInviteSchema = z.object({ requestId, characterName: z.string().trim().min(3).max(24) }).strict();
+export const guildRespondSchema = z.object({ requestId, inviteId, accept: z.boolean() }).strict();
+export const guildUpdateDescriptionSchema = z.object({ requestId, description: z.string().max(280) }).strict();
+export const guildSetRoleSchema = z.object({ requestId, targetCharacterId: characterId, role: z.enum(['OFFICER', 'MEMBER']) }).strict();
+export const guildKickSchema = z.object({ requestId, targetCharacterId: characterId }).strict();
+export const guildLeaveSchema = z.object({ requestId }).strict();
+export const guildTransferLeadershipSchema = z.object({ requestId, targetCharacterId: characterId }).strict();
+export const guildDisbandSchema = z.object({ requestId }).strict();
 
 export type CreateCharacterPayload = z.infer<typeof createCharacterSchema>;
 export type SelectCharacterPayload = z.infer<typeof selectCharacterSchema>;
@@ -63,6 +80,7 @@ export type MoveTargetPayload = z.infer<typeof moveTargetSchema>;
 export type MoveStopPayload = z.infer<typeof moveStopSchema>;
 export type ViewportUpdatePayload = z.infer<typeof viewportUpdateSchema>;
 export type ChatSendPayload = z.infer<typeof chatSendSchema>;
+export type GuildChatPayload = z.infer<typeof guildChatSchema>;
 export type InventoryRequestPayload = z.infer<typeof inventoryRequestSchema>;
 export type InventoryItemPayload = z.infer<typeof inventoryItemSchema>;
 export type InventoryMovePayload = z.infer<typeof inventoryMoveSchema>;
@@ -86,3 +104,13 @@ export type CombatRequestPayload = z.infer<typeof combatRequestSchema>;
 export type CombatRespondPayload = z.infer<typeof combatRespondSchema>;
 export type CombatActionPayload = z.infer<typeof combatActionSchema>;
 export type CombatLeavePayload = z.infer<typeof combatLeaveSchema>;
+export type GuildGetPayload = z.infer<typeof guildGetSchema>;
+export type GuildCreatePayload = z.infer<typeof guildCreateSchema>;
+export type GuildInviteCommandPayload = z.infer<typeof guildInviteSchema>;
+export type GuildRespondPayload = z.infer<typeof guildRespondSchema>;
+export type GuildUpdateDescriptionPayload = z.infer<typeof guildUpdateDescriptionSchema>;
+export type GuildSetRolePayload = z.infer<typeof guildSetRoleSchema>;
+export type GuildKickPayload = z.infer<typeof guildKickSchema>;
+export type GuildLeavePayload = z.infer<typeof guildLeaveSchema>;
+export type GuildTransferLeadershipPayload = z.infer<typeof guildTransferLeadershipSchema>;
+export type GuildDisbandPayload = z.infer<typeof guildDisbandSchema>;

@@ -9,6 +9,7 @@ import {
 import type { User } from 'firebase/auth';
 import { useI18n } from '../../i18n/I18nProvider';
 import { GameSocketClient } from './GameSocketClient';
+import { installGuildSocketBridge } from './guildSocketBridge';
 import { installMobSocketBridge } from './mobSocketBridge';
 
 const GameConnectionContext = createContext<GameSocketClient | undefined>(undefined);
@@ -19,6 +20,7 @@ export function GameConnectionProvider({ user, children }: GameConnectionProvide
   const clientRef = useRef<GameSocketClient | undefined>(undefined);
   if (!clientRef.current) {
     clientRef.current = new GameSocketClient(user, locale);
+    installGuildSocketBridge(clientRef.current);
     installMobSocketBridge(clientRef.current);
   }
   useEffect(() => {

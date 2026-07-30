@@ -6,6 +6,7 @@ import { HealthModule } from './health/health.module.js';
 import { LocalizationModule } from './i18n/localization.module.js';
 import { CharacterModule } from './modules/characters/character.module.js';
 import { CombatModule } from './modules/combat/combat.module.js';
+import { GuildModule } from './modules/guilds/guild.module.js';
 import { ItemModule } from './modules/items/item.module.js';
 import { MapModule } from './modules/maps/map.module.js';
 import { MobModule } from './modules/mobs/mob.module.js';
@@ -35,6 +36,7 @@ import { WorldModule } from './modules/world/world.module.js';
     PersistenceModule,
     MovementModule,
     SkillModule,
+    GuildModule,
     RealtimeModule,
     ItemModule,
     NpcInteractionModule,
