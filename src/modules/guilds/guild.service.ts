@@ -310,14 +310,18 @@ export class GuildService {
 
   async disband(userId: string, characterId: string): Promise<GuildSnapshot> {
     const actor = await this.member(userId, characterId);
-    const memberIds = await this.memberIds(actor.guildId);
-    await this.prisma.$transaction(async (tx) => {
+    const memberIds = await this.prisma.$transaction(async (tx) => {
       await this.lockGuild(tx, actor.guildId);
       const currentActor = await this.txMember(tx, characterId, actor.guildId);
       if (currentActor.role !== 'LEADER') {
         throw new GameError(GAME_ERROR_CODES.GUILD_FORBIDDEN, 'errors.guild.forbidden');
       }
+      const affected = await tx.guildMember.findMany({
+        where: { guildId: actor.guildId },
+        select: { characterId: true },
+      });
       await tx.guild.delete({ where: { id: actor.guildId } });
+      return affected.map((member) => member.characterId);
     });
     await this.broadcastCharacters(memberIds);
     return this.getSnapshot(userId, characterId);
