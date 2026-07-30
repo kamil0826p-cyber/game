@@ -12,6 +12,7 @@ import './outfit-navigation.css';
 import './hud-tooltips.css';
 import './combat.css';
 import './combat-support-effects.css';
+import './combat-group-stage.css';
 
 const root = document.getElementById('root');
 if (!root) {
