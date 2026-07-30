@@ -177,7 +177,18 @@
 
 @media (max-height: 680px) {
   .combat-stage-unit {
-    transform: translate(-50%, -78%) scale(calc(var(--combat-unit-scale, 1) * 0.86));
+    width: clamp(4.1rem, 5.2vw, 5.6rem);
+    height: clamp(7.6rem, 9.6vw, 10rem);
+  }
+
+  .combat-stage-actor {
+    width: clamp(3.9rem, 4.9vw, 5.2rem);
+    height: clamp(5.8rem, 7.2vw, 7.7rem);
+  }
+
+  .combat-stage-outfit {
+    width: clamp(3.6rem, 4.5vw, 4.8rem) !important;
+    height: clamp(5.4rem, 6.7vw, 7.1rem) !important;
   }
 
   .combat-log {
