@@ -11,7 +11,8 @@
 - assign every active group exactly one administrator, initially the player who created it;
 - allow only the administrator to invite new members and remove existing non-admin members;
 - show a dedicated two-person mark beside the world nickname of players in the local character's group;
-- allow a member to leave a group; a remaining member is released when a two-person group dissolves.
+- allow a member to leave a group; a remaining member is released when a two-person group dissolves;
+- expose the authoritative group roster to the existing PVP and PVE coordinators for Stage 3 group combat.
 
 ## Reuse and architecture
 
@@ -21,6 +22,7 @@
 - Client-side administrator visibility is centralized in `groupPermissions`; the server independently repeats every authorization check.
 - Group and guild affiliation for nameplates are updated from their authoritative snapshots rather than inferred from displayed names or tags.
 - Mob label text and rank colours are pure presentation helpers covered by a focused unit test.
+- Group combat extends the existing `CombatEngine`, `CombatService`, `PveCombatService`, combat arena and socket bridge. It does not introduce a second engine or overlay; see `GROUP_COMBAT_SELF_REVIEW.md`.
 
 ## Security and consistency
 
@@ -34,7 +36,7 @@
 - Kicking removes membership indexes and pushes a null group snapshot to the removed online player.
 - An administrator cannot kick themselves; they must leave the group instead.
 - Leaving removes membership indexes, promotes the oldest remaining member when the administrator leaves and dissolves groups with fewer than two members.
-- Group creation and invitations are blocked while either participant is in combat. Group combat itself is deliberately not implemented in this stage.
+- Group creation and invitations remain blocked while either participant is already reserved by combat.
 - Socket snapshots are pushed to online members; the HUD also refreshes active groups and pending invitations periodically to keep health and online state current.
 
 ## Tests and verification
@@ -42,6 +44,7 @@
 - backend rule tests cover the 10-member limit and invitation TTL;
 - backend service tests cover acceptance-created groups, shared adjacent range, full groups, transient acceptance failures, administrator-only invites, kicking, administrator transfer, stale-invite invalidation and group dissolution;
 - frontend tests cover administrator UI permissions, group nickname presence tracking, the complete mob label/rank colour mapping and guild membership presence tracking;
+- Stage 3 adds focused engine, PVP roster and ten-person combat presentation tests documented in `GROUP_COMBAT_SELF_REVIEW.md`;
 - the PR diff was searched for stale `leader` / `leaderCharacterId` group fields and for missing `group:kick` contract layers;
 - the changed-file set was reviewed for relative import resolution and client/server contract symmetry;
 - a full local `npm run check:all` could not be executed because the connector environment cannot resolve GitHub for a checkout, and the repository currently reports no workflow runs for this branch.
@@ -49,5 +52,5 @@
 ## Deliberate limits
 
 - Group state is realtime and process-local, matching the current ephemeral combat/trade style. Persisted groups or multi-node shared state require a separate persistence/distribution design.
-- This stage does not add group combat, shared loot, experience distribution, manual administrator transfer or group chat.
+- Stage 3 adds group PVP/PVE, split experience and personal loot. Manual administrator transfer and group chat remain outside this stage.
 - Offline members remain visible so a reconnect can restore the group; automatic long-term offline eviction is left for a later group lifecycle policy.
