@@ -1,17 +1,13 @@
 import { Container, Graphics, Rectangle, Text, type FederatedPointerEvent } from 'pixi.js';
 import type { NpcStatePayload } from '../../contracts/socket';
 import {
-  getQuestMarkerState,
+  getNpcQuestMarkerState,
   subscribeQuestMarkerState,
 } from '../quests/questMarkerState';
 import { WORLD_TILE_SIZE } from './constants';
 
 export const NPC_CONTEXT_EVENT = 'game:npc-interaction';
 export interface NpcInteractionPoint { x: number; y: number; }
-
-const QUEST_KEY_BY_NPC_KEY: Readonly<Record<string, string>> = {
-  'mira-tanner': 'rabbit-fur-for-mira',
-};
 
 export class NpcView {
   readonly container = new Container();
@@ -31,8 +27,7 @@ export class NpcView {
       if (npc.interactionType === 'MERCHANT') interactionMarker.text = '¤';
       else if (npc.interactionType !== 'QUEST') interactionMarker.text = '…';
       else {
-        const questKey = QUEST_KEY_BY_NPC_KEY[npc.key];
-        const state = questKey ? getQuestMarkerState(questKey) : 'UNKNOWN';
+        const state = getNpcQuestMarkerState(npc.key);
         interactionMarker.text = state === 'NOT_STARTED' ? '!' : state === 'READY' ? '?' : '';
       }
       interactionMarker.visible = interactionMarker.text.length > 0;
