@@ -87,4 +87,4 @@ Covered by focused tests or direct code-path review:
 
 ## Verification limits
 
-A complete `npm run check:all` still cannot be executed in the connector environment because a local checkout cannot resolve GitHub. All changed TypeScript and TSX files were parsed with the installed TypeScript compiler, the changed call sites and constructor wiring were reviewed, and focused unit tests were added. The repository currently has no GitHub workflow run for this branch, so CI validation remains unavailable until the repository runs its own checks.
+A complete `npm run check:all` still cannot be executed in the connector environment because a local checkout cannot resolve GitHub. The prepared TypeScript and TSX changes were parsed with the installed TypeScript compiler before publication, the published diff and module wiring were reviewed, and focused unit tests were added. The repository currently has no GitHub workflow run for this branch, so CI validation remains unavailable until the repository runs its own checks.
