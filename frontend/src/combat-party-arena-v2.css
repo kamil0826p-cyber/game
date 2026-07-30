@@ -104,6 +104,10 @@
   background: rgba(2, 5, 9, 0.94);
 }
 
+.combat-dynamic-vfx {
+  z-index: 110;
+}
+
 .combat-dynamic-cast-rune,
 .combat-dynamic-impact-burst {
   width: clamp(4.2rem, 5vw, 6.2rem);
@@ -120,14 +124,14 @@
 
 @keyframes combat-stage-lunge-left {
   0%, 100% { transform: translateX(-50%); }
-  28% { transform: translateX(calc(-50% - 0.45rem)) rotate(-2deg); }
-  62% { transform: translateX(calc(-50% + 2.8rem)) rotate(4deg) scale(1.04); }
+  28% { transform: translateX(calc(-50% - 0.3rem)) rotate(-2deg); }
+  62% { transform: translateX(calc(-50% + 1.2rem)) rotate(3deg) scale(1.03); }
 }
 
 @keyframes combat-stage-lunge-right {
   0%, 100% { transform: translateX(-50%); }
-  28% { transform: translateX(calc(-50% + 0.45rem)) rotate(2deg); }
-  62% { transform: translateX(calc(-50% - 2.8rem)) rotate(-4deg) scale(1.04); }
+  28% { transform: translateX(calc(-50% + 0.3rem)) rotate(2deg); }
+  62% { transform: translateX(calc(-50% - 1.2rem)) rotate(-3deg) scale(1.03); }
 }
 
 @media (max-width: 1440px) {
