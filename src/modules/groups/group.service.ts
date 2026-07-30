@@ -25,7 +25,7 @@ interface StoredGroupMember {
 
 interface GroupRecord {
   id: string;
-  leaderCharacterId: string;
+  adminCharacterId: string;
   members: Map<string, StoredGroupMember>;
   createdAt: number;
 }
@@ -61,6 +61,11 @@ export class GroupService implements OnModuleDestroy {
       throw new GameError(GAME_ERROR_CODES.GROUP_SELF, 'errors.group.self');
     }
 
+    const actorGroup = this.groupForCharacter(actor.characterId);
+    if (actorGroup && actorGroup.adminCharacterId !== actor.characterId) {
+      throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+    }
+
     const target = this.world.getByCharacterId(targetCharacterId);
     if (
       !target?.activeInWorld ||
@@ -79,8 +84,6 @@ export class GroupService implements OnModuleDestroy {
     if (this.groupIdByCharacter.has(targetCharacterId)) {
       throw new GameError(GAME_ERROR_CODES.GROUP_TARGET_MEMBER, 'errors.group.targetMember');
     }
-
-    const actorGroup = this.groupForCharacter(actor.characterId);
     if (actorGroup && isGroupFull(actorGroup.members.size)) {
       throw new GameError(GAME_ERROR_CODES.GROUP_FULL, 'errors.group.full');
     }
@@ -143,7 +146,12 @@ export class GroupService implements OnModuleDestroy {
     }
 
     let group = this.groupForCharacter(inviter.characterId);
-    if (invite.sourceGroupId && group?.id !== invite.sourceGroupId) {
+    const invitationStillOwnedByAdmin = group?.adminCharacterId === inviter.characterId;
+    if (
+      (invite.sourceGroupId &&
+        (group?.id !== invite.sourceGroupId || !invitationStillOwnedByAdmin)) ||
+      (!invite.sourceGroupId && group && !invitationStillOwnedByAdmin)
+    ) {
       this.invites.delete(invite.id);
       throw new GameError(
         GAME_ERROR_CODES.GROUP_INVITE_NOT_FOUND,
@@ -163,6 +171,44 @@ export class GroupService implements OnModuleDestroy {
     return this.snapshotFor(target.characterId);
   }
 
+  kick(actor: PlayerSession, targetCharacterId: string): GroupSnapshot {
+    this.pruneExpiredInvites();
+    const group = this.groupForCharacter(actor.characterId);
+    if (!group) {
+      throw new GameError(GAME_ERROR_CODES.GROUP_REQUIRED, 'errors.group.required');
+    }
+    if (group.adminCharacterId !== actor.characterId) {
+      throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+    }
+    if (targetCharacterId === actor.characterId) {
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_ADMIN_CANNOT_KICK_SELF,
+        'errors.group.adminCannotKickSelf',
+      );
+    }
+    if (!group.members.has(targetCharacterId)) {
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_MEMBER_NOT_FOUND,
+        'errors.group.memberNotFound',
+      );
+    }
+
+    const previousMemberIds = [...group.members.keys()];
+    group.members.delete(targetCharacterId);
+    this.groupIdByCharacter.delete(targetCharacterId);
+    this.removeInvitesFrom(targetCharacterId);
+    this.removeInvitesForTarget(targetCharacterId);
+
+    if (group.members.size <= 1) {
+      for (const characterId of group.members.keys()) this.groupIdByCharacter.delete(characterId);
+      this.groups.delete(group.id);
+      this.removeInvitesForGroup(group.id);
+    }
+
+    this.publishTo(previousMemberIds);
+    return this.snapshotFor(actor.characterId);
+  }
+
   leave(actor: PlayerSession): GroupSnapshot {
     this.pruneExpiredInvites();
     const group = this.groupForCharacter(actor.characterId);
@@ -171,9 +217,11 @@ export class GroupService implements OnModuleDestroy {
     }
 
     const previousMemberIds = [...group.members.keys()];
+    const adminLeaving = group.adminCharacterId === actor.characterId;
     group.members.delete(actor.characterId);
     this.groupIdByCharacter.delete(actor.characterId);
     this.removeInvitesFrom(actor.characterId);
+    if (adminLeaving) this.removeInvitesForGroup(group.id);
 
     if (group.members.size <= 1) {
       for (const characterId of group.members.keys()) this.groupIdByCharacter.delete(characterId);
@@ -183,8 +231,12 @@ export class GroupService implements OnModuleDestroy {
       return this.snapshotFor(actor.characterId);
     }
 
-    if (group.leaderCharacterId === actor.characterId) {
-      group.leaderCharacterId = group.members.keys().next().value as string;
+    if (adminLeaving) {
+      const nextAdminCharacterId = group.members.keys().next().value;
+      if (!nextAdminCharacterId) {
+        throw new Error('A non-empty group must always have an administrator.');
+      }
+      group.adminCharacterId = nextAdminCharacterId;
     }
     this.publishTo(previousMemberIds);
     return this.snapshotFor(actor.characterId);
@@ -196,15 +248,15 @@ export class GroupService implements OnModuleDestroy {
     this.invites.clear();
   }
 
-  private createGroup(leader: PlayerSession): GroupRecord {
+  private createGroup(admin: PlayerSession): GroupRecord {
     const group: GroupRecord = {
       id: randomUUID(),
-      leaderCharacterId: leader.characterId,
-      members: new Map([[leader.characterId, this.storeMember(leader)]]),
+      adminCharacterId: admin.characterId,
+      members: new Map([[admin.characterId, this.storeMember(admin)]]),
       createdAt: Date.now(),
     };
     this.groups.set(group.id, group);
-    this.groupIdByCharacter.set(leader.characterId, group.id);
+    this.groupIdByCharacter.set(admin.characterId, group.id);
     return group;
   }
 
@@ -222,22 +274,22 @@ export class GroupService implements OnModuleDestroy {
 
   private groupPayload(group: GroupRecord): GroupDetailsPayload {
     const members = [...group.members.values()].map((stored) =>
-      this.memberPayload(stored, group.leaderCharacterId),
+      this.memberPayload(stored, group.adminCharacterId),
     );
     members.sort((left, right) => {
-      if (left.leader !== right.leader) return left.leader ? -1 : 1;
+      if (left.admin !== right.admin) return left.admin ? -1 : 1;
       if (left.online !== right.online) return left.online ? -1 : 1;
       return left.name.localeCompare(right.name, 'pl');
     });
     return {
       id: group.id,
-      leaderCharacterId: group.leaderCharacterId,
+      adminCharacterId: group.adminCharacterId,
       maxMembers: GROUP_MAX_MEMBERS,
       members,
     };
   }
 
-  private memberPayload(stored: StoredGroupMember, leaderCharacterId: string): GroupMemberPayload {
+  private memberPayload(stored: StoredGroupMember, adminCharacterId: string): GroupMemberPayload {
     const live = this.world.getByCharacterId(stored.characterId);
     const source = live?.activeInWorld ? this.storeMember(live) : stored;
     if (live?.activeInWorld) {
@@ -247,7 +299,7 @@ export class GroupService implements OnModuleDestroy {
     return {
       ...source,
       online: Boolean(live?.activeInWorld),
-      leader: stored.characterId === leaderCharacterId,
+      admin: stored.characterId === adminCharacterId,
     };
   }
 
