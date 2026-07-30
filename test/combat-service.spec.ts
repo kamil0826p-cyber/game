@@ -57,8 +57,9 @@ const session = (
   }) as PlayerSession;
 
 const services: CombatService[] = [];
+type GroupMode = 'none' | 'both' | 'first-only';
 
-const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP', grouped = false) => {
+const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP', groupMode: GroupMode = 'none') => {
   const first = session('first', 4, { agility: 20 });
   const firstAlly = session('first-ally', 3, { agility: 15 });
   const second = session('second', 5, { agility: 12 });
@@ -74,10 +75,15 @@ const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP', grouped = false) => {
   const publisher = { emit: vi.fn() };
   const groups = {
     getSnapshot: vi.fn((active: PlayerSession) => {
-      if (!grouped) return { group: null, invites: [] };
       const firstTeam = [first.characterId, firstAlly.characterId];
       const secondTeam = [second.characterId, secondAlly.characterId];
-      const ids = firstTeam.includes(active.characterId) ? firstTeam : secondTeam.includes(active.characterId) ? secondTeam : [active.characterId];
+      const firstGrouped = groupMode === 'both' || groupMode === 'first-only';
+      const secondGrouped = groupMode === 'both';
+      const ids = firstGrouped && firstTeam.includes(active.characterId)
+        ? firstTeam
+        : secondGrouped && secondTeam.includes(active.characterId)
+          ? secondTeam
+          : [active.characterId];
       if (ids.length === 1) return { group: null, invites: [] };
       const groupId = ids === firstTeam ? 'group-first' : 'group-second';
       return {
@@ -171,11 +177,23 @@ describe('CombatService PVP policy', () => {
   });
 
   it('reserves and starts both complete available groups', async () => {
-    const { combat, first, firstAlly, second, secondAlly } = harness('PVP', true);
+    const { combat, first, firstAlly, second, secondAlly } = harness('PVP', 'both');
     const snapshot = await combat.request(first.userId, first.characterId, second.characterId);
     expect(snapshot.participants).toHaveLength(4);
     expect(snapshot.teams?.map((team) => team.actorIds.length)).toEqual([2, 2]);
     expect([first, firstAlly, second, secondAlly].every((active) => active.combatState === 'IN_BATTLE')).toBe(true);
+  });
+
+  it('allows a complete group to fight a solo player', async () => {
+    const { combat, first, firstAlly, second, secondAlly } = harness('PVP', 'first-only');
+    const snapshot = await combat.request(first.userId, first.characterId, second.characterId);
+
+    expect(snapshot.participants).toHaveLength(3);
+    expect(snapshot.teams?.map((team) => team.actorIds.length)).toEqual([2, 1]);
+    expect(first.combatState).toBe('IN_BATTLE');
+    expect(firstAlly.combatState).toBe('IN_BATTLE');
+    expect(second.combatState).toBe('IN_BATTLE');
+    expect(secondAlly.combatState).toBe('IDLE');
   });
 
   it('rejects a third player attacking someone who is already in combat', async () => {
