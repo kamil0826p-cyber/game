@@ -3,6 +3,7 @@ import type { SocketAck } from './socket.events.js';
 import type {
   GroupGetPayload,
   GroupInviteCommandPayload,
+  GroupKickPayload,
   GroupLeavePayload,
   GroupRespondPayload,
 } from './group.schemas.js';
@@ -16,12 +17,12 @@ export interface GroupMemberPayload {
   hp: number;
   maxHp: number;
   online: boolean;
-  leader: boolean;
+  admin: boolean;
 }
 
 export interface GroupDetailsPayload {
   id: string;
-  leaderCharacterId: string;
+  adminCharacterId: string;
   maxMembers: number;
   members: GroupMemberPayload[];
 }
@@ -57,6 +58,10 @@ declare module './socket.events.js' {
     ) => void;
     'group:leave': (
       payload: GroupLeavePayload,
+      acknowledgement?: (response: SocketAck<GroupSnapshot>) => void,
+    ) => void;
+    'group:kick': (
+      payload: GroupKickPayload,
       acknowledgement?: (response: SocketAck<GroupSnapshot>) => void,
     ) => void;
   }
