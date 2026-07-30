@@ -10,6 +10,7 @@ import type {
   SocketAck,
 } from '../../contracts/socket';
 import { createRequestId } from '../../utils/requestId';
+import { clearGuildPresence, setGuildPresence } from '../guilds/guildPresence';
 import { gameStore } from '../state/gameStore';
 import type { GameSocketClient } from './GameSocketClient';
 
@@ -42,6 +43,10 @@ declare module './GameSocketClient' {
 
 const ACK_TIMEOUT_MS = 8_000;
 
+function isPolishUi(): boolean {
+  return document.documentElement.lang.toLowerCase().startsWith('pl');
+}
+
 export function installGuildSocketBridge(client: GameSocketClient): void {
   const bridge = client as unknown as BridgeClient;
   const originalConnect = client.connect.bind(client);
@@ -49,6 +54,7 @@ export function installGuildSocketBridge(client: GameSocketClient): void {
   const guildListeners = new Set<GuildListener>();
   const chatListeners = new Set<GuildChatListener>();
   let boundSocket: GameSocket | undefined;
+  let seenInviteIds = new Set<string>();
 
   const withAck = <T>(emit: (ack: (response: SocketAck<T>) => void) => void): Promise<T> =>
     new Promise<SocketAck<T>>((resolve, reject) => {
@@ -75,6 +81,18 @@ export function installGuildSocketBridge(client: GameSocketClient): void {
   };
 
   const publishSnapshot = (snapshot: GuildSnapshot): GuildSnapshot => {
+    const nextInviteIds = new Set(snapshot.invites.map((invite) => invite.inviteId));
+    for (const invite of snapshot.invites) {
+      if (seenInviteIds.has(invite.inviteId)) continue;
+      gameStore.addNotification({
+        code: 'GUILD_INVITE_RECEIVED',
+        message: isPolishUi()
+          ? `${invite.inviterName} zaprasza cię do gildii ${invite.guildName} [${invite.guildTag}].`
+          : `${invite.inviterName} invited you to ${invite.guildName} [${invite.guildTag}].`,
+      });
+    }
+    seenInviteIds = nextInviteIds;
+    setGuildPresence(snapshot);
     for (const listener of guildListeners) listener(snapshot);
     return snapshot;
   };
@@ -100,8 +118,10 @@ export function installGuildSocketBridge(client: GameSocketClient): void {
   };
   bridge.disconnect = () => {
     boundSocket = undefined;
+    seenInviteIds = new Set();
     guildListeners.clear();
     chatListeners.clear();
+    clearGuildPresence();
     originalDisconnect();
   };
 
