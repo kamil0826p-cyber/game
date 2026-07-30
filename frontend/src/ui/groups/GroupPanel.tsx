@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { OutfitPreview } from '../../components/common/OutfitPreview';
 import type { GroupInvitePayload, GroupMemberPayload } from '../../contracts/group';
+import { canKickGroupMember } from '../../game/groups/groupPermissions';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
 import { useGroupState } from '../../game/state/groupStore';
@@ -17,6 +18,7 @@ export function GroupPanel(): React.JSX.Element {
   const { locale } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [busyInviteId, setBusyInviteId] = useState<string>();
+  const [busyMemberId, setBusyMemberId] = useState<string>();
   const [leaving, setLeaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -61,8 +63,20 @@ export function GroupPanel(): React.JSX.Element {
     }
   };
 
+  const kick = async (member: GroupMemberPayload): Promise<void> => {
+    if (busyMemberId || leaving) return;
+    setBusyMemberId(member.characterId);
+    try {
+      await connection.kickGroupMember(member.characterId);
+    } catch {
+      // The bridge publishes localized server errors through the global notification stack.
+    } finally {
+      setBusyMemberId(undefined);
+    }
+  };
+
   const leave = async (): Promise<void> => {
-    if (leaving || !group) return;
+    if (leaving || busyMemberId || !group) return;
     setLeaving(true);
     try {
       await connection.leaveGroup();
@@ -114,12 +128,25 @@ export function GroupPanel(): React.JSX.Element {
           {group ? (
             <>
               <div className="space-y-2">
-                {group.members.map((member) => <MemberRow key={member.characterId} member={member} pl={pl} />)}
+                {group.members.map((member) => (
+                  <MemberRow
+                    key={member.characterId}
+                    member={member}
+                    pl={pl}
+                    canKick={canKickGroupMember(
+                      group,
+                      game.self?.characterId,
+                      member.characterId,
+                    )}
+                    busy={busyMemberId === member.characterId}
+                    onKick={kick}
+                  />
+                ))}
               </div>
               <button
                 type="button"
                 onClick={() => void leave()}
-                disabled={leaving}
+                disabled={leaving || Boolean(busyMemberId)}
                 className="mt-3 w-full rounded-md border border-rose-300/20 bg-rose-400/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-200 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {leaving ? (pl ? 'Opuszczanie…' : 'Leaving…') : (pl ? 'Opuść grupę' : 'Leave group')}
@@ -191,7 +218,19 @@ function InviteCard({
   );
 }
 
-function MemberRow({ member, pl }: { member: GroupMemberPayload; pl: boolean }): React.JSX.Element {
+function MemberRow({
+  member,
+  pl,
+  canKick,
+  busy,
+  onKick,
+}: {
+  member: GroupMemberPayload;
+  pl: boolean;
+  canKick: boolean;
+  busy: boolean;
+  onKick: (member: GroupMemberPayload) => Promise<void>;
+}): React.JSX.Element {
   const healthPercent = member.maxHp > 0
     ? Math.max(0, Math.min(100, (member.hp / member.maxHp) * 100))
     : 0;
@@ -209,7 +248,7 @@ function MemberRow({ member, pl }: { member: GroupMemberPayload; pl: boolean }):
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <p className="truncate text-xs font-semibold text-slate-100">
-            {member.leader ? <span className="mr-1 text-amber-300" title={pl ? 'Lider' : 'Leader'}>♛</span> : null}
+            {member.admin ? <span className="mr-1 text-amber-300" title={pl ? 'Administrator' : 'Administrator'}>♛</span> : null}
             {member.name}
           </p>
           <span className={`size-2 shrink-0 rounded-full ${member.online ? 'bg-emerald-400' : 'bg-slate-600'}`} title={member.online ? (pl ? 'Online' : 'Online') : (pl ? 'Offline' : 'Offline')} />
@@ -221,6 +260,16 @@ function MemberRow({ member, pl }: { member: GroupMemberPayload; pl: boolean }):
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/50">
           <div className="h-full bg-rose-500" style={{ width: `${healthPercent}%` }} />
         </div>
+        {canKick ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void onKick(member)}
+            className="mt-2 rounded-md border border-rose-300/20 bg-rose-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-rose-200 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? (pl ? 'Wyrzucanie…' : 'Removing…') : (pl ? 'Wyrzuć' : 'Remove')}
+          </button>
+        ) : null}
       </div>
     </div>
   );
