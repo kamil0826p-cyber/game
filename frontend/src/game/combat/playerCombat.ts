@@ -1,6 +1,6 @@
-import { isActorWithinInteractionRange } from '../../../../src/common/rules/actor-interaction';
 import { getPvpEngagementPolicy } from '../../../../src/common/rules/player-interaction-request';
 import type { PublicPlayerState, SelfCharacterState, ZoneType } from '../../contracts/game';
+import { canInteractWithPlayer } from '../interactions/playerInteraction';
 
 export type PlayerCombatAvailability =
   'AVAILABLE_WITH_CONSENT' | 'AVAILABLE_IMMEDIATELY' | 'SAFE_ZONE' | 'TOO_FAR' | 'SELF';
@@ -11,7 +11,7 @@ export function getPlayerCombatAvailability(
   zoneType: ZoneType,
 ): PlayerCombatAvailability {
   if (self.characterId === player.characterId) return 'SELF';
-  if (!isActorWithinInteractionRange(self, player)) return 'TOO_FAR';
+  if (!canInteractWithPlayer(self, player)) return 'TOO_FAR';
   const policy = getPvpEngagementPolicy(zoneType);
   if (policy === 'FORBIDDEN') return 'SAFE_ZONE';
   return policy === 'CONSENT' ? 'AVAILABLE_WITH_CONSENT' : 'AVAILABLE_IMMEDIATELY';
