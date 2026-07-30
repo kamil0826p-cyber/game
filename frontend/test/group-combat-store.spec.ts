@@ -95,6 +95,21 @@ describe('group combat client state', () => {
     expect(gameStore.getSnapshot().plannedPath).toEqual([{ x: 2, y: 1 }]);
   });
 
+  it('keeps a defeated but not withdrawn participant attached as a spectator', () => {
+    setSelf(self());
+    gameStore.updateCombatState(combat([
+      participant('self', 'a', { hp: 0 }),
+      participant('ally', 'a'),
+      participant('enemy', 'b'),
+    ]));
+
+    expect(gameStore.getSnapshot().self).toMatchObject({
+      combatState: 'IN_BATTLE',
+      hp: 0,
+    });
+    expect(gameStore.getSnapshot().plannedPath).toEqual([]);
+  });
+
   it('keeps an active local participant locked in battle', () => {
     setSelf(self());
     gameStore.updateCombatState(combat([
