@@ -11,7 +11,7 @@ function formatSeconds(milliseconds: number): string {
   return `${Math.max(0, Math.ceil(milliseconds / 1_000))}s`;
 }
 
-export function GroupPanel(): React.JSX.Element {
+export function GroupPanel(): React.JSX.Element | null {
   const connection = useGameConnection();
   const game = useGameState();
   const snapshot = useGroupState();
@@ -88,32 +88,42 @@ export function GroupPanel(): React.JSX.Element {
     }
   };
 
+  if (!group && invites.length === 0) return null;
+
   return (
-    <section className="hud-panel pointer-events-auto w-[min(390px,calc(100vw-24px))] overflow-hidden" aria-label={pl ? 'Grupa' : 'Group'}>
+    <section
+      className="hud-panel pointer-events-auto relative z-40 w-[min(390px,calc(100vw-24px))] overflow-hidden shadow-2xl shadow-black/35"
+      aria-label={pl ? 'Grupa' : 'Group'}
+    >
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-white/5"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="grid size-7 shrink-0 place-items-center rounded-md border border-amber-300/20 bg-amber-300/10 text-sm text-amber-200" aria-hidden="true">♟</span>
-          <span>
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-amber-300/25 bg-amber-300/10 text-amber-200"
+            aria-hidden="true"
+          >
+            <GroupIcon />
+          </span>
+          <span className="min-w-0">
             <span className="block font-display text-sm text-amber-100">{pl ? 'Grupa' : 'Group'}</span>
-            <span className="block text-[9px] uppercase tracking-[0.15em] text-slate-500">
+            <span className="block truncate text-[9px] uppercase tracking-[0.15em] text-slate-500">
               {group
                 ? `${group.members.length} / ${group.maxMembers}`
-                : invites.length > 0
-                  ? pl ? `${invites.length} zaproszenie` : `${invites.length} invitation`
-                  : pl ? 'Brak grupy' : 'No group'}
+                : pl
+                  ? `${invites.length} ${invites.length === 1 ? 'zaproszenie' : 'zaproszenia'}`
+                  : `${invites.length} ${invites.length === 1 ? 'invitation' : 'invitations'}`}
             </span>
           </span>
         </span>
-        <span className={`text-sm text-amber-200 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true">⌄</span>
+        <ChevronIcon expanded={expanded} />
       </button>
 
       {expanded ? (
-        <div className="border-t border-white/5 px-3 pb-3 pt-2">
+        <div className="scrollbar-thin max-h-[min(58vh,520px)] overflow-y-auto border-t border-white/5 px-3 pb-3 pt-2 md:max-h-[calc(100vh-470px)]">
           {invites.map((invite) => (
             <InviteCard
               key={invite.inviteId}
@@ -127,7 +137,7 @@ export function GroupPanel(): React.JSX.Element {
 
           {group ? (
             <>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {group.members.map((member) => (
                   <MemberRow
                     key={member.characterId}
@@ -143,19 +153,17 @@ export function GroupPanel(): React.JSX.Element {
                   />
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => void leave()}
-                disabled={leaving || Boolean(busyMemberId)}
-                className="mt-3 w-full rounded-md border border-rose-300/20 bg-rose-400/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-200 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {leaving ? (pl ? 'Opuszczanie…' : 'Leaving…') : (pl ? 'Opuść grupę' : 'Leave group')}
-              </button>
+              <div className="mt-2 flex justify-end border-t border-white/5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => void leave()}
+                  disabled={leaving || Boolean(busyMemberId)}
+                  className="rounded-md px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-[0.13em] text-rose-200/75 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {leaving ? (pl ? 'Opuszczanie…' : 'Leaving…') : (pl ? 'Opuść grupę' : 'Leave group')}
+                </button>
+              </div>
             </>
-          ) : invites.length === 0 ? (
-            <p className="py-2 text-center text-xs text-slate-400">
-              {pl ? 'Podejdź do gracza i wybierz „Dodaj do grupy”.' : 'Approach a player and choose “Add to group”.'}
-            </p>
           ) : null}
         </div>
       ) : null}
@@ -179,13 +187,13 @@ function InviteCard({
   return (
     <div className="mb-2 rounded-lg border border-emerald-300/25 bg-emerald-400/10 p-2.5">
       <div className="flex items-center gap-2.5">
-        <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-md border border-emerald-300/20 bg-slate-950/70">
+        <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-emerald-300/20 bg-slate-950/70">
           <OutfitPreview
             outfitKey={invite.inviterOutfitKey}
             characterClass={invite.inviterClass}
             size="small"
             animated
-            className="!h-16 !w-11"
+            className="!h-14 !w-10"
           />
         </div>
         <div className="min-w-0 flex-1">
@@ -193,7 +201,9 @@ function InviteCard({
           <p className="text-[9px] uppercase tracking-[0.13em] text-emerald-200/70">
             Lv. {invite.inviterLevel} · {pl ? 'zaprasza do grupy' : 'group invitation'}
           </p>
-          <p className="mt-0.5 text-[9px] text-slate-500">{pl ? 'Wygasa za' : 'Expires in'} {formatSeconds(remaining)}</p>
+          <p className="mt-0.5 text-[9px] text-slate-500">
+            {pl ? 'Wygasa za' : 'Expires in'} {formatSeconds(remaining)}
+          </p>
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -201,7 +211,7 @@ function InviteCard({
           type="button"
           disabled={busy}
           onClick={() => void onRespond(invite, true)}
-          className="rounded-md border border-emerald-300/25 bg-emerald-400/15 px-2 py-1.5 text-[10px] font-semibold text-emerald-100 hover:bg-emerald-400/25 disabled:opacity-50"
+          className="rounded-md border border-emerald-300/25 bg-emerald-400/15 px-2 py-1.5 text-[10px] font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-50"
         >
           {pl ? 'Akceptuj' : 'Accept'}
         </button>
@@ -209,7 +219,7 @@ function InviteCard({
           type="button"
           disabled={busy}
           onClick={() => void onRespond(invite, false)}
-          className="rounded-md border border-slate-300/15 bg-slate-400/10 px-2 py-1.5 text-[10px] font-semibold text-slate-300 hover:bg-slate-400/20 disabled:opacity-50"
+          className="rounded-md border border-slate-300/15 bg-slate-400/10 px-2 py-1.5 text-[10px] font-semibold text-slate-300 transition hover:bg-slate-400/20 disabled:opacity-50"
         >
           {pl ? 'Odrzuć' : 'Decline'}
         </button>
@@ -234,43 +244,99 @@ function MemberRow({
   const healthPercent = member.maxHp > 0
     ? Math.max(0, Math.min(100, (member.hp / member.maxHp) * 100))
     : 0;
+  const kickLabel = pl ? `Wyrzuć ${member.name} z grupy` : `Remove ${member.name} from group`;
+
   return (
-    <div className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 ${member.online ? 'border-white/10 bg-white/[0.035]' : 'border-white/5 bg-black/10 opacity-60'}`}>
-      <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-md border border-amber-300/15 bg-slate-950/65">
+    <div
+      className={`grid grid-cols-[40px_minmax(0,1fr)_28px] items-center gap-2 rounded-lg border px-2 py-1.5 ${member.online ? 'border-white/10 bg-white/[0.035]' : 'border-white/5 bg-black/10 opacity-60'}`}
+    >
+      <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-amber-300/15 bg-slate-950/65">
         <OutfitPreview
           outfitKey={member.outfitKey}
           characterClass={member.characterClass}
           size="small"
           animated={member.online}
-          className="!h-16 !w-11"
+          className="!h-14 !w-10"
         />
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-xs font-semibold text-slate-100">
-            {member.admin ? <span className="mr-1 text-amber-300" title={pl ? 'Administrator' : 'Administrator'}>♛</span> : null}
-            {member.name}
-          </p>
-          <span className={`size-2 shrink-0 rounded-full ${member.online ? 'bg-emerald-400' : 'bg-slate-600'}`} title={member.online ? (pl ? 'Online' : 'Online') : (pl ? 'Offline' : 'Offline')} />
+
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="truncate text-xs font-semibold text-slate-100">{member.name}</p>
+          {member.admin ? (
+            <span
+              className="shrink-0 rounded border border-amber-300/20 bg-amber-300/10 px-1 py-0.5 text-[7px] font-bold uppercase tracking-[0.12em] text-amber-300"
+              title={pl ? 'Administrator grupy' : 'Group administrator'}
+            >
+              {pl ? 'Admin' : 'Admin'}
+            </span>
+          ) : null}
         </div>
-        <div className="mt-0.5 flex items-center justify-between text-[9px] uppercase tracking-[0.12em] text-slate-500">
+        <div className="mt-0.5 flex items-center justify-between gap-2 text-[8px] uppercase tracking-[0.11em] text-slate-500">
           <span>Lv. {member.level}</span>
-          <span>{member.hp} / {member.maxHp} HP</span>
+          <span className="shrink-0">{member.hp} / {member.maxHp} HP</span>
         </div>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/50">
+        <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/50">
           <div className="h-full bg-rose-500" style={{ width: `${healthPercent}%` }} />
         </div>
+      </div>
+
+      <div className="flex h-full flex-col items-center justify-between py-0.5">
+        <span
+          className={`size-2 rounded-full ${member.online ? 'bg-emerald-400' : 'bg-slate-600'}`}
+          title={member.online ? 'Online' : 'Offline'}
+        />
         {canKick ? (
           <button
             type="button"
             disabled={busy}
             onClick={() => void onKick(member)}
-            className="mt-2 rounded-md border border-rose-300/20 bg-rose-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-rose-200 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid size-7 place-items-center rounded-md border border-white/5 text-slate-500 transition hover:border-rose-300/25 hover:bg-rose-400/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-40"
+            title={kickLabel}
+            aria-label={kickLabel}
           >
-            {busy ? (pl ? 'Wyrzucanie…' : 'Removing…') : (pl ? 'Wyrzuć' : 'Remove')}
+            {busy ? <span className="text-xs">…</span> : <PersonRemoveIcon />}
           </button>
-        ) : null}
+        ) : <span aria-hidden="true" />}
       </div>
     </div>
+  );
+}
+
+function GroupIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.8 18.5c.5-3.2 2.2-5 5.2-5s4.7 1.8 5.2 5" />
+      <circle cx="16.5" cy="9" r="2.2" />
+      <path d="M15.2 13.6c2.8-.3 4.5 1.3 5 4.1" />
+    </svg>
+  );
+}
+
+function PersonRemoveIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.8 18.5c.5-3.2 2.2-5 5.2-5 1.4 0 2.5.4 3.4 1.1" />
+      <path d="M15.5 16.5h5" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      className={`size-4 shrink-0 text-amber-200 transition-transform ${expanded ? 'rotate-180' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m5 7.5 5 5 5-5" />
+    </svg>
   );
 }
