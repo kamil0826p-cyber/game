@@ -22,6 +22,7 @@ import { VisibilityService } from '../world/visibility.service.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { SessionClaimExecutor } from './session-claim.executor.js';
+import { createWorldEntryOccupancyPredicate } from './world-entry-occupancy.js';
 
 export interface CharacterRosterEntry {
   characterId: string;
@@ -153,7 +154,7 @@ export class SessionLifecycleService {
     const position = this.maps.findNearestWalkable(
       map,
       { x: session.x, y: session.y },
-      (x, y) => map.zoneType !== 'SAFE' && this.worldState.isOccupied(map.id, x, y, session.characterId),
+      createWorldEntryOccupancyPredicate(this.worldState, map.id, session.characterId),
     );
     if (position.x !== session.x || position.y !== session.y) {
       this.worldState.updatePosition(session, { mapId: map.id, x: position.x, y: position.y, direction: session.direction });
