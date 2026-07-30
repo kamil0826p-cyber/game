@@ -83,7 +83,8 @@ Covered by focused tests or direct code-path review:
 - pending cancellation and server shutdown release every reservation;
 - the PVE socket bridge preserves target selection instead of accidentally sending the command to the PVP event;
 - Nest module imports were checked for a `CombatModule` / `MobModule` / `MovementModule` cycle;
-- frontend roster props were hardened for `exactOptionalPropertyTypes` so explicit `undefined` identifiers remain type-safe.
+- frontend roster props were hardened for `exactOptionalPropertyTypes` so explicit `undefined` identifiers remain type-safe;
+- client combat state is calculated per participant, so a withdrawn member returns to `IDLE` while their teammates continue fighting; this has a dedicated regression test.
 
 ## Verification limits
 
