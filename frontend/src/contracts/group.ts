@@ -10,12 +10,12 @@ export interface GroupMemberPayload {
   hp: number;
   maxHp: number;
   online: boolean;
-  leader: boolean;
+  admin: boolean;
 }
 
 export interface GroupDetailsPayload {
   id: string;
-  leaderCharacterId: string;
+  adminCharacterId: string;
   maxMembers: number;
   members: GroupMemberPayload[];
 }
@@ -51,6 +51,10 @@ declare module './socket' {
     ) => void;
     'group:leave': (
       payload: { requestId: string },
+      acknowledgement: (response: SocketAck<GroupSnapshot>) => void,
+    ) => void;
+    'group:kick': (
+      payload: { requestId: string; targetCharacterId: string },
       acknowledgement: (response: SocketAck<GroupSnapshot>) => void,
     ) => void;
   }
