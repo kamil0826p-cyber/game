@@ -34,7 +34,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
   const refreshQuestMarkers = useCallback(async () => {
     try {
       const snapshot = await getQuestLog(connection);
-      replaceQuestMarkerStates(snapshot.quests);
+      replaceQuestMarkerStates(snapshot.quests, snapshot.npcBindings);
     } catch {
       resetQuestMarkerStates();
     }
@@ -43,7 +43,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
   useEffect(() => {
     if (state.phase === 'in-world' && state.socketConnected) void refreshQuestMarkers();
     else resetQuestMarkerStates();
-  }, [refreshQuestMarkers, state.phase, state.socketConnected, state.self?.characterId]);
+  }, [refreshQuestMarkers, state.phase, state.socketConnected, state.self?.characterId, state.map?.id]);
 
   useEffect(() => {
     const open = (event: Event) => {
@@ -99,6 +99,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
     setBusy(true);
     try {
       const next = await connection.startNpcDialogue(context.npc.id);
+      await refreshQuestMarkers();
       if (gameStore.getSnapshot().activeModal) {
         setContext(undefined);
         void connection.endNpcDialogue(context.npc.id);
