@@ -8,6 +8,7 @@ import {
 import { useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import { MobRewardOverlay } from '../combat/MobRewardOverlay';
+import { GroupPanel } from '../groups/GroupPanel';
 import { GuildOverlay } from '../guilds/GuildOverlay';
 import { ModalHost } from '../modals/ModalHost';
 import { NpcInteractionLayer } from '../npcs/NpcInteractionLayer';
@@ -90,7 +91,10 @@ export function GameHud(): React.JSX.Element | null {
   return (
     <div className="game-hud-root pointer-events-none absolute inset-0 z-10 select-none text-slate-100">
       <HudAnchor elementRef={statusPanelRef} className="absolute left-3 top-3">
-        <StatusPanel character={state.self} map={state.map} />
+        <div className="flex flex-col gap-2">
+          <StatusPanel character={state.self} map={state.map} />
+          <GroupPanel />
+        </div>
       </HudAnchor>
       <HudAnchor elementRef={miniMapRef} className="absolute right-3 top-3 hidden sm:block">
         <MiniMap map={state.map} character={state.self} players={state.players} />
