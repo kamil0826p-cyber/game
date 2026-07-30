@@ -29,8 +29,13 @@ export class NpcService {
     let nodeId = dialogue.rootNodeId;
     if (dialogue.quest) {
       if (!position.characterId || !this.quests) throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
-      const state = await this.quests.getDialogueState(position.characterId, dialogue.quest.questKey);
-      nodeId = dialogue.quest.rootNodes[state === 'NOT_STARTED' ? 'notStarted' : state === 'ACTIVE' ? 'active' : state === 'READY' ? 'ready' : 'rewarded'];
+      const context = await this.quests.getDialogueContext(position.characterId, dialogue.quest.questKey);
+      if (context.state === 'NOT_STARTED') nodeId = dialogue.quest.rootNodes.notStarted;
+      else if (context.state === 'READY') nodeId = dialogue.quest.rootNodes.ready;
+      else if (context.state === 'REWARDED') nodeId = dialogue.quest.rootNodes.rewarded;
+      else nodeId = context.activeStage === undefined
+        ? dialogue.quest.rootNodes.active
+        : dialogue.quest.activeStageNodes?.[String(context.activeStage)] ?? dialogue.quest.rootNodes.active;
     }
     return this.toDialogueSnapshot(npc, dialogue, nodeId, locale);
   }
