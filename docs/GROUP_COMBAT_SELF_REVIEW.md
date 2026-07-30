@@ -81,7 +81,9 @@ Covered by focused tests or direct code-path review:
 - complete groups are reserved and activated in immediate PVP;
 - same-group overlap, stale membership, map changes, trades and shared PVP/PVE occupancy are rejected server-side;
 - pending cancellation and server shutdown release every reservation;
-- the PVE socket bridge preserves target selection instead of accidentally sending the command to the PVP event.
+- the PVE socket bridge preserves target selection instead of accidentally sending the command to the PVP event;
+- Nest module imports were checked for a `CombatModule` / `MobModule` / `MovementModule` cycle;
+- frontend roster props were hardened for `exactOptionalPropertyTypes` so explicit `undefined` identifiers remain type-safe.
 
 ## Verification limits
 
