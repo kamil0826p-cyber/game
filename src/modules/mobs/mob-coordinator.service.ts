@@ -130,6 +130,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     );
 
     await Promise.all(recipients.map(async (session, index) => {
+      const experienceAllowed = canReceiveMobExperience(session.level, mob.level);
       const personalMob: RuntimeMob = {
         ...mob,
         experience: experienceShares[index] ?? 0,
@@ -148,7 +149,6 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
           self: this.world.toSelfState(session),
         };
         this.publisher.emit(session.socketId, 'mob:rewards', payload);
-        const experienceAllowed = canReceiveMobExperience(session.level, mob.level);
         this.publisher.emit(session.socketId, 'notification', {
           code: 'MOB_REWARD',
           message: session.locale === 'pl'
