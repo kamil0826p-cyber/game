@@ -12,15 +12,36 @@ import { mobStore } from '../state/mobStore';
 import type { GameSocketClient } from './GameSocketClient';
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+type CombatAction = 'BASIC_ATTACK' | 'SKILL';
 interface BridgeClient {
   socket?: GameSocket;
   connect(): void;
   disconnect(): void;
 }
+interface RawCombatSocket {
+  connected: boolean;
+  emit(
+    event: 'combat:act' | 'pve:act',
+    payload: {
+      requestId: string;
+      combatId: string;
+      action: CombatAction;
+      skillKey?: string;
+      targetActorId?: string;
+    },
+    acknowledgement: (response: SocketAck<CombatSnapshot>) => void,
+  ): void;
+}
 
 declare module './GameSocketClient' {
   interface GameSocketClient {
     requestMobCombat(mobId: string): Promise<CombatSnapshot>;
+    performTeamCombatAction(
+      combatId: string,
+      action: CombatAction,
+      targetActorId?: string,
+      skillKey?: string,
+    ): Promise<CombatSnapshot>;
   }
 }
 
@@ -65,9 +86,7 @@ export function installMobSocketBridge(client: GameSocketClient): void {
   };
 
   const applyReward = (reward: MobRewardPayload): void => {
-    const internal = gameStore as unknown as {
-      patch(patch: { self: MobRewardPayload['self'] }): void;
-    };
+    const internal = gameStore as unknown as { patch(patch: { self: MobRewardPayload['self'] }): void };
     internal.patch({ self: reward.self });
     window.dispatchEvent(new CustomEvent<MobRewardPayload>(MOB_REWARD_EVENT, { detail: reward }));
     void client.getSkills().catch(() => undefined);
@@ -110,11 +129,7 @@ export function installMobSocketBridge(client: GameSocketClient): void {
     const socket = bridge.socket;
     if (!socket?.connected) throw new Error('The game socket is not connected.');
     const combat = await withAck<CombatSnapshot>((ack) =>
-      socket.emit(
-        'pve:request',
-        { requestId: createRequestId('pve-request'), mobId },
-        ack,
-      ),
+      socket.emit('pve:request', { requestId: createRequestId('pve-request'), mobId }, ack),
     );
     pveCombatIds.add(combat.combatId);
     gameStore.updateCombatState(combat);
@@ -138,29 +153,35 @@ export function installMobSocketBridge(client: GameSocketClient): void {
 
   client.performCombatAction = async (
     combatId: string,
-    action: 'BASIC_ATTACK' | 'SKILL',
+    action: CombatAction,
     skillKey?: string,
   ): Promise<CombatSnapshot> => {
-    if (!pveCombatIds.has(combatId)) {
-      return originalPerformCombatAction(combatId, action, skillKey);
-    }
-    const socket = bridge.socket;
+    if (!pveCombatIds.has(combatId)) return originalPerformCombatAction(combatId, action, skillKey);
+    return client.performTeamCombatAction(combatId, action, undefined, skillKey);
+  };
+
+  client.performTeamCombatAction = async (
+    combatId: string,
+    action: CombatAction,
+    targetActorId?: string,
+    skillKey?: string,
+  ): Promise<CombatSnapshot> => {
+    const socket = bridge.socket as unknown as RawCombatSocket | undefined;
     if (!socket?.connected) throw new Error('The game socket is not connected.');
-    const combat = await withAck<CombatSnapshot>((ack) => {
-      if (action === 'SKILL' && skillKey) {
-        socket.emit(
-          'pve:act',
-          { requestId: createRequestId('pve-skill'), combatId, action, skillKey },
-          ack,
-        );
-      } else {
-        socket.emit(
-          'pve:act',
-          { requestId: createRequestId('pve-attack'), combatId, action: 'BASIC_ATTACK' },
-          ack,
-        );
-      }
-    });
+    const event = pveCombatIds.has(combatId) ? 'pve:act' : 'combat:act';
+    const combat = await withAck<CombatSnapshot>((ack) =>
+      socket.emit(
+        event,
+        {
+          requestId: createRequestId(action === 'SKILL' ? `${event}-skill` : `${event}-attack`),
+          combatId,
+          action,
+          ...(skillKey ? { skillKey } : {}),
+          ...(targetActorId ? { targetActorId } : {}),
+        },
+        ack,
+      ),
+    );
     gameStore.updateCombatState(combat);
     return combat;
   };
@@ -170,11 +191,7 @@ export function installMobSocketBridge(client: GameSocketClient): void {
     const socket = bridge.socket;
     if (!socket?.connected) throw new Error('The game socket is not connected.');
     const combat = await withAck<CombatSnapshot>((ack) =>
-      socket.emit(
-        'pve:leave',
-        { requestId: createRequestId('pve-leave'), combatId },
-        ack,
-      ),
+      socket.emit('pve:leave', { requestId: createRequestId('pve-leave'), combatId }, ack),
     );
     gameStore.updateCombatState(combat);
     return combat;
