@@ -8,7 +8,6 @@ import { parseNpcDialogueDefinition } from '../npcs/npc-dialogue.js';
 import { skillPointsGainedBetweenLevels } from '../skills/skill.rules.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import {
-  advanceQuestProgress,
   areQuestStepsComplete,
   consumableRequirements,
   emptyQuestProgress,
@@ -19,6 +18,7 @@ import {
   parseQuestProgress,
   parseQuestRewards,
   parseQuestSteps,
+  reconcileQuestProgress,
   type EvaluatedQuestStep,
   type QuestProgressState,
   type QuestRewards,
@@ -139,8 +139,12 @@ export class QuestService {
       const items = await transaction.inventoryItem.findMany({ where: { characterId: session.characterId }, include: { itemDefinition: { select: { key: true } } }, orderBy: { slotIndex: 'asc' } });
       const inventoryCounts = new Map<string, number>();
       for (const item of items) inventoryCounts.set(item.itemDefinition.key, (inventoryCounts.get(item.itemDefinition.key) ?? 0) + item.quantity);
-      const progress = advanceQuestProgress(steps, parseQuestProgress(characterQuest.progress), inventoryCounts);
+      const previousProgress = parseQuestProgress(characterQuest.progress);
+      const progress = reconcileQuestProgress(steps, previousProgress, inventoryCounts);
       if (!areQuestStepsComplete(evaluateQuestSteps(steps, progress, inventoryCounts, locale)) || !this.hasConsumableRequirements(inventoryCounts, consumableRequirements(steps))) {
+        if (progressChanged(previousProgress, progress)) {
+          await transaction.characterQuest.update({ where: { id: characterQuest.id }, data: { progress: questProgressJson(progress) } });
+        }
         return { completed: false as const, state: 'ACTIVE' as const };
       }
       const character = await transaction.character.findUnique({ where: { id: session.characterId } });
@@ -189,9 +193,9 @@ export class QuestService {
     for (const quest of active) {
       const steps = this.requireSteps(quest.questDefinition);
       const previous = parseQuestProgress(quest.progress);
-      const beforeEvent = advanceQuestProgress(steps, previous, inventoryCounts);
+      const beforeEvent = reconcileQuestProgress(steps, previous, inventoryCounts);
       const incremented = incrementObjectiveProgress(steps, beforeEvent, predicate);
-      const afterEvent = advanceQuestProgress(steps, incremented, inventoryCounts);
+      const afterEvent = reconcileQuestProgress(steps, incremented, inventoryCounts);
       if (!progressChanged(previous, afterEvent)) continue;
       await this.prisma.characterQuest.update({ where: { id: quest.id }, data: { progress: questProgressJson(afterEvent) } });
     }
@@ -204,11 +208,11 @@ export class QuestService {
     progress: QuestProgressState,
     inventoryCounts: ReadonlyMap<string, number>,
   ): Promise<QuestProgressState> {
-    const advanced = advanceQuestProgress(steps, progress, inventoryCounts);
-    if (progressChanged(progress, advanced)) {
-      await database.characterQuest.update({ where: { id: characterQuestId }, data: { progress: questProgressJson(advanced) } });
+    const reconciled = reconcileQuestProgress(steps, progress, inventoryCounts);
+    if (progressChanged(progress, reconciled)) {
+      await database.characterQuest.update({ where: { id: characterQuestId }, data: { progress: questProgressJson(reconciled) } });
     }
-    return advanced;
+    return reconciled;
   }
 
   private toLogEntry(quest: CharacterQuestRecord, progress: QuestProgressState, inventoryCounts: ReadonlyMap<string, number>, locale: SupportedLocale): QuestLogEntryPayload {
