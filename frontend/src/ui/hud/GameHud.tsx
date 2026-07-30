@@ -8,6 +8,7 @@ import {
 import { useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import { MobRewardOverlay } from '../combat/MobRewardOverlay';
+import { GuildOverlay } from '../guilds/GuildOverlay';
 import { ModalHost } from '../modals/ModalHost';
 import { NpcInteractionLayer } from '../npcs/NpcInteractionLayer';
 import { PlayerInteractionLayer } from '../interactions/PlayerInteractionLayer';
@@ -123,6 +124,7 @@ export function GameHud(): React.JSX.Element | null {
       <PortalTransition state={state.portalTransition} />
       <ConnectionOverlay reconnecting={state.phase === 'reconnecting'} />
       <ModalHost />
+      <GuildOverlay />
       <NpcInteractionLayer />
       <PlayerInteractionLayer />
       <MobRewardOverlay />
