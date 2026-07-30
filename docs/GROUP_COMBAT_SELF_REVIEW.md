@@ -88,6 +88,7 @@ The background uses `100% 100%` sizing rather than `cover`. A small amount of co
 - The right formation is a strict mirror of the left formation.
 - Group sizes adapt the sprite scale: solo actors are large, while full parties use compact front and back rows.
 - Inactive actors keep a compact name and HP presentation. The active actor and selected target expose additional combat information.
+- State markers such as defeated and withdrawn remain visible on compact desktop cards; the responsive low-height mode can hide the marker row while the defeated sprite remains visually dimmed.
 - Living enemy sprites are the actual target controls. Selection automatically falls back when the selected actor dies or withdraws.
 - The coordinate system covers the full viewport, matching the full-viewbox arena asset exactly instead of using an inset stage with different vertical percentages.
 - Responsive rules reduce character dimensions on smaller displays without changing their ground anchors.
