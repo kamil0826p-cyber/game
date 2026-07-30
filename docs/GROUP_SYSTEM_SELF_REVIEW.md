@@ -42,8 +42,9 @@
 - backend rule tests cover the 10-member limit and invitation TTL;
 - backend service tests cover acceptance-created groups, shared adjacent range, full groups, transient acceptance failures, administrator-only invites, kicking, administrator transfer, stale-invite invalidation and group dissolution;
 - frontend tests cover administrator UI permissions, group nickname presence tracking, the complete mob label/rank colour mapping and guild membership presence tracking;
-- all changed TypeScript and TSX files are parsed with TypeScript's compiler API as a syntax check;
-- the changed-file set is reviewed for relative import resolution and contract symmetry before publication.
+- the PR diff was searched for stale `leader` / `leaderCharacterId` group fields and for missing `group:kick` contract layers;
+- the changed-file set was reviewed for relative import resolution and client/server contract symmetry;
+- a full local `npm run check:all` could not be executed because the connector environment cannot resolve GitHub for a checkout, and the repository currently reports no workflow runs for this branch.
 
 ## Deliberate limits
 
