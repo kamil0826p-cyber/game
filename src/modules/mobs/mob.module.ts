@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { KeyedSerialExecutor } from '../../common/utils/keyed-serial-executor.js';
+import { CombatModule } from '../combat/combat.module.js';
+import { GroupModule } from '../groups/group.module.js';
 import { MapModule } from '../maps/map.module.js';
+import { MovementModule } from '../movement/movement.module.js';
 import { PersistenceModule } from '../persistence/persistence.module.js';
 import { TradeModule } from '../player/trade/trade.module.js';
 import { QuestModule } from '../quests/quest.module.js';
@@ -12,7 +15,7 @@ import { MobRewardService } from './mob-reward.service.js';
 import { PveCombatService } from './pve-combat.service.js';
 
 @Module({
-  imports: [MapModule, PersistenceModule, TradeModule, QuestModule, SkillModule, WorldModule],
+  imports: [CombatModule, GroupModule, MapModule, MovementModule, PersistenceModule, TradeModule, QuestModule, SkillModule, WorldModule],
   providers: [KeyedSerialExecutor, MobRewardService, MobCoordinatorService, PveCombatService, MobGateway],
   exports: [MobCoordinatorService, PveCombatService],
 })

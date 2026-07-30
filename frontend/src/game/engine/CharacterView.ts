@@ -1,5 +1,7 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
 import type { PublicPlayerState } from '../../contracts/game';
+import { isGroupMate, subscribeGroupPresence } from '../groups/groupPresence';
+import { isGuildMate, subscribeGuildPresence } from '../guilds/guildPresence';
 import { WORLD_TILE_SIZE } from './constants';
 import { getOutfitSheetFrames, type OutfitSheetFrames } from './OutfitSheetLoader';
 
@@ -11,7 +13,11 @@ export class CharacterView {
   private readonly shadow: Graphics;
   private readonly sprite = new Sprite();
   private readonly nameplate = new Container();
+  private readonly badge = new Graphics();
+  private readonly groupMark = new Graphics();
   private readonly nameText: Text;
+  private readonly unsubscribeGuildPresence: () => void;
+  private readonly unsubscribeGroupPresence: () => void;
   private frames: OutfitSheetFrames | undefined;
   private destroyed = false;
   private state: PublicPlayerState;
@@ -63,14 +69,14 @@ export class CharacterView {
       },
     });
     this.nameText.anchor.set(0.5, 1);
-    const badge = new Graphics()
-      .roundRect(-58, -19, 116, 20, 6)
-      .fill({ color: localPlayer ? 0x4c3412 : 0x111827, alpha: 0.82 })
-      .stroke({ color: localPlayer ? 0xfbbf24 : 0x475569, width: 1, alpha: 0.8 });
-    this.nameplate.addChild(badge, this.nameText);
+    this.groupMark.position.set(-47, 0);
+    this.nameplate.addChild(this.badge, this.groupMark, this.nameText);
     this.nameplate.position.set(0, -72);
     this.nameplate.zIndex = 4;
     this.container.addChild(this.shadow, this.sprite, this.nameplate);
+    this.updateBadgeStyle();
+    this.unsubscribeGuildPresence = subscribeGuildPresence(() => this.updateBadgeStyle());
+    this.unsubscribeGroupPresence = subscribeGroupPresence(() => this.updateBadgeStyle());
 
     const x = (state.x + 0.5) * WORLD_TILE_SIZE;
     const y = (state.y + 1) * WORLD_TILE_SIZE;
@@ -86,6 +92,7 @@ export class CharacterView {
     const distance = Math.hypot(nextX - this.targetX, nextY - this.targetY);
     this.state = state;
     this.nameText.text = `${state.name}  Lv. ${state.level}`;
+    this.updateBadgeStyle();
     if (state.outfitKey !== this.lastOutfitKey) this.loadOutfit(state.outfitKey);
 
     if (immediate || distance > WORLD_TILE_SIZE * 1.6) {
@@ -126,7 +133,33 @@ export class CharacterView {
 
   destroy(): void {
     this.destroyed = true;
+    this.unsubscribeGuildPresence();
+    this.unsubscribeGroupPresence();
     this.container.destroy({ children: true });
+  }
+
+  private updateBadgeStyle(): void {
+    const guildMate = !this.localPlayer && isGuildMate(this.state.characterId);
+    const groupMate = !this.localPlayer && isGroupMate(this.state.characterId);
+    const fill = this.localPlayer ? 0x4c3412 : guildMate ? 0x103f3a : 0x111827;
+    const stroke = this.localPlayer ? 0xfbbf24 : guildMate ? 0x34d399 : 0x475569;
+    this.badge
+      .clear()
+      .roundRect(-58, -19, 116, 20, 6)
+      .fill({ color: fill, alpha: 0.86 })
+      .stroke({ color: stroke, width: guildMate ? 2 : 1, alpha: 0.9 });
+
+    this.groupMark.clear();
+    if (groupMate) {
+      this.groupMark
+        .circle(-2.75, -12, 2.25)
+        .circle(2.75, -12, 2.25)
+        .fill({ color: 0xcffafe, alpha: 1 })
+        .roundRect(-5.5, -9, 5, 4.5, 2)
+        .roundRect(0.5, -9, 5, 4.5, 2)
+        .fill({ color: 0x22d3ee, alpha: 0.96 });
+    }
+    this.groupMark.visible = groupMate;
   }
 
   private updateFrame(now: number): void {

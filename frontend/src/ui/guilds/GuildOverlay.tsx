@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TOGGLE_GUILD_WINDOW_EVENT } from '../../game/guilds/guildUiEvents';
+import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { gameStore, useGameState } from '../../game/state/gameStore';
 import { GuildModal } from './GuildModal';
 
@@ -8,9 +9,14 @@ const editable = (target: EventTarget | null): boolean =>
   (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 
 export function GuildOverlay(): React.JSX.Element | null {
+  const connection = useGameConnection();
+  const state = useGameState();
   const [open, setOpen] = useState(false);
-  const activeModal = useGameState().activeModal;
-  useEffect(() => { if (activeModal) setOpen(false); }, [activeModal]);
+  useEffect(() => { if (state.activeModal) setOpen(false); }, [state.activeModal]);
+  useEffect(() => {
+    if (state.phase !== 'in-world' || !state.socketConnected) return;
+    void connection.getGuild().catch(() => undefined);
+  }, [connection, state.phase, state.socketConnected]);
   useEffect(() => {
     const toggle = () => {
       gameStore.setActiveModal(null);

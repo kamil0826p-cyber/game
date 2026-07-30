@@ -9,6 +9,7 @@ import { QuestService } from '../quests/quest.service.js';
 import { skillPointsGainedBetweenLevels } from '../skills/skill.rules.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { applyExperience, statGrowthForLevels } from './character-progression.js';
+import { canReceiveMobExperience } from './mob-reward.rules.js';
 import { rollMobLoot, type AwardedLoot } from './mob-rewards.js';
 import type { RuntimeMob } from './mob.types.js';
 
@@ -38,7 +39,8 @@ export class MobRewardService {
         select: { id: true, userId: true, level: true, experience: true, hp: true, maxHp: true, energy: true, maxEnergy: true, strength: true, agility: true, intelligence: true, armor: true },
       });
       if (!character || character.userId !== session.userId) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
-      const progression = applyExperience(character.level, character.experience, mob.experience);
+      const experienceAward = canReceiveMobExperience(character.level, mob.level) ? mob.experience : 0;
+      const progression = applyExperience(character.level, character.experience, experienceAward);
       const skillPointsGained = skillPointsGainedBetweenLevels(character.level, progression.level);
       const growth = statGrowthForLevels(progression.levelsGained);
       const maxHp = character.maxHp + growth.maxHp;
@@ -56,14 +58,14 @@ export class MobRewardService {
         select: { level: true, experience: true, hp: true, maxHp: true, energy: true, maxEnergy: true, strength: true, agility: true, intelligence: true, armor: true, stateVersion: true },
       });
       const loot = await this.grantLoot(transaction, character.id, rolled);
-      return { progression, skillPointsGained, updated, ...loot };
+      return { progression, skillPointsGained, updated, experienceAward, ...loot };
     });
     Object.assign(session, result.updated);
     session.stateRevision = Math.max(session.stateRevision + 1, result.updated.stateVersion);
     session.persistedRevision = Math.max(session.persistedRevision, result.updated.stateVersion);
     session.dirty = false;
     await this.quests?.recordMobKill(session.characterId, mob.definitionKey).catch(() => undefined);
-    return { experienceGained: mob.experience, levelsGained: result.progression.levelsGained, skillPointsGained: result.skillPointsGained, nextLevelExperience: result.progression.nextLevelExperience, loot: result.granted, skippedLoot: result.skipped };
+    return { experienceGained: result.experienceAward, levelsGained: result.progression.levelsGained, skillPointsGained: result.skillPointsGained, nextLevelExperience: result.progression.nextLevelExperience, loot: result.granted, skippedLoot: result.skipped };
   }
 
   private async grantLoot(transaction: Prisma.TransactionClient, characterId: string, rewards: readonly AwardedLoot[]): Promise<{ granted: SettledLoot[]; skipped: SettledLoot[] }> {

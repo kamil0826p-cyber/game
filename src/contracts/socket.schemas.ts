@@ -9,6 +9,7 @@ const tradeQuantity = z.number().int().min(0).max(9999);
 const tradeId = z.string().uuid();
 const combatId = z.string().uuid();
 const characterId = z.string().uuid();
+const actorId = z.string().trim().min(1).max(128);
 const npcId = z.string().uuid();
 const inviteId = z.string().uuid();
 const outfitKey = z.string().trim().min(1).max(64).regex(/^[a-z0-9-]+$/);
@@ -52,8 +53,8 @@ export const combatGetActiveSchema = z.object({ requestId }).strict();
 export const combatRequestSchema = z.object({ requestId, targetCharacterId: characterId }).strict();
 export const combatRespondSchema = z.object({ requestId, combatId, accept: z.boolean() }).strict();
 export const combatActionSchema = z.discriminatedUnion('action', [
-  z.object({ requestId, combatId, action: z.literal('BASIC_ATTACK') }).strict(),
-  z.object({ requestId, combatId, action: z.literal('SKILL'), skillKey }).strict(),
+  z.object({ requestId, combatId, action: z.literal('BASIC_ATTACK'), targetActorId: actorId.optional() }).strict(),
+  z.object({ requestId, combatId, action: z.literal('SKILL'), skillKey, targetActorId: actorId.optional() }).strict(),
 ]);
 export const combatLeaveSchema = z.object({ requestId, combatId }).strict();
 export const guildGetSchema = z.object({ requestId }).strict();

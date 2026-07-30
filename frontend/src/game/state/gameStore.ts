@@ -255,7 +255,8 @@ class GameStore {
       (candidate) => candidate.characterId === self.characterId,
     );
     if (!participant) return;
-    const active = combat.status === 'ACTIVE';
+    const combatActive = combat.status === 'ACTIVE';
+    const participantActive = combatActive && !participant.withdrawn;
     const cooldowns = new Map(
       participant.skills.map((skill) => [skill.key, skill.cooldownTurnsRemaining]),
     );
@@ -263,17 +264,19 @@ class GameStore {
     for (const combatant of combat.participants) {
       if (!combatant.characterId || combatant.characterId === self.characterId) continue;
       const player = players[combatant.characterId];
-      if (player)
+      if (player) {
+        const combatantActive = combatActive && !combatant.withdrawn;
         players[combatant.characterId] = {
           ...player,
-          combatState: active ? 'IN_BATTLE' : 'IDLE',
+          combatState: combatantActive ? 'IN_BATTLE' : 'IDLE',
         };
+      }
     }
     this.patch({
       self: {
         ...self,
-        combatState: active ? 'IN_BATTLE' : 'IDLE',
-        hp: active ? participant.hp : Math.max(1, participant.hp),
+        combatState: participantActive ? 'IN_BATTLE' : 'IDLE',
+        hp: participantActive ? participant.hp : Math.max(1, participant.hp),
         energy: participant.energy,
       },
       players,
@@ -286,7 +289,7 @@ class GameStore {
             })),
           }
         : undefined,
-      plannedPath: active ? [] : this.state.plannedPath,
+      plannedPath: participantActive ? [] : this.state.plannedPath,
     });
   }
   addNotification(payload: SocketErrorPayload): void {

@@ -1,8 +1,9 @@
 import { isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 
 export const COMBAT_TURN_TTL_MS = 30_000;
-export const COMBAT_EVENT_HISTORY_LIMIT = 24;
+export const COMBAT_EVENT_HISTORY_LIMIT = 48;
 export const COMBAT_RESULT_RETENTION_MS = 15_000;
+export const COMBAT_TEAM_LIMIT = 10;
 
 export interface CombatPosition {
   mapId: string;
@@ -14,8 +15,9 @@ export function isCombatDistanceAllowed(first: CombatPosition, second: CombatPos
   return isActorWithinInteractionRange(first, second);
 }
 
-export function combatActorLockKeys(firstActorId: string, secondActorId: string): string[] {
-  return [firstActorId, secondActorId].sort().map((actorId) => `combat-actor:${actorId}`);
+export function combatActorLockKeys(actorIds: Iterable<string> | string, secondActorId?: string): string[] {
+  const ids = typeof actorIds === 'string' ? [actorIds, ...(secondActorId ? [secondActorId] : [])] : [...actorIds];
+  return [...new Set(ids)].sort().map((actorId) => `combat-actor:${actorId}`);
 }
 
 export function physicalDamageMultiplier(armor: number, armorPenetration = 0): number {

@@ -23,6 +23,7 @@ export interface CombatRuntimeStatus {
 
 export interface CombatRuntimeActor {
   actorId: string;
+  teamId: string;
   kind: 'PLAYER' | 'MOB';
   characterId?: string;
   name: string;
@@ -38,8 +39,16 @@ export interface CombatRuntimeActor {
   agility: number;
   intelligence: number;
   armor: number;
+  withdrawn: boolean;
   statuses: CombatRuntimeStatus[];
   skills: Map<string, CombatRuntimeSkill>;
+}
+
+export interface CombatRuntimeTeam {
+  teamId: string;
+  anchorActorId: string;
+  sourceGroupId?: string;
+  actorIds: string[];
 }
 
 export interface CombatRuntime {
@@ -56,10 +65,13 @@ export interface CombatRuntime {
   turnStartedAt?: number;
   turnEndsAt?: number;
   winnerActorId?: string;
+  winnerTeamId?: string;
   finishReason?: CombatFinishReason;
   initiatorActorId: string;
   recipientActorId: string;
-  actors: [CombatRuntimeActor, CombatRuntimeActor];
+  teams: [CombatRuntimeTeam, CombatRuntimeTeam];
+  actors: CombatRuntimeActor[];
+  turnOrder: string[];
   events: CombatActionResolutionPayload[];
   nextSequence: number;
 }
@@ -67,10 +79,17 @@ export interface CombatRuntime {
 export interface CombatActionCommand {
   action: 'BASIC_ATTACK' | 'SKILL';
   skillKey?: string;
+  targetActorId?: string;
 }
 
-export interface CombatActorInput extends Omit<CombatRuntimeActor, 'statuses' | 'skills'> {
+export interface CombatActorInput extends Omit<CombatRuntimeActor, 'teamId' | 'withdrawn' | 'statuses' | 'skills'> {
   skills: readonly CombatRuntimeSkill[];
+}
+
+export interface CombatTeamInput {
+  anchorActorId: string;
+  sourceGroupId?: string;
+  actors: readonly CombatActorInput[];
 }
 
 export interface CombatEngineResult {

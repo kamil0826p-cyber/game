@@ -3,8 +3,11 @@ import type { PublicPlayerState } from '../../contracts/game';
 import type { CombatSnapshot, TradeSnapshot } from '../../contracts/socket';
 import { getPlayerCombatAvailability } from '../../game/combat/playerCombat';
 import { PLAYER_CONTEXT_EVENT } from '../../game/engine/CharacterView';
+import { canInviteToGroup } from '../../game/groups/groupPermissions';
+import { canInteractWithPlayer } from '../../game/interactions/playerInteraction';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { gameStore, useGameState } from '../../game/state/gameStore';
+import { useGroupState } from '../../game/state/groupStore';
 import { canTradeWithPlayer } from '../../game/trade/playerTrade';
 import { useI18n } from '../../i18n/I18nProvider';
 import { CombatArena } from '../combat/CombatArena';
@@ -28,6 +31,7 @@ const dismissedCombat = (combat: CombatSnapshot): boolean =>
 export function PlayerInteractionLayer(): React.JSX.Element | null {
   const connection = useGameConnection();
   const state = useGameState();
+  const groupSnapshot = useGroupState();
   const { locale } = useI18n();
   const [context, setContext] = useState<ContextState>();
   const [trade, setTrade] = useState<TradeSnapshot>();
@@ -187,6 +191,37 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     }
   };
 
+  const inviteToGroup = async (): Promise<void> => {
+    if (!context || !state.self || busy) return;
+    if (!canInteractWithPlayer(state.self, context.player)) {
+      gameStore.addNotification({
+        code: 'GROUP_TOO_FAR',
+        message:
+          locale === 'pl'
+            ? 'Podejdź bliżej do gracza, aby dodać go do grupy.'
+            : 'Move closer to invite this player to a group.',
+      });
+      setContext(undefined);
+      return;
+    }
+    setBusy(true);
+    try {
+      await connection.inviteToGroup(context.player.characterId);
+      gameStore.addNotification({
+        code: 'GROUP_INVITE_SENT',
+        message:
+          locale === 'pl'
+            ? `Zaproszenie do grupy wysłano do ${context.player.name}.`
+            : `Group invitation sent to ${context.player.name}.`,
+      });
+      setContext(undefined);
+    } catch {
+      // Global socket notification.
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const respondCombat = async (accept: boolean): Promise<void> => {
     if (!combat || busy) return;
     setBusy(true);
@@ -224,6 +259,12 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     return <TradeModal trade={trade} onChange={setTrade} onClose={() => void closeTrade()} />;
   if (!context) return null;
 
+  const groupInvitationAllowed = canInviteToGroup(
+    groupSnapshot.group,
+    state.self?.characterId,
+    context.player.characterId,
+  );
+
   return (
     <ActorContextMenu
       title={context.player.name}
@@ -245,6 +286,17 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
           run: startCombat,
           disabled: busy,
         },
+        ...(groupInvitationAllowed
+          ? [
+              {
+                key: 'group',
+                label: locale === 'pl' ? 'Dodaj do grupy' : 'Add to group',
+                icon: '✚',
+                run: inviteToGroup,
+                disabled: busy,
+              },
+            ]
+          : []),
       ]}
     />
   );
