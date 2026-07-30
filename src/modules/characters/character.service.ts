@@ -110,7 +110,7 @@ export class CharacterService {
     try {
       const character = await this.prisma.$transaction(async (transaction) => {
         const lockKey = `${userId}:${realm.id}`;
-        await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
 
         const count = await transaction.character.count({
           where: { userId, realmId: realm.id },
