@@ -23,6 +23,7 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
   const [messages, setMessages] = useState<ChatMessagePayload[]>([]);
   const [guildMessages, setGuildMessages] = useState<GuildChatMessagePayload[]>([]);
   const [guildId, setGuildId] = useState<string>();
+  const guildIdRef = useRef<string>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const tabs: ChatTab[] = ['Global', 'Local', 'Guild', 'System'];
 
@@ -35,10 +36,11 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
 
   useEffect(() => {
     const applyGuild = (nextGuildId?: string) => {
-      setGuildId((currentGuildId) => {
-        if (currentGuildId !== nextGuildId) setGuildMessages([]);
-        return nextGuildId;
-      });
+      if (guildIdRef.current !== nextGuildId) {
+        guildIdRef.current = nextGuildId;
+        setGuildMessages([]);
+      }
+      setGuildId(nextGuildId);
     };
     const unsubscribeGuild = connection.subscribeGuild((snapshot) => applyGuild(snapshot.guild?.id));
     const unsubscribeChat = connection.subscribeGuildChat((message) => {
