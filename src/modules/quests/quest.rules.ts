@@ -140,6 +140,28 @@ export function advanceQuestProgress(
   return { counters: { ...progress.counters }, stage };
 }
 
+export function reconcileQuestProgress(
+  steps: readonly QuestStepDefinition[],
+  progress: QuestProgressState,
+  inventoryCounts: ReadonlyMap<string, number>,
+): QuestProgressState {
+  const advanced = advanceQuestProgress(steps, progress, inventoryCounts);
+  const cumulativeRequirements = new Map<string, number>();
+  for (const stage of questStages(steps)) {
+    if (stage >= advanced.stage) break;
+    for (const step of steps) {
+      if (step.stage !== stage || step.type !== 'COLLECT_ITEM' || !step.consumeOnComplete) continue;
+      cumulativeRequirements.set(step.itemKey, (cumulativeRequirements.get(step.itemKey) ?? 0) + step.quantity);
+    }
+    for (const [itemKey, requiredQuantity] of cumulativeRequirements) {
+      if ((inventoryCounts.get(itemKey) ?? 0) < requiredQuantity) {
+        return { counters: { ...advanced.counters }, stage };
+      }
+    }
+  }
+  return advanced;
+}
+
 export function evaluateQuestSteps(
   steps: readonly QuestStepDefinition[],
   progress: QuestProgressState,
