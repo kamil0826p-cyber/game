@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CombatParticipantPayload, CombatSnapshot } from '../src/contracts/socket';
 import {
+  combatFormationSlots,
   combatRosterColumns,
   combatTeams,
   selectCombatTarget,
@@ -36,8 +37,16 @@ const snapshot = (participants: CombatParticipantPayload[]): CombatSnapshot => (
   initiatorActorId: participants[0]!.actorId,
   recipientActorId: participants.at(-1)!.actorId,
   teams: [
-    { teamId: 'a', anchorActorId: participants[0]!.actorId, actorIds: participants.filter((item) => item.teamId === 'a').map((item) => item.actorId) },
-    { teamId: 'b', anchorActorId: participants.at(-1)!.actorId, actorIds: participants.filter((item) => item.teamId === 'b').map((item) => item.actorId) },
+    {
+      teamId: 'a',
+      anchorActorId: participants[0]!.actorId,
+      actorIds: participants.filter((item) => item.teamId === 'a').map((item) => item.actorId),
+    },
+    {
+      teamId: 'b',
+      anchorActorId: participants.at(-1)!.actorId,
+      actorIds: participants.filter((item) => item.teamId === 'b').map((item) => item.actorId),
+    },
   ],
   participants: participants as unknown as [CombatParticipantPayload, CombatParticipantPayload],
   recentActions: [],
@@ -60,6 +69,30 @@ describe('group combat presentation', () => {
     expect(combatRosterColumns(5)).toBe(1);
     expect(combatRosterColumns(6)).toBe(2);
     expect(combatRosterColumns(10)).toBe(2);
+  });
+
+  it('places ten visible combatants in two battlefield rows per side', () => {
+    const left = combatFormationSlots(10, 'left');
+    const right = combatFormationSlots(10, 'right');
+
+    expect(left).toHaveLength(10);
+    expect(right).toHaveLength(10);
+    expect(left.every((slot) => slot.x < 50)).toBe(true);
+    expect(right.every((slot) => slot.x > 50)).toBe(true);
+    expect(new Set(left.map((slot) => `${slot.x}:${slot.y}`)).size).toBe(10);
+    expect(new Set(right.map((slot) => `${slot.x}:${slot.y}`)).size).toBe(10);
+    expect(left.slice(0, 5).every((slot) => slot.y > left[5]!.y)).toBe(true);
+    expect(right.slice(0, 5).every((slot) => slot.y > right[5]!.y)).toBe(true);
+  });
+
+  it('mirrors solo and group sides without forcing equal team sizes', () => {
+    const solo = combatFormationSlots(1, 'left');
+    const group = combatFormationSlots(10, 'right');
+
+    expect(solo).toHaveLength(1);
+    expect(group).toHaveLength(10);
+    expect(solo[0]!.x).toBeLessThan(50);
+    expect(group.every((slot) => slot.x > 50)).toBe(true);
   });
 
   it('keeps a living selected target and falls back after defeat', () => {
