@@ -44,7 +44,6 @@ export function CharacterModal({ character, onClose }: { character: SelfCharacte
           </div>
         </div>
       </div>
-      <p className="mock-banner mt-5">{t('modal.character.banner')}</p>
     </Modal>
   );
 }
