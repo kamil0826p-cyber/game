@@ -111,8 +111,8 @@ function RosterCard({ participant, active, selected, enemy, canSelect, onSelect 
 function TeamRoster({ title, members, activeActorId, selectedActorId, enemy, canSelect, onSelect }: {
   title: string;
   members: CombatParticipantPayload[];
-  activeActorId?: string;
-  selectedActorId?: string;
+  activeActorId?: string | undefined;
+  selectedActorId?: string | undefined;
   enemy: boolean;
   canSelect: boolean;
   onSelect: (actorId: string) => void;
