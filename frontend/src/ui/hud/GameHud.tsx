@@ -90,7 +90,7 @@ export function GameHud(): React.JSX.Element | null {
   if (!state.self || !state.map) return null;
   return (
     <div className="game-hud-root pointer-events-none absolute inset-0 z-10 select-none text-slate-100">
-      <HudAnchor elementRef={statusPanelRef} className="absolute left-3 top-3">
+      <HudAnchor elementRef={statusPanelRef} className="absolute left-3 top-3 z-30">
         <div className="flex flex-col gap-2">
           <StatusPanel character={state.self} map={state.map} />
           <GroupPanel />
@@ -99,7 +99,7 @@ export function GameHud(): React.JSX.Element | null {
       <HudAnchor elementRef={miniMapRef} className="absolute right-3 top-3 hidden sm:block">
         <MiniMap map={state.map} character={state.self} players={state.players} />
       </HudAnchor>
-      <HudAnchor elementRef={chatRef} className="absolute bottom-3 left-3 hidden md:block">
+      <HudAnchor elementRef={chatRef} className="absolute bottom-3 left-3 z-20 hidden md:block">
         <ChatPanel notifications={state.notifications} />
       </HudAnchor>
       {state.self.combatState === 'IDLE' ? (
