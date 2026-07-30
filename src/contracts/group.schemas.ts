@@ -12,8 +12,12 @@ export const groupRespondSchema = z
   .object({ requestId: requestIdSchema, inviteId: inviteIdSchema, accept: z.boolean() })
   .strict();
 export const groupLeaveSchema = z.object({ requestId: requestIdSchema }).strict();
+export const groupKickSchema = z
+  .object({ requestId: requestIdSchema, targetCharacterId: characterIdSchema })
+  .strict();
 
 export type GroupGetPayload = z.infer<typeof groupGetSchema>;
 export type GroupInviteCommandPayload = z.infer<typeof groupInviteSchema>;
 export type GroupRespondPayload = z.infer<typeof groupRespondSchema>;
 export type GroupLeavePayload = z.infer<typeof groupLeaveSchema>;
+export type GroupKickPayload = z.infer<typeof groupKickSchema>;
