@@ -23,7 +23,7 @@ export function ChatPanel({ notifications }: { notifications: readonly ClientNot
   const [messages, setMessages] = useState<ChatMessagePayload[]>([]);
   const [guildMessages, setGuildMessages] = useState<GuildChatMessagePayload[]>([]);
   const [guildId, setGuildId] = useState<string>();
-  const guildIdRef = useRef<string>();
+  const guildIdRef = useRef<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
   const tabs: ChatTab[] = ['Global', 'Local', 'Guild', 'System'];
 
