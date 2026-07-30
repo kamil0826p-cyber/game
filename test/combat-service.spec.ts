@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KeyedSerialExecutor } from '../src/common/utils/keyed-serial-executor.js';
+import { CombatOccupancyService } from '../src/modules/combat/combat-occupancy.service.js';
+import { CombatService } from '../src/modules/combat/combat.service.js';
+import type { GroupService } from '../src/modules/groups/group.service.js';
 import type { MapService } from '../src/modules/maps/map.service.js';
 import type { MovementCoordinatorService } from '../src/modules/movement/movement-coordinator.service.js';
 import type { PlayerPersistenceService } from '../src/modules/persistence/player-persistence.service.js';
 import type { TradeService } from '../src/modules/player/trade/trade.service.js';
 import type { SkillService } from '../src/modules/skills/skill.service.js';
-import { CombatService } from '../src/modules/combat/combat.service.js';
 import type { PlayerSession } from '../src/modules/world/player-session.types.js';
 import type { WorldEventsPublisher } from '../src/modules/world/world-events.publisher.js';
 import type { WorldStateService } from '../src/modules/world/world-state.service.js';
@@ -56,36 +58,57 @@ const session = (
 
 const services: CombatService[] = [];
 
-const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP') => {
-  const first = session('first', 4);
-  const second = session('second', 5);
+const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP', grouped = false) => {
+  const first = session('first', 4, { agility: 20 });
+  const firstAlly = session('first-ally', 3, { agility: 15 });
+  const second = session('second', 5, { agility: 12 });
+  const secondAlly = session('second-ally', 6, { agility: 8 });
   const third = session('third', 6);
   const sessions = new Map([
     [first.characterId, first],
+    [firstAlly.characterId, firstAlly],
     [second.characterId, second],
+    [secondAlly.characterId, secondAlly],
     [third.characterId, third],
   ]);
   const publisher = { emit: vi.fn() };
+  const groups = {
+    getSnapshot: vi.fn((active: PlayerSession) => {
+      if (!grouped) return { group: null, invites: [] };
+      const firstTeam = [first.characterId, firstAlly.characterId];
+      const secondTeam = [second.characterId, secondAlly.characterId];
+      const ids = firstTeam.includes(active.characterId) ? firstTeam : secondTeam.includes(active.characterId) ? secondTeam : [active.characterId];
+      if (ids.length === 1) return { group: null, invites: [] };
+      const groupId = ids === firstTeam ? 'group-first' : 'group-second';
+      return {
+        invites: [],
+        group: {
+          id: groupId,
+          adminCharacterId: ids[0],
+          maxMembers: 10,
+          members: ids.map((characterId, index) => ({
+            characterId,
+            name: characterId,
+            characterClass: 'WARRIOR',
+            level: 10,
+            outfitKey: 'warrior-recruit',
+            hp: 140,
+            maxHp: 140,
+            online: true,
+            admin: index === 0,
+          })),
+        },
+      };
+    }),
+  } as unknown as GroupService;
   const combat = new CombatService(
     {
       getMap: vi.fn(async () => ({
-        id: 'map-a',
-        realmId: 'realm-a',
-        key: 'map-a',
-        name: 'Map',
-        width: 20,
-        height: 20,
-        zoneType,
-        spawn: { x: 1, y: 1 },
-        version: 1,
-        tiledData: {},
-        collision: new Uint8Array(),
-        portalsByTile: new Map(),
+        id: 'map-a', realmId: 'realm-a', key: 'map-a', name: 'Map', width: 20, height: 20,
+        zoneType, spawn: { x: 1, y: 1 }, version: 1, tiledData: {}, collision: new Uint8Array(), portalsByTile: new Map(),
       })),
     } as unknown as MapService,
-    {
-      quiesce: vi.fn(async (_session: PlayerSession, task: () => unknown) => task()),
-    } as unknown as MovementCoordinatorService,
+    { quiesce: vi.fn(async (_session: PlayerSession, task: () => unknown) => task()) } as unknown as MovementCoordinatorService,
     {
       persistSession: vi.fn(async (active: PlayerSession) => ({
         characterId: active.characterId,
@@ -96,26 +119,19 @@ const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP') => {
     { hasActive: vi.fn(async () => false) } as unknown as TradeService,
     {
       getSnapshot: vi.fn(async () => ({
-        characterClass: 'WARRIOR',
-        characterLevel: 10,
-        points: { earned: 1, spent: 0, available: 1 },
-        skills: [],
+        characterClass: 'WARRIOR', characterLevel: 10,
+        points: { earned: 1, spent: 0, available: 1 }, skills: [],
       })),
       persistCooldowns: vi.fn(async () => undefined),
     } as unknown as SkillService,
+    groups,
+    new CombatOccupancyService(),
     {
       getByCharacterId: (id: string) => sessions.get(id),
       toPublicState: (active: PlayerSession) => ({
-        characterId: active.characterId,
-        name: active.name,
-        characterClass: active.characterClass,
-        level: active.level,
-        outfitKey: active.outfitKey,
-        mapId: active.mapId,
-        x: active.x,
-        y: active.y,
-        direction: active.direction,
-        combatState: active.combatState,
+        characterId: active.characterId, name: active.name, characterClass: active.characterClass,
+        level: active.level, outfitKey: active.outfitKey, mapId: active.mapId,
+        x: active.x, y: active.y, direction: active.direction, combatState: active.combatState,
       }),
       markPersisted: vi.fn(),
     } as unknown as WorldStateService,
@@ -123,7 +139,7 @@ const harness = (zoneType: 'SAFE' | 'OUTLAW' | 'PVP') => {
     new KeyedSerialExecutor(),
   );
   services.push(combat);
-  return { combat, first, second, third, publisher };
+  return { combat, first, firstAlly, second, secondAlly, third, publisher };
 };
 
 afterEach(async () => {
@@ -133,18 +149,13 @@ afterEach(async () => {
 describe('CombatService PVP policy', () => {
   it('rejects combat on a SAFE map', async () => {
     const { combat, first, second, publisher } = harness('SAFE');
-
-    await expect(
-      combat.request(first.userId, first.characterId, second.characterId),
-    ).rejects.toMatchObject({ code: 'COMBAT_SAFE_ZONE' });
+    await expect(combat.request(first.userId, first.characterId, second.characterId)).rejects.toMatchObject({ code: 'COMBAT_SAFE_ZONE' });
     expect(publisher.emit).not.toHaveBeenCalled();
   });
 
   it('creates a consent request in an OUTLAW zone without entering battle', async () => {
     const { combat, first, second, publisher } = harness('OUTLAW');
-
     const snapshot = await combat.request(first.userId, first.characterId, second.characterId);
-
     expect(snapshot.status).toBe('REQUESTED');
     expect(first.combatState).toBe('IDLE');
     expect(second.combatState).toBe('IDLE');
@@ -153,20 +164,23 @@ describe('CombatService PVP policy', () => {
 
   it('starts immediately and marks both players IN_BATTLE on a PVP map', async () => {
     const { combat, first, second } = harness('PVP');
-
     const snapshot = await combat.request(first.userId, first.characterId, second.characterId);
-
     expect(snapshot.status).toBe('ACTIVE');
     expect(first.combatState).toBe('IN_BATTLE');
     expect(second.combatState).toBe('IN_BATTLE');
   });
 
+  it('reserves and starts both complete available groups', async () => {
+    const { combat, first, firstAlly, second, secondAlly } = harness('PVP', true);
+    const snapshot = await combat.request(first.userId, first.characterId, second.characterId);
+    expect(snapshot.participants).toHaveLength(4);
+    expect(snapshot.teams?.map((team) => team.actorIds.length)).toEqual([2, 2]);
+    expect([first, firstAlly, second, secondAlly].every((active) => active.combatState === 'IN_BATTLE')).toBe(true);
+  });
+
   it('rejects a third player attacking someone who is already in combat', async () => {
     const { combat, first, second, third } = harness('PVP');
     await combat.request(first.userId, first.characterId, second.characterId);
-
-    await expect(
-      combat.request(third.userId, third.characterId, second.characterId),
-    ).rejects.toMatchObject({ code: 'COMBAT_BUSY' });
+    await expect(combat.request(third.userId, third.characterId, second.characterId)).rejects.toMatchObject({ code: 'COMBAT_BUSY' });
   });
 });
