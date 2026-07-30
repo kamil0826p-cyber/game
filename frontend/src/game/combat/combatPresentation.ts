@@ -23,6 +23,13 @@ export interface CombatTeamView {
   enemyTeamId: string;
 }
 
+export interface CombatStagePosition {
+  x: number;
+  y: number;
+  scale: number;
+  layer: number;
+}
+
 export function isSelfCastCombatAction(action: CombatActionResolutionPayload | undefined): boolean {
   return Boolean(
     action &&
@@ -107,6 +114,56 @@ export function selectCombatTarget(
 
 export function combatRosterColumns(memberCount: number): 1 | 2 {
   return memberCount > 5 ? 2 : 1;
+}
+
+function rowScale(rowCount: number, backRow: boolean): number {
+  const base = rowCount <= 1 ? 1 : rowCount === 2 ? 0.94 : rowCount === 3 ? 0.86 : 0.76;
+  return backRow ? Math.max(0.62, base - 0.1) : base;
+}
+
+function formationRow(
+  rowCount: number,
+  startIndex: number,
+  side: 'left' | 'right',
+  y: number,
+  backRow: boolean,
+): Array<{ index: number; slot: CombatStagePosition }> {
+  if (rowCount <= 0) return [];
+  const center = 31;
+  const spread = rowCount === 1 ? 0 : Math.min(32, (rowCount - 1) * 8.25);
+  const step = rowCount === 1 ? 0 : spread / (rowCount - 1);
+  const scale = rowScale(rowCount, backRow);
+  return Array.from({ length: rowCount }, (_, rowIndex) => {
+    const leftX = center - spread / 2 + step * rowIndex;
+    const x = side === 'left' ? leftX : 100 - leftX;
+    const distanceFromCenter = Math.abs(rowIndex - (rowCount - 1) / 2);
+    return {
+      index: startIndex + rowIndex,
+      slot: {
+        x,
+        y: y + distanceFromCenter * 1.35,
+        scale,
+        layer: (backRow ? 10 : 30) + rowIndex,
+      },
+    };
+  });
+}
+
+export function combatFormationSlots(
+  memberCount: number,
+  side: 'left' | 'right',
+): CombatStagePosition[] {
+  const count = Math.max(0, Math.min(10, Math.trunc(memberCount)));
+  if (count === 0) return [];
+  const backCount = count > 5 ? count - 5 : 0;
+  const frontCount = count > 5 ? 5 : count;
+  const rows = [
+    ...formationRow(backCount, 5, side, 36, true),
+    ...formationRow(frontCount, 0, side, count > 5 ? 59 : 53, false),
+  ];
+  const slots = new Array<CombatStagePosition>(count);
+  for (const row of rows) slots[row.index] = row.slot;
+  return slots;
 }
 
 export function actionDamageFor(action: CombatActionResolutionPayload, actorId: string): number {
