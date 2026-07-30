@@ -27,7 +27,7 @@ export function QuestModal({ onClose }: { onClose: () => void }): React.JSX.Elem
       .then((snapshot) => {
         if (cancelled) return;
         setQuests(snapshot.quests);
-        replaceQuestMarkerStates(snapshot.quests);
+        replaceQuestMarkerStates(snapshot.quests, snapshot.npcBindings);
         setSelectedKey((current) => current && snapshot.quests.some((quest) => quest.key === current) ? current : snapshot.quests[0]?.key);
         setError(undefined);
       })
@@ -58,12 +58,21 @@ export function QuestModal({ onClose }: { onClose: () => void }): React.JSX.Elem
                 {locale === 'pl' ? 'Zadanie zostało ukończone, a nagroda odebrana.' : 'The quest is complete and the reward has been claimed.'}
               </div>
             ) : (
-              <div className="mt-5 space-y-2">{selected.objectives.map((objective) => (
-                <div key={objective.id} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
-                  <span className={objective.completed ? 'text-emerald-300' : 'text-slate-300'}>{objective.completed ? '✓ ' : ''}{objective.label}</span>
-                  <strong className="shrink-0 text-amber-200">{objective.current} / {objective.target}</strong>
-                </div>
-              ))}</div>
+              <div className="mt-5 space-y-2">{selected.objectives.map((objective) => {
+                const locked = !objective.active && !objective.completed;
+                return (
+                  <div key={objective.id} className={`flex items-center justify-between gap-4 rounded-lg border border-white/10 p-3 text-sm ${locked ? 'bg-black/15 opacity-55' : 'bg-white/5'}`}>
+                    <span className={objective.completed ? 'text-emerald-300' : locked ? 'text-slate-500' : 'text-slate-300'}>
+                      {objective.completed ? '✓ ' : locked ? '○ ' : ''}{objective.label}
+                    </span>
+                    {locked ? (
+                      <strong className="shrink-0 text-slate-500">{locale === 'pl' ? 'Następny etap' : 'Later stage'}</strong>
+                    ) : (
+                      <strong className="shrink-0 text-amber-200">{objective.current} / {objective.target}</strong>
+                    )}
+                  </div>
+                );
+              })}</div>
             )}
             <div className="mt-5 rounded-lg border border-amber-300/15 bg-amber-950/15 p-3 text-sm text-slate-300">
               <strong className="text-amber-200">{locale === 'pl' ? 'Nagrody' : 'Rewards'}:</strong>{' '}{selected.rewards.experience} XP
