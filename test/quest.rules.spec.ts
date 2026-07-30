@@ -11,13 +11,14 @@ import {
   parseQuestProgress,
   parseQuestRewards,
   parseQuestSteps,
+  reconcileQuestProgress,
 } from '../src/modules/quests/quest.rules.js';
 
 const collection = parseQuestSteps([{ id: 'fur', type: 'COLLECT_ITEM', itemKey: 'rabbit-fur', quantity: 5, consumeOnComplete: true, label: { pl: 'Zdobądź futra', en: 'Collect furs' } }])!;
 describe('quest definition rules', () => {
   it('evaluates collection objectives against authoritative inventory counts', () => {
-    const incompleteProgress = advanceQuestProgress(collection, parseQuestProgress({}), new Map([['rabbit-fur', 4]]));
-    const readyProgress = advanceQuestProgress(collection, parseQuestProgress({}), new Map([['rabbit-fur', 7]]));
+    const incompleteProgress = reconcileQuestProgress(collection, parseQuestProgress({}), new Map([['rabbit-fur', 4]]));
+    const readyProgress = reconcileQuestProgress(collection, parseQuestProgress({}), new Map([['rabbit-fur', 7]]));
     const incomplete = evaluateQuestSteps(collection, incompleteProgress, new Map([['rabbit-fur', 4]]), 'pl');
     const ready = evaluateQuestSteps(collection, readyProgress, new Map([['rabbit-fur', 7]]), 'en');
     expect(incomplete[0]).toMatchObject({ current: 4, target: 5, completed: false, active: true, stage: 0 });
@@ -60,6 +61,15 @@ describe('quest definition rules', () => {
     progress = advanceQuestProgress(steps, progress, inventory);
     expect(getActiveQuestStage(steps, progress)).toBeUndefined();
     expect(areQuestStepsComplete(evaluateQuestSteps(steps, progress, inventory, 'pl'))).toBe(true);
+  });
+  it('reopens a consumable collection stage when required items are lost', () => {
+    const steps = parseQuestSteps([
+      { id: 'collect-fur', type: 'COLLECT_ITEM', itemKey: 'rabbit-fur', quantity: 2, consumeOnComplete: true, stage: 0 },
+      { id: 'kill-rabbit', type: 'KILL_MOB', mobKey: 'spawn-rabbit', quantity: 1, stage: 1 },
+    ])!;
+    const completed = { counters: { 'kill-rabbit': 1 }, stage: 2 };
+    expect(getActiveQuestStage(steps, reconcileQuestProgress(steps, completed, new Map([['rabbit-fur', 1]])))).toBe(0);
+    expect(getActiveQuestStage(steps, reconcileQuestProgress(steps, completed, new Map([['rabbit-fur', 2]])))).toBeUndefined();
   });
   it('keeps objectives in the same stage parallel', () => {
     const steps = parseQuestSteps([
