@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ExtendedError } from 'socket.io';
+import { configureGameSocketListenerBudget } from '../common/socket/game-socket-listener-budget.js';
 import type { GameSocket } from '../contracts/socket.events.js';
 import { FirebaseAuthService } from './firebase-auth.service.js';
 
@@ -13,6 +14,8 @@ export class FirebaseSocketAuthMiddleware {
     socket: GameSocket,
     next: (error?: ExtendedError) => void,
   ): Promise<void> => {
+    configureGameSocketListenerBudget(socket);
+
     try {
       const token = this.extractToken(socket);
       if (!token) {
