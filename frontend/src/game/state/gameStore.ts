@@ -256,7 +256,7 @@ class GameStore {
     );
     if (!participant) return;
     const combatActive = combat.status === 'ACTIVE';
-    const participantActive = combatActive && participant.hp > 0 && !participant.withdrawn;
+    const participantActive = combatActive && !participant.withdrawn;
     const cooldowns = new Map(
       participant.skills.map((skill) => [skill.key, skill.cooldownTurnsRemaining]),
     );
@@ -265,7 +265,7 @@ class GameStore {
       if (!combatant.characterId || combatant.characterId === self.characterId) continue;
       const player = players[combatant.characterId];
       if (player) {
-        const combatantActive = combatActive && combatant.hp > 0 && !combatant.withdrawn;
+        const combatantActive = combatActive && !combatant.withdrawn;
         players[combatant.characterId] = {
           ...player,
           combatState: combatantActive ? 'IN_BATTLE' : 'IDLE',
