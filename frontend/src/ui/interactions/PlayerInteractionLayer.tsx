@@ -3,6 +3,7 @@ import type { PublicPlayerState } from '../../contracts/game';
 import type { CombatSnapshot, TradeSnapshot } from '../../contracts/socket';
 import { getPlayerCombatAvailability } from '../../game/combat/playerCombat';
 import { PLAYER_CONTEXT_EVENT } from '../../game/engine/CharacterView';
+import { canInteractWithPlayer } from '../../game/interactions/playerInteraction';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { gameStore, useGameState } from '../../game/state/gameStore';
 import { canTradeWithPlayer } from '../../game/trade/playerTrade';
@@ -187,6 +188,37 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     }
   };
 
+  const inviteToGroup = async (): Promise<void> => {
+    if (!context || !state.self || busy) return;
+    if (!canInteractWithPlayer(state.self, context.player)) {
+      gameStore.addNotification({
+        code: 'GROUP_TOO_FAR',
+        message:
+          locale === 'pl'
+            ? 'Podejdź bliżej do gracza, aby dodać go do grupy.'
+            : 'Move closer to invite this player to a group.',
+      });
+      setContext(undefined);
+      return;
+    }
+    setBusy(true);
+    try {
+      await connection.inviteToGroup(context.player.characterId);
+      gameStore.addNotification({
+        code: 'GROUP_INVITE_SENT',
+        message:
+          locale === 'pl'
+            ? `Zaproszenie do grupy wysłano do ${context.player.name}.`
+            : `Group invitation sent to ${context.player.name}.`,
+      });
+      setContext(undefined);
+    } catch {
+      // Global socket notification.
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const respondCombat = async (accept: boolean): Promise<void> => {
     if (!combat || busy) return;
     setBusy(true);
@@ -243,6 +275,13 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
           label: locale === 'pl' ? 'Atakuj' : 'Attack',
           icon: '⚔',
           run: startCombat,
+          disabled: busy,
+        },
+        {
+          key: 'group',
+          label: locale === 'pl' ? 'Dodaj do grupy' : 'Add to group',
+          icon: '✚',
+          run: inviteToGroup,
           disabled: busy,
         },
       ]}
