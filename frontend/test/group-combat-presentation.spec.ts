@@ -71,28 +71,33 @@ describe('group combat presentation', () => {
     expect(combatRosterColumns(10)).toBe(2);
   });
 
-  it('places ten visible combatants in two battlefield rows per side', () => {
+  it('anchors ten combatants to the two rows painted into the arena', () => {
     const left = combatFormationSlots(10, 'left');
     const right = combatFormationSlots(10, 'right');
 
     expect(left).toHaveLength(10);
     expect(right).toHaveLength(10);
-    expect(left.every((slot) => slot.x < 50)).toBe(true);
-    expect(right.every((slot) => slot.x > 50)).toBe(true);
+    expect(left.every((slot) => slot.x < 50 && slot.effectX < 50)).toBe(true);
+    expect(right.every((slot) => slot.x > 50 && slot.effectX > 50)).toBe(true);
     expect(new Set(left.map((slot) => `${slot.x}:${slot.y}`)).size).toBe(10);
     expect(new Set(right.map((slot) => `${slot.x}:${slot.y}`)).size).toBe(10);
-    expect(left.slice(0, 5).every((slot) => slot.y > left[5]!.y)).toBe(true);
-    expect(right.slice(0, 5).every((slot) => slot.y > right[5]!.y)).toBe(true);
+    expect(left.slice(0, 5).every((slot) => slot.row === 'front')).toBe(true);
+    expect(left.slice(5).every((slot) => slot.row === 'back')).toBe(true);
+    expect(left.every((slot) => slot.effectY < slot.y)).toBe(true);
+    expect(right.every((slot, index) => slot.x === 100 - left[index]!.x)).toBe(true);
+    expect(right.every((slot, index) => slot.effectX === 100 - left[index]!.effectX)).toBe(true);
   });
 
-  it('mirrors solo and group sides without forcing equal team sizes', () => {
+  it('uses a large central slot for solo combat and compact slots for full parties', () => {
     const solo = combatFormationSlots(1, 'left');
     const group = combatFormationSlots(10, 'right');
 
     expect(solo).toHaveLength(1);
     expect(group).toHaveLength(10);
-    expect(solo[0]!.x).toBeLessThan(50);
+    expect(solo[0]).toMatchObject({ row: 'front', x: 21.4, scale: 1.08 });
     expect(group.every((slot) => slot.x > 50)).toBe(true);
+    expect(group.slice(0, 5).every((slot) => slot.scale === 0.7)).toBe(true);
+    expect(group.slice(5).every((slot) => slot.scale <= 0.72)).toBe(true);
   });
 
   it('keeps a living selected target and falls back after defeat', () => {
