@@ -10,7 +10,7 @@ const createSession = (): PlayerSession => ({ socketId: 'socket', connectionId: 
 function createService(furQuantity: number) {
   const items = furQuantity > 0 ? [{ id: '66666666-6666-4666-8666-666666666666', quantity: furQuantity, itemDefinition: { key: 'rabbit-fur' } }] : [];
   const transaction = {
-    characterQuest: { findFirst: vi.fn().mockResolvedValue(characterQuest), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    characterQuest: { findFirst: vi.fn().mockResolvedValue(characterQuest), update: vi.fn().mockResolvedValue(characterQuest), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     inventoryItem: { findMany: vi.fn().mockResolvedValue(items), delete: vi.fn().mockResolvedValue(undefined), update: vi.fn().mockResolvedValue(undefined) },
     character: {
       findUnique: vi.fn().mockResolvedValue({ id: characterQuest.characterId, userId: createSession().userId, level: 2, experience: 0, hp: 100, maxHp: 100, energy: 20, maxEnergy: 20, strength: 10, agility: 8, intelligence: 4, armor: 6, gold: 0, silver: 0 }),
@@ -32,5 +32,29 @@ describe('QuestService turn-in', () => {
     const player = createSession(); const { service, transaction } = createService(5);
     await expect(service.turnIn(player, definition.key, 'pl')).resolves.toMatchObject({ completed: true, state: 'REWARDED', reward: { experience: 180, gold: 0, silver: 300 } });
     expect(transaction.inventoryItem.delete).toHaveBeenCalled(); expect(transaction.characterCurrencyLedger.create).toHaveBeenCalledTimes(1); expect(player.gold).toBe(0); expect(player.silver).toBe(300);
+  });
+});
+
+describe('QuestService marker bindings', () => {
+  it('derives quest NPC bindings from validated server dialogue data', async () => {
+    const prisma = {
+      characterQuest: { findMany: vi.fn().mockResolvedValue([]) },
+      inventoryItem: { findMany: vi.fn().mockResolvedValue([]) },
+      npcDefinition: { findMany: vi.fn().mockResolvedValue([
+        {
+          key: 'mira-tanner',
+          dialogue: {
+            type: 'QUEST', rootNodeId: 'offer',
+            quest: { questKey: definition.key, rootNodes: { notStarted: 'offer', active: 'offer', ready: 'offer', rewarded: 'offer' } },
+            nodes: { offer: { text: 'Hello.', choices: [] } },
+          },
+        },
+        { key: 'borin', dialogue: { type: 'DIALOGUE', rootNodeId: 'hello', nodes: { hello: { text: 'Hello.', choices: [] } } } },
+      ]) },
+    } as unknown as PrismaService;
+    await expect(new QuestService(prisma).getLog(characterQuest.characterId, 'pl', 'map')).resolves.toEqual({
+      quests: [],
+      npcBindings: [{ npcKey: 'mira-tanner', questKey: definition.key }],
+    });
   });
 });
