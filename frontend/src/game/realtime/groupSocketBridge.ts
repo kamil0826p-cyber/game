@@ -25,6 +25,7 @@ declare module './GameSocketClient' {
     inviteToGroup(targetCharacterId: string): Promise<GroupSnapshot>;
     respondGroupInvite(inviteId: string, accept: boolean): Promise<GroupSnapshot>;
     leaveGroup(): Promise<GroupSnapshot>;
+    kickGroupMember(targetCharacterId: string): Promise<GroupSnapshot>;
   }
 }
 
@@ -134,5 +135,13 @@ export function installGroupSocketBridge(client: GameSocketClient): void {
   client.leaveGroup = () =>
     command((socket, ack) =>
       socket.emit('group:leave', { requestId: createRequestId('group-leave') }, ack),
+    );
+  client.kickGroupMember = (targetCharacterId) =>
+    command((socket, ack) =>
+      socket.emit(
+        'group:kick',
+        { requestId: createRequestId('group-kick'), targetCharacterId },
+        ack,
+      ),
     );
 }
