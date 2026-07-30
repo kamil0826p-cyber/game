@@ -13,6 +13,7 @@ import './hud-tooltips.css';
 import './combat.css';
 import './combat-support-effects.css';
 import './combat-group-stage.css';
+import './group-panel-actions.css';
 
 const root = document.getElementById('root');
 if (!root) {
