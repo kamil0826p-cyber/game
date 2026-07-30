@@ -9,6 +9,7 @@ import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { MOB_RANKS, type MobLootEntry, type MobRank } from './mob.catalog.js';
+import { canReceiveMobExperience, splitMobExperience } from './mob-reward.rules.js';
 import { MobRewardService } from './mob-reward.service.js';
 import type { ClaimedMob, RuntimeMob } from './mob.types.js';
 
@@ -122,13 +123,16 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
         return session?.activeInWorld ? [session] : [];
       });
     if (recipients.length === 0) return;
-    const baseExperience = Math.floor(mob.experience / recipients.length);
-    const experienceRemainder = mob.experience % recipients.length;
+    const experienceShares = splitMobExperience(
+      mob.experience,
+      recipients.map((session) => session.level),
+      mob.level,
+    );
 
     await Promise.all(recipients.map(async (session, index) => {
       const personalMob: RuntimeMob = {
         ...mob,
-        experience: baseExperience + (index < experienceRemainder ? 1 : 0),
+        experience: experienceShares[index] ?? 0,
       };
       try {
         const settlement = await this.rewards.award(session, personalMob);
@@ -144,11 +148,16 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
           self: this.world.toSelfState(session),
         };
         this.publisher.emit(session.socketId, 'mob:rewards', payload);
+        const experienceAllowed = canReceiveMobExperience(session.level, mob.level);
         this.publisher.emit(session.socketId, 'notification', {
           code: 'MOB_REWARD',
           message: session.locale === 'pl'
-            ? `Pokonano ${mob.name}: +${settlement.experienceGained} doświadczenia. Łup jest osobisty.`
-            : `Defeated ${mob.name}: +${settlement.experienceGained} experience. Loot is personal.`,
+            ? experienceAllowed
+              ? `Pokonano ${mob.name}: +${settlement.experienceGained} doświadczenia. Łup jest osobisty.`
+              : `Pokonano ${mob.name}: brak doświadczenia, ponieważ różnica poziomów przekracza 10. Łup jest osobisty.`
+            : experienceAllowed
+              ? `Defeated ${mob.name}: +${settlement.experienceGained} experience. Loot is personal.`
+              : `Defeated ${mob.name}: no experience because the level difference is greater than 10. Loot is personal.`,
         });
         if (settlement.levelsGained > 0) {
           this.publisher.emit(session.socketId, 'notification', {
