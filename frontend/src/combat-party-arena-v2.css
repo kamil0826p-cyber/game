@@ -72,11 +72,6 @@
   display: none;
 }
 
-.combat-stage-unit:not(.combat-stage-unit-active):not(.combat-stage-unit-selected)
-  .combat-stage-markers em:not(:first-child) {
-  display: none;
-}
-
 .combat-stage-name-row {
   margin-bottom: 0.18rem;
 }
