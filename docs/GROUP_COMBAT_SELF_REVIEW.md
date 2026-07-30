@@ -105,7 +105,8 @@ This avoids the earlier failure where moving or scaling the sprite caused the pr
 - area skills create an impact and floating result at every affected target anchor;
 - support effects remain attached to the casting actor;
 - sprite scale changes do not alter effect coordinates;
-- lunge motion is intentionally short and returns to the actor's original formation anchor.
+- lunge motion is intentionally short and returns to the actor's original formation anchor;
+- the dynamic VFX layer renders above active and selected combatants, so an impact is not hidden behind the target sprite.
 
 ## Additional UI fixes found during review
 
