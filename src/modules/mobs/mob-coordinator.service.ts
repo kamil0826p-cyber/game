@@ -33,26 +33,15 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const records = await this.prisma.mobDefinition.findMany({
-      orderBy: [{ mapId: 'asc' }, { key: 'asc' }],
-    });
+    const records = await this.prisma.mobDefinition.findMany({ orderBy: [{ mapId: 'asc' }, { key: 'asc' }] });
     for (const record of records) {
       const mob = this.toRuntimeMob(record);
       const map = await this.maps.getMap(mob.mapId);
       if (!this.maps.isInside(map, mob.x, mob.y) || this.maps.isCollision(map, mob.x, mob.y)) {
-        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-          reason: `Mob ${record.key} is placed on an invalid tile.`,
-        });
+        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason: `Mob ${record.key} is placed on an invalid tile.` });
       }
-      if (
-        [...this.mobs.values()].some(
-          (candidate) =>
-            candidate.mapId === mob.mapId && candidate.x === mob.x && candidate.y === mob.y,
-        )
-      ) {
-        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-          reason: `Multiple mobs occupy ${mob.mapId}:${mob.x},${mob.y}.`,
-        });
+      if ([...this.mobs.values()].some((candidate) => candidate.mapId === mob.mapId && candidate.x === mob.x && candidate.y === mob.y)) {
+        throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason: `Multiple mobs occupy ${mob.mapId}:${mob.x},${mob.y}.` });
       }
       this.mobs.set(mob.id, mob);
       this.mobIdByActorId.set(this.actorId(mob.id), mob.id);
@@ -68,51 +57,29 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
   }
 
   getMapMobs(mapId: string): MobStatePayload[] {
-    return [...this.mobs.values()]
-      .filter((mob) => mob.mapId === mapId && mob.state !== 'RESPAWNING')
-      .map((mob) => this.toPayload(mob));
+    return [...this.mobs.values()].filter((mob) => mob.mapId === mapId && mob.state !== 'RESPAWNING').map((mob) => this.toPayload(mob));
   }
 
   isTileOccupied(mapId: string, x: number, y: number): boolean {
-    return [...this.mobs.values()].some(
-      (mob) =>
-        mob.mapId === mapId &&
-        mob.x === x &&
-        mob.y === y &&
-        mob.state !== 'RESPAWNING',
-    );
+    return [...this.mobs.values()].some((mob) => mob.mapId === mapId && mob.x === x && mob.y === y && mob.state !== 'RESPAWNING');
   }
 
   claim(mobId: string, session: PlayerSession): ClaimedMob {
     const mob = this.requireMob(mobId);
-    if (mob.state !== 'ALIVE') {
-      throw new GameError(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
-    }
-    if (!isActorWithinInteractionRange(session, mob)) {
-      throw new GameError(GAME_ERROR_CODES.COMBAT_TOO_FAR, 'errors.combat.tooFar');
-    }
+    if (mob.state !== 'ALIVE') throw new GameError(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
+    if (!isActorWithinInteractionRange(session, mob)) throw new GameError(GAME_ERROR_CODES.COMBAT_TOO_FAR, 'errors.combat.tooFar');
     mob.state = 'IN_COMBAT';
     mob.engagedCharacterId = session.characterId;
     mob.respawnsAt = undefined;
     return {
       mob,
       actor: {
-        actorId: this.actorId(mob.id),
-        kind: 'MOB',
-        name: mob.name,
-        characterClass: mob.characterClass,
-        level: mob.level,
-        outfitKey: mob.outfitKey,
-        renderScale: mob.renderScale,
-        hp: mob.stats.maxHp,
-        maxHp: mob.stats.maxHp,
-        energy: mob.stats.maxEnergy,
-        maxEnergy: mob.stats.maxEnergy,
-        strength: mob.stats.strength,
-        agility: mob.stats.agility,
-        intelligence: mob.stats.intelligence,
-        armor: mob.stats.armor,
-        skills: [],
+        actorId: this.actorId(mob.id), kind: 'MOB', name: mob.name,
+        characterClass: mob.characterClass, level: mob.level, outfitKey: mob.outfitKey,
+        renderScale: mob.renderScale, hp: mob.stats.maxHp, maxHp: mob.stats.maxHp,
+        energy: mob.stats.maxEnergy, maxEnergy: mob.stats.maxEnergy,
+        strength: mob.stats.strength, agility: mob.stats.agility,
+        intelligence: mob.stats.intelligence, armor: mob.stats.armor, skills: [],
       },
     };
   }
@@ -126,17 +93,17 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
 
   async completeCombat(runtime: CombatRuntime): Promise<void> {
     const mobActor = runtime.actors.find((actor) => actor.kind === 'MOB');
-    const playerActor = runtime.actors.find((actor) => actor.kind === 'PLAYER');
-    if (!mobActor || !playerActor?.characterId) return;
+    const playerActors = runtime.actors.filter((actor) => actor.kind === 'PLAYER' && actor.characterId);
+    if (!mobActor || playerActors.length === 0) return;
     const mobId = this.mobIdByActorId.get(mobActor.actorId);
     if (!mobId) return;
     const mob = this.mobs.get(mobId);
-    if (!mob || mob.engagedCharacterId !== playerActor.characterId) return;
+    if (!mob || mob.engagedCharacterId !== runtime.initiatorActorId) return;
 
-    const playerWon =
-      runtime.finishReason === 'DEFEATED' && runtime.winnerActorId === playerActor.actorId;
+    const playerTeamId = playerActors[0]!.teamId;
+    const playerWon = runtime.finishReason === 'DEFEATED' && runtime.winnerTeamId === playerTeamId;
     if (!playerWon) {
-      this.releaseClaim(mob.id, playerActor.characterId);
+      this.releaseClaim(mob.id, runtime.initiatorActorId);
       return;
     }
 
@@ -148,60 +115,65 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     this.broadcastDespawn(mob.mapId, { mobId: mob.id, respawnsAt: mob.respawnsAt });
     this.scheduleRespawn(mob);
 
-    const session = this.world.getByCharacterId(playerActor.characterId);
-    if (!session) return;
-    try {
-      const settlement = await this.rewards.award(session, mob);
-      const payload: MobRewardPayload = {
-        mobId: mob.id,
-        mobName: mob.name,
-        experienceGained: settlement.experienceGained,
-        levelsGained: settlement.levelsGained,
-        skillPointsGained: settlement.skillPointsGained,
-        nextLevelExperience: settlement.nextLevelExperience,
-        loot: settlement.loot,
-        skippedLoot: settlement.skippedLoot,
-        self: this.world.toSelfState(session),
-      };
-      this.publisher.emit(session.socketId, 'mob:rewards', payload);
-      this.publisher.emit(session.socketId, 'notification', {
-        code: 'MOB_REWARD',
-        message:
-          session.locale === 'pl'
-            ? `Pokonano ${mob.name}: +${settlement.experienceGained} doświadczenia.`
-            : `Defeated ${mob.name}: +${settlement.experienceGained} experience.`,
+    const recipients = playerActors
+      .filter((actor) => !actor.withdrawn)
+      .flatMap((actor) => {
+        const session = this.world.getByCharacterId(actor.characterId!);
+        return session?.activeInWorld ? [session] : [];
       });
-      if (settlement.levelsGained > 0) {
+    if (recipients.length === 0) return;
+    const baseExperience = Math.floor(mob.experience / recipients.length);
+    const experienceRemainder = mob.experience % recipients.length;
+
+    await Promise.all(recipients.map(async (session, index) => {
+      const personalMob: RuntimeMob = {
+        ...mob,
+        experience: baseExperience + (index < experienceRemainder ? 1 : 0),
+      };
+      try {
+        const settlement = await this.rewards.award(session, personalMob);
+        const payload: MobRewardPayload = {
+          mobId: mob.id,
+          mobName: mob.name,
+          experienceGained: settlement.experienceGained,
+          levelsGained: settlement.levelsGained,
+          skillPointsGained: settlement.skillPointsGained,
+          nextLevelExperience: settlement.nextLevelExperience,
+          loot: settlement.loot,
+          skippedLoot: settlement.skippedLoot,
+          self: this.world.toSelfState(session),
+        };
+        this.publisher.emit(session.socketId, 'mob:rewards', payload);
         this.publisher.emit(session.socketId, 'notification', {
-          code: 'LEVEL_UP',
-          message:
-            session.locale === 'pl'
+          code: 'MOB_REWARD',
+          message: session.locale === 'pl'
+            ? `Pokonano ${mob.name}: +${settlement.experienceGained} doświadczenia. Łup jest osobisty.`
+            : `Defeated ${mob.name}: +${settlement.experienceGained} experience. Loot is personal.`,
+        });
+        if (settlement.levelsGained > 0) {
+          this.publisher.emit(session.socketId, 'notification', {
+            code: 'LEVEL_UP',
+            message: session.locale === 'pl'
               ? `Awans! Twoja postać osiągnęła ${session.level} poziom.`
               : `Level up! Your character reached level ${session.level}.`,
-        });
-      }
-      if (settlement.skippedLoot.length > 0) {
+          });
+        }
+        if (settlement.skippedLoot.length > 0) {
+          this.publisher.emit(session.socketId, 'notification', {
+            code: 'MOB_LOOT_SKIPPED',
+            message: session.locale === 'pl'
+              ? 'Część twojego łupu przepadła, ponieważ ekwipunek jest pełny.'
+              : 'Some of your loot was left behind because the inventory is full.',
+          });
+        }
+      } catch (error) {
+        this.logger.error(`Could not settle group rewards for ${session.characterId} after defeating ${mob.id}.`, error instanceof Error ? error.stack : undefined);
         this.publisher.emit(session.socketId, 'notification', {
-          code: 'MOB_LOOT_SKIPPED',
-          message:
-            session.locale === 'pl'
-              ? 'Część łupu przepadła, ponieważ ekwipunek jest pełny.'
-              : 'Some loot was left behind because the inventory is full.',
+          code: GAME_ERROR_CODES.INTERNAL_ERROR,
+          message: session.locale === 'pl' ? 'Wystąpił wewnętrzny błąd serwera.' : 'An internal server error occurred.',
         });
       }
-    } catch (error) {
-      this.logger.error(
-        `Could not settle rewards for ${session.characterId} after defeating ${mob.id}.`,
-        error instanceof Error ? error.stack : undefined,
-      );
-      this.publisher.emit(session.socketId, 'notification', {
-        code: GAME_ERROR_CODES.INTERNAL_ERROR,
-        message:
-          session.locale === 'pl'
-            ? 'Wystąpił wewnętrzny błąd serwera.'
-            : 'An internal server error occurred.',
-      });
-    }
+    }));
   }
 
   private scheduleRespawn(mob: RuntimeMob): void {
@@ -232,142 +204,73 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
 
   private broadcastSpawn(mapId: string, payload: MobStatePayload): void {
     for (const session of this.world.listSessions()) {
-      if (session.activeInWorld && session.mapId === mapId) {
-        this.publisher.emit(session.socketId, 'world:mobSpawned', payload);
-      }
+      if (session.activeInWorld && session.mapId === mapId) this.publisher.emit(session.socketId, 'world:mobSpawned', payload);
     }
   }
 
-  private broadcastDespawn(
-    mapId: string,
-    payload: { mobId: string; respawnsAt: number },
-  ): void {
+  private broadcastDespawn(mapId: string, payload: { mobId: string; respawnsAt: number }): void {
     for (const session of this.world.listSessions()) {
-      if (session.activeInWorld && session.mapId === mapId) {
-        this.publisher.emit(session.socketId, 'world:mobDespawned', payload);
-      }
+      if (session.activeInWorld && session.mapId === mapId) this.publisher.emit(session.socketId, 'world:mobDespawned', payload);
     }
   }
 
   private requireMob(mobId: string): RuntimeMob {
     const mob = this.mobs.get(mobId);
-    if (!mob) {
-      throw new GameError(
-        GAME_ERROR_CODES.COMBAT_PARTICIPANT_UNAVAILABLE,
-        'errors.combat.participantUnavailable',
-      );
-    }
+    if (!mob) throw new GameError(GAME_ERROR_CODES.COMBAT_PARTICIPANT_UNAVAILABLE, 'errors.combat.participantUnavailable');
     return mob;
   }
 
-  private actorId(mobId: string): string {
-    return `mob:${mobId}`;
-  }
+  private actorId(mobId: string): string { return `mob:${mobId}`; }
 
   private toPayload(mob: RuntimeMob): MobStatePayload {
-    return {
-      id: mob.id,
-      definitionKey: mob.definitionKey,
-      name: mob.name,
-      rank: mob.rank,
-      mapId: mob.mapId,
-      x: mob.x,
-      y: mob.y,
-      level: mob.level,
-      outfitKey: mob.outfitKey,
-      renderScale: mob.renderScale,
-    };
+    return { id: mob.id, definitionKey: mob.definitionKey, name: mob.name, rank: mob.rank, mapId: mob.mapId, x: mob.x, y: mob.y, level: mob.level, outfitKey: mob.outfitKey, renderScale: mob.renderScale };
   }
 
   private toRuntimeMob(record: {
-    id: string;
-    key: string;
-    name: string;
-    mapId: string;
-    x: number;
-    y: number;
-    level: number;
-    outfitKey: string;
-    stats: unknown;
-    lootTable: unknown;
-    respawnMs: number;
+    id: string; key: string; name: string; mapId: string; x: number; y: number;
+    level: number; outfitKey: string; stats: unknown; lootTable: unknown; respawnMs: number;
   }): RuntimeMob {
-    const stats = record.stats as Partial<RuntimeMob['stats']> & {
-      rank?: unknown;
-      experience?: unknown;
-      characterClass?: unknown;
-      renderScale?: unknown;
-    };
+    const stats = record.stats as Partial<RuntimeMob['stats']> & { rank?: unknown; experience?: unknown; characterClass?: unknown; renderScale?: unknown };
     const rank = stats.rank;
     const characterClass = stats.characterClass;
     const renderScale = stats.renderScale;
     const loot = Array.isArray(record.lootTable) ? record.lootTable : [];
     if (
-      typeof rank !== 'string' ||
-      !MOB_RANKS.includes(rank as MobRank) ||
+      typeof rank !== 'string' || !MOB_RANKS.includes(rank as MobRank) ||
       !['MAGE', 'WARRIOR', 'ARCHER'].includes(String(characterClass)) ||
-      typeof renderScale !== 'number' ||
-      !Number.isFinite(renderScale) ||
-      renderScale < MIN_RENDER_SCALE ||
-      renderScale > MAX_RENDER_SCALE ||
-      !Number.isInteger(stats.experience) ||
-      Number(stats.experience) < 0 ||
-      !this.validStats(stats) ||
-      !loot.every((entry) => this.validLootEntry(entry))
+      typeof renderScale !== 'number' || !Number.isFinite(renderScale) ||
+      renderScale < MIN_RENDER_SCALE || renderScale > MAX_RENDER_SCALE ||
+      !Number.isInteger(stats.experience) || Number(stats.experience) < 0 ||
+      !this.validStats(stats) || !loot.every((entry) => this.validLootEntry(entry))
     ) {
-      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', {
-        reason: `Mob definition ${record.key} has malformed stats, scale or loot.`,
-      });
+      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason: `Mob definition ${record.key} has malformed stats, scale or loot.` });
     }
     return {
-      id: record.id,
-      definitionKey: record.key,
-      name: record.name,
-      rank: rank as MobRank,
-      mapId: record.mapId,
-      x: record.x,
-      y: record.y,
-      level: record.level,
-      characterClass: characterClass as RuntimeMob['characterClass'],
-      outfitKey: record.outfitKey,
-      renderScale,
-      respawnMs: Math.max(1_000, record.respawnMs),
-      experience: Number(stats.experience),
+      id: record.id, definitionKey: record.key, name: record.name, rank: rank as MobRank,
+      mapId: record.mapId, x: record.x, y: record.y, level: record.level,
+      characterClass: characterClass as RuntimeMob['characterClass'], outfitKey: record.outfitKey,
+      renderScale, respawnMs: Math.max(1_000, record.respawnMs), experience: Number(stats.experience),
       stats: {
-        maxHp: Number(stats.maxHp),
-        maxEnergy: Number(stats.maxEnergy),
-        strength: Number(stats.strength),
-        agility: Number(stats.agility),
-        intelligence: Number(stats.intelligence),
-        armor: Number(stats.armor),
+        maxHp: Number(stats.maxHp), maxEnergy: Number(stats.maxEnergy), strength: Number(stats.strength),
+        agility: Number(stats.agility), intelligence: Number(stats.intelligence), armor: Number(stats.armor),
       },
-      loot: loot as MobLootEntry[],
-      state: 'ALIVE',
+      loot: loot as MobLootEntry[], state: 'ALIVE',
     };
   }
 
   private validStats(stats: Partial<RuntimeMob['stats']>): boolean {
-    return ['maxHp', 'maxEnergy', 'strength', 'agility', 'intelligence', 'armor'].every(
-      (key) => {
-        const value = stats[key as keyof RuntimeMob['stats']];
-        return Number.isInteger(value) && Number(value) >= 0;
-      },
-    );
+    return ['maxHp', 'maxEnergy', 'strength', 'agility', 'intelligence', 'armor'].every((key) => {
+      const value = stats[key as keyof RuntimeMob['stats']];
+      return Number.isInteger(value) && Number(value) >= 0;
+    });
   }
 
   private validLootEntry(value: unknown): value is MobLootEntry {
     if (!value || typeof value !== 'object') return false;
     const entry = value as Partial<MobLootEntry>;
-    return (
-      typeof entry.itemKey === 'string' &&
-      entry.itemKey.length > 0 &&
-      typeof entry.chance === 'number' &&
-      entry.chance >= 0 &&
-      entry.chance <= 1 &&
-      Number.isInteger(entry.minQuantity) &&
-      Number.isInteger(entry.maxQuantity) &&
-      Number(entry.minQuantity) > 0 &&
-      Number(entry.maxQuantity) >= Number(entry.minQuantity)
-    );
+    return typeof entry.itemKey === 'string' && entry.itemKey.length > 0 &&
+      typeof entry.chance === 'number' && entry.chance >= 0 && entry.chance <= 1 &&
+      Number.isInteger(entry.minQuantity) && Number.isInteger(entry.maxQuantity) &&
+      Number(entry.minQuantity) > 0 && Number(entry.maxQuantity) >= Number(entry.minQuantity);
   }
 }
