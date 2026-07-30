@@ -18,8 +18,8 @@ interface CombatVfxProps {
   targets: PositionedCombatant[];
 }
 
-function pointStyle(position: CombatStagePosition): React.CSSProperties {
-  return { left: `${position.x}%`, top: `${position.y}%` };
+function effectPointStyle(position: CombatStagePosition): React.CSSProperties {
+  return { left: `${position.effectX}%`, top: `${position.effectY}%` };
 }
 
 function FloatingResult({
@@ -48,7 +48,7 @@ function FloatingResult({
       className={`combat-dynamic-floating-result ${
         healing || result.shieldDelta > 0 ? 'combat-floating-positive' : ''
       }`}
-      style={pointStyle(target.position)}
+      style={effectPointStyle(target.position)}
     >
       {label}
     </span>
@@ -70,11 +70,11 @@ export function CombatVfx({
     '--combat-travel-ms': `${action.visual.travelMs ?? 420}ms`,
   } as React.CSSProperties;
   const projectileStyle = {
-    '--combat-from-x': `${actor.position.x}%`,
-    '--combat-from-y': `${actor.position.y - 7}%`,
-    '--combat-to-x': `${target.position.x}%`,
-    '--combat-to-y': `${target.position.y - 7}%`,
-    '--combat-projectile-facing': target.position.x >= actor.position.x ? 1 : -1,
+    '--combat-from-x': `${actor.position.effectX}%`,
+    '--combat-from-y': `${actor.position.effectY}%`,
+    '--combat-to-x': `${target.position.effectX}%`,
+    '--combat-to-y': `${target.position.effectY}%`,
+    '--combat-projectile-facing': target.position.effectX >= actor.position.effectX ? 1 : -1,
   } as React.CSSProperties;
 
   return (
@@ -88,10 +88,10 @@ export function CombatVfx({
         <div
           className="combat-support-aura"
           style={{
-            ...pointStyle(actor.position),
+            ...effectPointStyle(actor.position),
             right: 'auto',
             bottom: 'auto',
-            transform: 'translate(-50%, -68%)',
+            transform: 'translate(-50%, -50%)',
           }}
         >
           <span className="combat-support-sigil" />
@@ -105,7 +105,7 @@ export function CombatVfx({
         </div>
       ) : (
         <>
-          <div className="combat-dynamic-cast-rune" style={pointStyle(actor.position)} />
+          <div className="combat-dynamic-cast-rune" style={effectPointStyle(actor.position)} />
           <div className="combat-dynamic-projectile" style={projectileStyle}>
             <i />
             <i />
@@ -113,13 +113,13 @@ export function CombatVfx({
           </div>
           {targets.map((combatant) => (
             <div key={combatant.actorId}>
-              <div className="combat-dynamic-impact-burst" style={pointStyle(combatant.position)}>
+              <div className="combat-dynamic-impact-burst" style={effectPointStyle(combatant.position)}>
                 <i />
                 <i />
                 <i />
                 <i />
               </div>
-              <div className="combat-dynamic-shockwave" style={pointStyle(combatant.position)} />
+              <div className="combat-dynamic-shockwave" style={effectPointStyle(combatant.position)} />
             </div>
           ))}
         </>
