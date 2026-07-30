@@ -26,9 +26,35 @@ export interface CombatTeamView {
 export interface CombatStagePosition {
   x: number;
   y: number;
+  effectX: number;
+  effectY: number;
   scale: number;
   layer: number;
+  row: 'front' | 'back';
 }
+
+interface ArenaAnchor {
+  x: number;
+  y: number;
+  effectY: number;
+  layer: number;
+}
+
+const FRONT_LEFT_ANCHORS: readonly ArenaAnchor[] = [
+  { x: 21.4, y: 74.7, effectY: 61.5, layer: 55 },
+  { x: 15.6, y: 77, effectY: 63, layer: 54 },
+  { x: 27.1, y: 77, effectY: 63, layer: 56 },
+  { x: 9.9, y: 81.6, effectY: 66, layer: 53 },
+  { x: 32.8, y: 81.6, effectY: 66, layer: 57 },
+];
+
+const BACK_LEFT_ANCHORS: readonly ArenaAnchor[] = [
+  { x: 18.5, y: 50.8, effectY: 40, layer: 25 },
+  { x: 13.5, y: 52.8, effectY: 42, layer: 24 },
+  { x: 23.4, y: 52.8, effectY: 42, layer: 26 },
+  { x: 8.6, y: 56.4, effectY: 45, layer: 23 },
+  { x: 28.4, y: 56.4, effectY: 45, layer: 27 },
+];
 
 export function isSelfCastCombatAction(action: CombatActionResolutionPayload | undefined): boolean {
   return Boolean(
@@ -116,37 +142,42 @@ export function combatRosterColumns(memberCount: number): 1 | 2 {
   return memberCount > 5 ? 2 : 1;
 }
 
-function rowScale(rowCount: number, backRow: boolean): number {
-  const base = rowCount <= 1 ? 1 : rowCount === 2 ? 0.94 : rowCount === 3 ? 0.86 : 0.76;
-  return backRow ? Math.max(0.62, base - 0.1) : base;
+function frontScale(memberCount: number): number {
+  if (memberCount <= 1) return 1.08;
+  if (memberCount === 2) return 1;
+  if (memberCount === 3) return 0.91;
+  if (memberCount === 4) return 0.83;
+  if (memberCount === 5) return 0.77;
+  return 0.7;
 }
 
-function formationRow(
-  rowCount: number,
-  startIndex: number,
+function backScale(backCount: number): number {
+  if (backCount <= 1) return 0.72;
+  if (backCount === 2) return 0.68;
+  if (backCount === 3) return 0.65;
+  return 0.61;
+}
+
+function mirrorAnchor(anchor: ArenaAnchor, side: 'left' | 'right'): ArenaAnchor {
+  return side === 'left' ? anchor : { ...anchor, x: 100 - anchor.x };
+}
+
+function toStagePosition(
+  anchor: ArenaAnchor,
   side: 'left' | 'right',
-  y: number,
-  backRow: boolean,
-): Array<{ index: number; slot: CombatStagePosition }> {
-  if (rowCount <= 0) return [];
-  const center = 29;
-  const spread = rowCount === 1 ? 0 : Math.min(30, (rowCount - 1) * 7.75);
-  const step = rowCount === 1 ? 0 : spread / (rowCount - 1);
-  const scale = rowScale(rowCount, backRow);
-  return Array.from({ length: rowCount }, (_, rowIndex) => {
-    const leftX = center - spread / 2 + step * rowIndex;
-    const x = side === 'left' ? leftX : 100 - leftX;
-    const distanceFromCenter = Math.abs(rowIndex - (rowCount - 1) / 2);
-    return {
-      index: startIndex + rowIndex,
-      slot: {
-        x,
-        y: y + distanceFromCenter * 1.35,
-        scale,
-        layer: (backRow ? 10 : 30) + rowIndex,
-      },
-    };
-  });
+  row: 'front' | 'back',
+  scale: number,
+): CombatStagePosition {
+  const resolved = mirrorAnchor(anchor, side);
+  return {
+    x: resolved.x,
+    y: resolved.y,
+    effectX: resolved.x,
+    effectY: resolved.effectY,
+    scale,
+    layer: resolved.layer,
+    row,
+  };
 }
 
 export function combatFormationSlots(
@@ -155,14 +186,17 @@ export function combatFormationSlots(
 ): CombatStagePosition[] {
   const count = Math.max(0, Math.min(10, Math.trunc(memberCount)));
   if (count === 0) return [];
-  const backCount = count > 5 ? count - 5 : 0;
-  const frontCount = count > 5 ? 5 : count;
-  const rows = [
-    ...formationRow(backCount, 5, side, 36, true),
-    ...formationRow(frontCount, 0, side, count > 5 ? 59 : 53, false),
-  ];
-  const slots = new Array<CombatStagePosition>(count);
-  for (const row of rows) slots[row.index] = row.slot;
+
+  const frontCount = Math.min(5, count);
+  const backCount = Math.max(0, count - frontCount);
+  const slots = FRONT_LEFT_ANCHORS
+    .slice(0, frontCount)
+    .map((anchor) => toStagePosition(anchor, side, 'front', frontScale(count)));
+  slots.push(
+    ...BACK_LEFT_ANCHORS
+      .slice(0, backCount)
+      .map((anchor) => toStagePosition(anchor, side, 'back', backScale(backCount))),
+  );
   return slots;
 }
 
