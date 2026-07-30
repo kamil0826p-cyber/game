@@ -1,7 +1,7 @@
 .combat-arena-backdrop {
   background:
     linear-gradient(180deg, rgba(2, 6, 12, 0.05), rgba(2, 5, 9, 0.08) 58%, rgba(1, 2, 5, 0.42)),
-    url('/assets/combat/grand-party-arena.svg') center / cover no-repeat;
+    url('/assets/combat/grand-party-arena.svg') center / 100% 100% no-repeat;
   filter: saturate(0.96) contrast(1.04);
   transform: none;
   animation: none;
@@ -14,8 +14,8 @@
 }
 
 .combat-stage-field {
-  top: 4.6rem;
-  bottom: 6.8rem;
+  top: 0;
+  bottom: 0;
 }
 
 .combat-stage-field::before,
@@ -24,7 +24,7 @@
 }
 
 .combat-team-caption {
-  top: 0.15rem;
+  top: 4.75rem;
   border-bottom-color: rgba(226, 186, 97, 0.18);
   background: rgba(5, 9, 14, 0.55);
   backdrop-filter: blur(5px);
@@ -149,11 +149,12 @@
 
 @media (max-width: 1120px), (max-height: 760px) {
   .combat-stage-field {
-    top: 4rem;
-    bottom: 6.1rem;
+    top: 0;
+    bottom: 0;
   }
 
   .combat-team-caption {
+    top: 4.1rem;
     transform: scale(0.88);
   }
 
