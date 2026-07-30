@@ -129,8 +129,8 @@ function formationRow(
   backRow: boolean,
 ): Array<{ index: number; slot: CombatStagePosition }> {
   if (rowCount <= 0) return [];
-  const center = 31;
-  const spread = rowCount === 1 ? 0 : Math.min(32, (rowCount - 1) * 8.25);
+  const center = 29;
+  const spread = rowCount === 1 ? 0 : Math.min(30, (rowCount - 1) * 7.75);
   const step = rowCount === 1 ? 0 : spread / (rowCount - 1);
   const scale = rowScale(rowCount, backRow);
   return Array.from({ length: rowCount }, (_, rowIndex) => {
