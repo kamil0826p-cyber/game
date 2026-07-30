@@ -3,6 +3,7 @@ import type { SupportedLocale } from '../../i18n/localization.service.js';
 
 const dialogueIdentifierSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const questKeySchema = z.string().trim().min(1).max(96).regex(/^[a-z0-9-]+$/);
+const questStageKeySchema = z.string().regex(/^\d+$/);
 const localizedTextSchema = z.union([
   z.string().trim().min(1).max(2_000),
   z.object({ en: z.string().trim().min(1).max(2_000), pl: z.string().trim().min(1).max(2_000) }).strict(),
@@ -24,6 +25,7 @@ const merchantConfigurationSchema = z.object({ itemKeys: z.array(z.string().trim
 const questConfigurationSchema = z.object({
   questKey: questKeySchema,
   rootNodes: z.object({ notStarted: dialogueIdentifierSchema, active: dialogueIdentifierSchema, ready: dialogueIdentifierSchema, rewarded: dialogueIdentifierSchema }).strict(),
+  activeStageNodes: z.record(questStageKeySchema, dialogueIdentifierSchema).optional(),
 }).strict();
 const legacyMerchantDialogueSchema = z.object({
   type: z.literal('MERCHANT'),
@@ -40,7 +42,14 @@ const npcDialogueDefinitionInputSchema = z.object({
   if (!definition.nodes[definition.rootNodeId]) context.addIssue({ code: 'custom', path: ['rootNodeId'], message: 'The root dialogue node does not exist.' });
   if (definition.type === 'MERCHANT' && !definition.merchant) context.addIssue({ code: 'custom', path: ['merchant'], message: 'Merchant dialogue requires merchant configuration.' });
   if (definition.type === 'QUEST' && !definition.quest) context.addIssue({ code: 'custom', path: ['quest'], message: 'Quest dialogue requires quest configuration.' });
-  if (definition.quest) for (const [state, nodeId] of Object.entries(definition.quest.rootNodes)) if (!definition.nodes[nodeId]) context.addIssue({ code: 'custom', path: ['quest', 'rootNodes', state], message: `Quest root node "${nodeId}" does not exist.` });
+  if (definition.quest) {
+    for (const [state, nodeId] of Object.entries(definition.quest.rootNodes)) {
+      if (!definition.nodes[nodeId]) context.addIssue({ code: 'custom', path: ['quest', 'rootNodes', state], message: `Quest root node "${nodeId}" does not exist.` });
+    }
+    for (const [stage, nodeId] of Object.entries(definition.quest.activeStageNodes ?? {})) {
+      if (!definition.nodes[nodeId]) context.addIssue({ code: 'custom', path: ['quest', 'activeStageNodes', stage], message: `Quest stage node "${nodeId}" does not exist.` });
+    }
+  }
   for (const [nodeId, node] of Object.entries(definition.nodes)) for (const choice of node.choices) {
     if (choice.nextNodeId && !definition.nodes[choice.nextNodeId]) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: `Dialogue node "${choice.nextNodeId}" does not exist.` });
     if (choice.action === 'OPEN_MERCHANT' && !definition.merchant) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: 'OPEN_MERCHANT requires a merchant configuration.' });
