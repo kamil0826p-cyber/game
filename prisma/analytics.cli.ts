@@ -9,6 +9,7 @@ const REPORT_VIEWS = {
   economy: 'AnalyticsEconomyDaily',
   rewards: 'AnalyticsRewardFlowsDaily',
   combat: 'AnalyticsCombatHealthDaily',
+  'combat-modes': 'AnalyticsCombatHealthByModeDaily',
   queue: 'AnalyticsQueueHealth',
   anomalies: 'AnalyticsAnomalies',
 } as const;
@@ -91,7 +92,7 @@ async function main(): Promise<void> {
     if (isReportCommand(command)) await report(prisma, REPORT_VIEWS[command], limit);
     else if (command === 'experiment:set') await setExperiment(prisma);
     else if (command === 'experiment:disable') await disableExperiment(prisma);
-    else throw new Error('Usage: npm run analytics -- funnel|retention|economy|rewards|combat|queue|anomalies|experiment:set|experiment:disable');
+    else throw new Error('Usage: npm run analytics -- funnel|retention|economy|rewards|combat|combat-modes|queue|anomalies|experiment:set|experiment:disable');
   } finally {
     await prisma.$disconnect();
   }
