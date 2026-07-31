@@ -11,7 +11,6 @@ import {
   type UpdateCharacterOutfitPayload,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
-import { CharacterService } from '../characters/character.service.js';
 import type { CharacterRosterEntry, CharacterRosterPayload } from './session-lifecycle.service.js';
 import { SessionLifecycleService } from './session-lifecycle.service.js';
 
@@ -19,30 +18,13 @@ import { SessionLifecycleService } from './session-lifecycle.service.js';
 export class CharacterRosterGateway {
   constructor(
     private readonly lifecycle: SessionLifecycleService,
-    private readonly characters: CharacterService,
     private readonly localization: LocalizationService,
   ) {}
 
   @SubscribeMessage('character:list')
   async list(@ConnectedSocket() client: GameSocket): Promise<SocketAck<CharacterRosterPayload>> {
     try {
-      const roster = await this.lifecycle.listCharacters(client);
-      const userId = client.data.userId;
-      if (!userId) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
-      const persisted = await this.characters.listCharactersForCurrentRealm(userId);
-      const genderById = new Map(
-        persisted.map((character) => [character.id, character.gender ?? 'MALE'] as const),
-      );
-      return {
-        ok: true,
-        data: {
-          ...roster,
-          characters: roster.characters.map((character) => ({
-            ...character,
-            gender: genderById.get(character.characterId) ?? 'MALE',
-          })),
-        },
-      };
+      return { ok: true, data: await this.lifecycle.listCharacters(client) };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
