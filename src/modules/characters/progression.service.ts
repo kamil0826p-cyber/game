@@ -5,6 +5,7 @@ import {
   applyExperience,
   calculateBaseStats,
   calculateSkillPointBudget,
+  experienceRequiredForNextLevel,
   requireProgressionRuleset,
   type ExperienceApplicationResult,
   type ProgressionRuleset,
@@ -37,6 +38,13 @@ export class ProgressionService {
       this.maximumLevel,
       this.ruleset,
     );
+  }
+
+  experienceRequiredForNextLevel(level: number): number | null {
+    const safeLevel = this.clampLevel(level);
+    return safeLevel >= this.maximumLevel
+      ? null
+      : experienceRequiredForNextLevel(safeLevel, this.ruleset);
   }
 
   calculateSkillPointBudget(
