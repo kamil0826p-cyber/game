@@ -46,7 +46,7 @@ export async function deployCompiledContent(prisma: PrismaClient, compiled: Comp
       const release = await readContentReleaseByVersion(tx, compiled.manifest.version); if (!release) throw new Error('Activated content release could not be read back.');
       await finishAttempt(tx, operationId, 'SUCCEEDED', diff);
       return { release, diff, idempotent: false };
-    }, { isolationLevel: 'Serializable', timeout: 60_000, maxWait: 10_000 });
+    }, { isolationLevel: 'ReadCommitted', timeout: 60_000, maxWait: 10_000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await finishAttempt(prisma, operationId, 'FAILED', emptyContentDiff(), message).catch(() => undefined);
@@ -76,7 +76,7 @@ export async function rollbackContent(prisma: PrismaClient, version: string, opt
       const release = await readContentReleaseByVersion(tx, version); if (!release) throw new Error('Rolled back content release could not be read back.');
       await finishAttempt(tx, operationId, 'SUCCEEDED', diff);
       return { release, diff, idempotent: false };
-    }, { isolationLevel: 'Serializable', timeout: 60_000, maxWait: 10_000 });
+    }, { isolationLevel: 'ReadCommitted', timeout: 60_000, maxWait: 10_000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await finishAttempt(prisma, operationId, 'FAILED', emptyContentDiff(), message).catch(() => undefined);
