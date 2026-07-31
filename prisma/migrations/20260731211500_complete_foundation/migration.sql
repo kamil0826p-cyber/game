@@ -81,7 +81,7 @@ DECLARE
   quest_key TEXT;
   quest_definition JSONB;
 BEGIN
-  IF NEW."status" NOT IN ('ACTIVE', 'READY', 'COMPLETED')
+  IF NEW."status" NOT IN ('ACTIVE', 'COMPLETED')
      OR COALESCE(NEW."progress", '{}'::jsonb) ? '__contentSnapshot' THEN
     RETURN NEW;
   END IF;
