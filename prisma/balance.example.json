@@ -1,34 +1,229 @@
 {
-  "key": "warrior-vs-mage-3v3",
-  "runs": 5000,
-  "seed": 20260801,
-  "maximumTurns": 250,
-  "teamA": {
-    "size": 3,
-    "fighter": {
-      "key": "warrior-level-10",
-      "characterClass": "WARRIOR",
-      "level": 10,
-      "hp": 260,
-      "energy": 95,
-      "strength": 32,
-      "agility": 16,
-      "intelligence": 8,
-      "armor": 22
+  "key": "reference-compositions-v1",
+  "scenarios": [
+    {
+      "key": "solo-warrior-vs-mage",
+      "runs": 5000,
+      "seed": 20260801,
+      "maximumTurns": 250,
+      "teamA": {
+        "members": [
+          {
+            "count": 1,
+            "fighter": {
+              "key": "warrior-level-10",
+              "characterClass": "WARRIOR",
+              "level": 10,
+              "hp": 260,
+              "energy": 95,
+              "strength": 32,
+              "agility": 16,
+              "intelligence": 8,
+              "armor": 22
+            }
+          }
+        ]
+      },
+      "teamB": {
+        "members": [
+          {
+            "count": 1,
+            "fighter": {
+              "key": "mage-level-10",
+              "characterClass": "MAGE",
+              "level": 10,
+              "hp": 175,
+              "energy": 190,
+              "strength": 8,
+              "agility": 18,
+              "intelligence": 36,
+              "armor": 10
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "mixed-3v3",
+      "runs": 5000,
+      "seed": 20260802,
+      "maximumTurns": 350,
+      "teamA": {
+        "members": [
+          {
+            "count": 1,
+            "fighter": {
+              "key": "warrior-level-10",
+              "characterClass": "WARRIOR",
+              "level": 10,
+              "hp": 260,
+              "energy": 95,
+              "strength": 32,
+              "agility": 16,
+              "intelligence": 8,
+              "armor": 22
+            }
+          },
+          {
+            "count": 1,
+            "fighter": {
+              "key": "mage-level-10",
+              "characterClass": "MAGE",
+              "level": 10,
+              "hp": 175,
+              "energy": 190,
+              "strength": 8,
+              "agility": 18,
+              "intelligence": 36,
+              "armor": 10
+            }
+          },
+          {
+            "count": 1,
+            "fighter": {
+              "key": "archer-level-10",
+              "characterClass": "ARCHER",
+              "level": 10,
+              "hp": 205,
+              "energy": 130,
+              "strength": 12,
+              "agility": 34,
+              "intelligence": 10,
+              "armor": 14
+            }
+          }
+        ]
+      },
+      "teamB": {
+        "members": [
+          {
+            "count": 2,
+            "fighter": {
+              "key": "warrior-level-10",
+              "characterClass": "WARRIOR",
+              "level": 10,
+              "hp": 260,
+              "energy": 95,
+              "strength": 32,
+              "agility": 16,
+              "intelligence": 8,
+              "armor": 22
+            }
+          },
+          {
+            "count": 1,
+            "fighter": {
+              "key": "archer-level-10",
+              "characterClass": "ARCHER",
+              "level": 10,
+              "hp": 205,
+              "energy": 130,
+              "strength": 12,
+              "agility": 34,
+              "intelligence": 10,
+              "armor": 14
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "mixed-10v10",
+      "runs": 2000,
+      "seed": 20260803,
+      "maximumTurns": 1000,
+      "teamA": {
+        "members": [
+          {
+            "count": 4,
+            "fighter": {
+              "key": "warrior-level-10",
+              "characterClass": "WARRIOR",
+              "level": 10,
+              "hp": 260,
+              "energy": 95,
+              "strength": 32,
+              "agility": 16,
+              "intelligence": 8,
+              "armor": 22
+            }
+          },
+          {
+            "count": 3,
+            "fighter": {
+              "key": "mage-level-10",
+              "characterClass": "MAGE",
+              "level": 10,
+              "hp": 175,
+              "energy": 190,
+              "strength": 8,
+              "agility": 18,
+              "intelligence": 36,
+              "armor": 10
+            }
+          },
+          {
+            "count": 3,
+            "fighter": {
+              "key": "archer-level-10",
+              "characterClass": "ARCHER",
+              "level": 10,
+              "hp": 205,
+              "energy": 130,
+              "strength": 12,
+              "agility": 34,
+              "intelligence": 10,
+              "armor": 14
+            }
+          }
+        ]
+      },
+      "teamB": {
+        "members": [
+          {
+            "count": 3,
+            "fighter": {
+              "key": "warrior-level-10",
+              "characterClass": "WARRIOR",
+              "level": 10,
+              "hp": 260,
+              "energy": 95,
+              "strength": 32,
+              "agility": 16,
+              "intelligence": 8,
+              "armor": 22
+            }
+          },
+          {
+            "count": 4,
+            "fighter": {
+              "key": "mage-level-10",
+              "characterClass": "MAGE",
+              "level": 10,
+              "hp": 175,
+              "energy": 190,
+              "strength": 8,
+              "agility": 18,
+              "intelligence": 36,
+              "armor": 10
+            }
+          },
+          {
+            "count": 3,
+            "fighter": {
+              "key": "archer-level-10",
+              "characterClass": "ARCHER",
+              "level": 10,
+              "hp": 205,
+              "energy": 130,
+              "strength": 12,
+              "agility": 34,
+              "intelligence": 10,
+              "armor": 14
+            }
+          }
+        ]
+      }
     }
-  },
-  "teamB": {
-    "size": 3,
-    "fighter": {
-      "key": "mage-level-10",
-      "characterClass": "MAGE",
-      "level": 10,
-      "hp": 175,
-      "energy": 190,
-      "strength": 8,
-      "agility": 18,
-      "intelligence": 36,
-      "armor": 10
-    }
-  }
+  ]
 }
