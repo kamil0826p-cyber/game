@@ -106,6 +106,10 @@ export class CombatTelegraphService {
   }
 
   decorate(snapshot: CombatSnapshot): CombatSnapshotWithTelegraphs {
+    if (snapshot.status !== 'ACTIVE') {
+      this.clear(snapshot.combatId);
+      return { ...snapshot, telegraphs: [] };
+    }
     return {
       ...snapshot,
       telegraphs: this.list(snapshot.combatId),
