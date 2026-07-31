@@ -19,8 +19,11 @@ function clientVersion(client: GameSocket): string | undefined {
 function participantFacts(snapshot: CombatSnapshot): Array<Record<string, unknown>> {
   return snapshot.participants.map((participant) => ({
     actorId: participant.actorId,
+    teamId: participant.teamId,
+    withdrawn: participant.withdrawn,
     ...(participant.characterId ? { characterId: participant.characterId } : {}),
     kind: participant.kind,
+    characterClass: participant.characterClass,
     level: participant.level,
     hp: participant.hp,
     maxHp: participant.maxHp,
