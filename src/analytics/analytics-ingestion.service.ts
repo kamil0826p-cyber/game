@@ -9,6 +9,14 @@ import { CRITICAL_ANALYTICS_EVENTS, deterministicSample, toAnalyticsEnvelope } f
 import { ANALYTICS_CONSUMER } from './analytics.types.js';
 import { AnalyticsProviderService } from './analytics-provider.service.js';
 
+const ANALYTICS_QUEUE_LOCK_KEY = 0x414e414c59544943n;
+
+class AnalyticsQueueFullError extends Error {
+  constructor() {
+    super('Analytics delivery queue is at capacity.');
+  }
+}
+
 @Injectable()
 export class AnalyticsIngestionService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(AnalyticsIngestionService.name);
@@ -56,13 +64,7 @@ export class AnalyticsIngestionService implements OnApplicationBootstrap, OnAppl
   }
 
   private async ingestBatch(): Promise<number> {
-    if (this.provider.active) {
-      const pending = await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
-        SELECT COUNT(*)::bigint AS "count" FROM "AnalyticsDelivery"
-        WHERE "status" IN ('PENDING', 'PROCESSING', 'FAILED')
-      `);
-      if (Number(pending[0]?.count ?? 0) >= this.config.values.ANALYTICS_QUEUE_CAPACITY) return 0;
-    }
+    if (this.provider.active && await this.queueIsFull()) return 0;
 
     const rows = await this.prisma.$queryRaw<DomainEventRecord[]>(Prisma.sql`
       SELECT event.*
@@ -76,54 +78,78 @@ export class AnalyticsIngestionService implements OnApplicationBootstrap, OnAppl
 
     let processed = 0;
     for (const event of rows) {
-      const result = await this.events.consumeExactlyOnce(ANALYTICS_CONSUMER, event.id, async (tx, current) => {
-        const sampled = CRITICAL_ANALYTICS_EVENTS.has(current.type) ||
-          deterministicSample(current.id, this.config.values.ANALYTICS_SAMPLE_BASIS_POINTS);
-        if (!sampled) return false;
+      try {
+        const result = await this.events.consumeExactlyOnce(ANALYTICS_CONSUMER, event.id, async (tx, current) => {
+          const sampled = CRITICAL_ANALYTICS_EVENTS.has(current.type) ||
+            deterministicSample(current.id, this.config.values.ANALYTICS_SAMPLE_BASIS_POINTS);
+          if (!sampled) return false;
 
-        let accountId = (current.payload as Record<string, unknown>).accountId;
-        if (typeof accountId !== 'string') accountId = undefined;
-        if (!accountId && current.actorCharacterId) {
-          const character = await tx.character.findUnique({
-            where: { id: current.actorCharacterId },
-            select: { userId: true },
+          const provider = this.provider.active;
+          if (provider) {
+            await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(${ANALYTICS_QUEUE_LOCK_KEY})`);
+            const pending = await tx.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+              SELECT COUNT(*)::bigint AS "count" FROM "AnalyticsDelivery"
+              WHERE "status" IN ('PENDING', 'PROCESSING', 'FAILED')
+            `);
+            if (Number(pending[0]?.count ?? 0) >= this.config.values.ANALYTICS_QUEUE_CAPACITY) {
+              throw new AnalyticsQueueFullError();
+            }
+          }
+
+          let accountId = (current.payload as Record<string, unknown>).accountId;
+          if (typeof accountId !== 'string') accountId = undefined;
+          if (!accountId && current.actorCharacterId) {
+            const character = await tx.character.findUnique({
+              where: { id: current.actorCharacterId },
+              select: { userId: true },
+            });
+            accountId = character?.userId;
+          }
+          const envelope = toAnalyticsEnvelope({
+            event: current,
+            accountId: typeof accountId === 'string' ? accountId : undefined,
+            contentVersion: this.config.values.GAME_CONTENT_VERSION,
           });
-          accountId = character?.userId;
-        }
-        const envelope = toAnalyticsEnvelope({
-          event: current,
-          accountId: typeof accountId === 'string' ? accountId : undefined,
-          contentVersion: this.config.values.GAME_CONTENT_VERSION,
-        });
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO "AnalyticsEvent" (
-            "id", "eventId", "eventName", "envelopeVersion", "sourceType", "sourceSchemaVersion",
-            "accountId", "characterId", "realmId", "mapId", "regionKey", "sessionId", "clientVersion",
-            "contentVersion", "operationId", "correlationId", "occurredAt", "ingestedAt", "properties"
-          ) VALUES (
-            ${randomUUID()}::uuid, ${current.id}::uuid, ${envelope.eventName}, ${envelope.envelopeVersion},
-            ${current.type}, ${current.schemaVersion}, ${envelope.accountId ?? null}::uuid,
-            ${envelope.characterId ?? null}::uuid, ${envelope.realmId ?? null}::uuid,
-            ${envelope.mapId ?? null}::uuid, ${envelope.regionKey ?? null}, ${envelope.sessionId ?? null},
-            ${envelope.clientVersion ?? null}, ${envelope.contentVersion}, ${envelope.operationId},
-            ${envelope.correlationId}, ${current.occurredAt}, NOW(), ${JSON.stringify(envelope.properties)}::jsonb
-          ) ON CONFLICT ("eventId") DO NOTHING
-        `);
-        const provider = this.provider.active;
-        if (provider) {
           await tx.$executeRaw(Prisma.sql`
-            INSERT INTO "AnalyticsDelivery" (
-              "id", "analyticsEventId", "provider", "status", "attempts", "nextAttemptAt", "createdAt", "updatedAt"
-            ) SELECT ${randomUUID()}::uuid, "id", ${provider.kind}, 'PENDING', 0, NOW(), NOW(), NOW()
-            FROM "AnalyticsEvent" WHERE "eventId" = ${current.id}::uuid
-            ON CONFLICT ("analyticsEventId", "provider") DO NOTHING
+            INSERT INTO "AnalyticsEvent" (
+              "id", "eventId", "eventName", "envelopeVersion", "sourceType", "sourceSchemaVersion",
+              "accountId", "characterId", "realmId", "mapId", "regionKey", "sessionId", "clientVersion",
+              "contentVersion", "operationId", "correlationId", "occurredAt", "ingestedAt", "properties"
+            ) VALUES (
+              ${randomUUID()}::uuid, ${current.id}::uuid, ${envelope.eventName}, ${envelope.envelopeVersion},
+              ${current.type}, ${current.schemaVersion}, ${envelope.accountId ?? null}::uuid,
+              ${envelope.characterId ?? null}::uuid, ${envelope.realmId ?? null}::uuid,
+              ${envelope.mapId ?? null}::uuid, ${envelope.regionKey ?? null}, ${envelope.sessionId ?? null},
+              ${envelope.clientVersion ?? null}, ${envelope.contentVersion}, ${envelope.operationId},
+              ${envelope.correlationId}, ${current.occurredAt}, NOW(), ${JSON.stringify(envelope.properties)}::jsonb
+            ) ON CONFLICT ("eventId") DO NOTHING
           `);
-        }
-        return true;
-      });
-      if (result.processed) processed += 1;
+          if (provider) {
+            await tx.$executeRaw(Prisma.sql`
+              INSERT INTO "AnalyticsDelivery" (
+                "id", "analyticsEventId", "provider", "status", "attempts", "nextAttemptAt", "createdAt", "updatedAt"
+              ) SELECT ${randomUUID()}::uuid, "id", ${provider.kind}, 'PENDING', 0, NOW(), NOW(), NOW()
+              FROM "AnalyticsEvent" WHERE "eventId" = ${current.id}::uuid
+              ON CONFLICT ("analyticsEventId", "provider") DO NOTHING
+            `);
+          }
+          return true;
+        });
+        if (result.processed) processed += 1;
+      } catch (error) {
+        if (error instanceof AnalyticsQueueFullError) break;
+        throw error;
+      }
     }
     return processed;
+  }
+
+  private async queueIsFull(): Promise<boolean> {
+    const pending = await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS "count" FROM "AnalyticsDelivery"
+      WHERE "status" IN ('PENDING', 'PROCESSING', 'FAILED')
+    `);
+    return Number(pending[0]?.count ?? 0) >= this.config.values.ANALYTICS_QUEUE_CAPACITY;
   }
 
   private async cleanup(): Promise<void> {
