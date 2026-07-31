@@ -42,7 +42,11 @@ export class MovementService {
     requestId?: string,
   ): Promise<MovementAttemptResult> {
     if (this.worldState.getByCharacterId(session.characterId)?.connectionId !== session.connectionId) {
-      return this.reject(session, new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady'), requestId);
+      return this.reject(
+        session,
+        new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady'),
+        requestId,
+      );
     }
 
     const attemptedAt = Date.now();
@@ -61,19 +65,45 @@ export class MovementService {
     const stepY = session.y + delta.y;
 
     if (!this.maps.isInside(sourceMap, stepX, stepY)) {
-      return this.reject(session, new GameError(GAME_ERROR_CODES.MOVE_OUT_OF_BOUNDS, 'errors.movement.outOfBounds'), requestId);
+      return this.reject(
+        session,
+        new GameError(
+          GAME_ERROR_CODES.MOVE_OUT_OF_BOUNDS,
+          'errors.movement.outOfBounds',
+        ),
+        requestId,
+      );
     }
     if (this.maps.isCollision(sourceMap, stepX, stepY)) {
-      return this.reject(session, new GameError(GAME_ERROR_CODES.MOVE_COLLISION, 'errors.movement.collision'), requestId);
+      return this.reject(
+        session,
+        new GameError(GAME_ERROR_CODES.MOVE_COLLISION, 'errors.movement.collision'),
+        requestId,
+      );
     }
     if (await this.npcs.isTileOccupied(sourceMap.id, stepX, stepY)) {
-      return this.reject(session, new GameError(GAME_ERROR_CODES.MOVE_TILE_OCCUPIED, 'errors.movement.occupied', { occupantType: 'NPC' }), requestId);
+      return this.reject(
+        session,
+        new GameError(
+          GAME_ERROR_CODES.MOVE_TILE_OCCUPIED,
+          'errors.movement.occupied',
+          { occupantType: 'NPC' },
+        ),
+        requestId,
+      );
     }
     if (
       sourceMap.zoneType !== 'SAFE' &&
       this.worldState.isOccupied(sourceMap.id, stepX, stepY, session.characterId)
     ) {
-      return this.reject(session, new GameError(GAME_ERROR_CODES.MOVE_TILE_OCCUPIED, 'errors.movement.occupied'), requestId);
+      return this.reject(
+        session,
+        new GameError(
+          GAME_ERROR_CODES.MOVE_TILE_OCCUPIED,
+          'errors.movement.occupied',
+        ),
+        requestId,
+      );
     }
 
     const portal = this.maps.getPortalAt(sourceMap, stepX, stepY);
@@ -85,17 +115,44 @@ export class MovementService {
       destinationMap = await this.maps.getMap(portal.destinationMapId);
       destinationX = portal.targetX;
       destinationY = portal.targetY;
-      if (!this.maps.isInside(destinationMap, destinationX, destinationY) || this.maps.isCollision(destinationMap, destinationX, destinationY)) {
-        return this.reject(session, new GameError(GAME_ERROR_CODES.PORTAL_INVALID, 'errors.portal.invalid'), requestId);
+      if (
+        !this.maps.isInside(destinationMap, destinationX, destinationY) ||
+        this.maps.isCollision(destinationMap, destinationX, destinationY)
+      ) {
+        return this.reject(
+          session,
+          new GameError(GAME_ERROR_CODES.PORTAL_INVALID, 'errors.portal.invalid'),
+          requestId,
+        );
       }
       if (await this.npcs.isTileOccupied(destinationMap.id, destinationX, destinationY)) {
-        return this.reject(session, new GameError(GAME_ERROR_CODES.MOVE_TILE_OCCUPIED, 'errors.movement.occupied', { occupantType: 'NPC' }), requestId);
+        return this.reject(
+          session,
+          new GameError(
+            GAME_ERROR_CODES.MOVE_TILE_OCCUPIED,
+            'errors.movement.occupied',
+            { occupantType: 'NPC' },
+          ),
+          requestId,
+        );
       }
       if (
         destinationMap.zoneType !== 'SAFE' &&
-        this.worldState.isOccupied(destinationMap.id, destinationX, destinationY, session.characterId)
+        this.worldState.isOccupied(
+          destinationMap.id,
+          destinationX,
+          destinationY,
+          session.characterId,
+        )
       ) {
-        return this.reject(session, new GameError(GAME_ERROR_CODES.MOVE_TILE_OCCUPIED, 'errors.movement.occupied'), requestId);
+        return this.reject(
+          session,
+          new GameError(
+            GAME_ERROR_CODES.MOVE_TILE_OCCUPIED,
+            'errors.movement.occupied',
+          ),
+          requestId,
+        );
       }
     }
 
@@ -107,7 +164,12 @@ export class MovementService {
       y: destinationY,
       direction,
     });
-    const nearbyPlayers = this.visibility.afterMovement(session, previous, Boolean(portal), committedAt);
+    const nearbyPlayers = this.visibility.afterMovement(
+      session,
+      previous,
+      Boolean(portal),
+      committedAt,
+    );
 
     const payload: MovementCommittedPayload = {
       requestId,
@@ -118,7 +180,12 @@ export class MovementService {
       direction: session.direction,
       serverTime: committedAt,
       portalTransition: portal
-        ? { sourceMapId: sourceMap.id, destinationMapId: destinationMap.id, targetX: destinationX, targetY: destinationY }
+        ? {
+            sourceMapId: sourceMap.id,
+            destinationMapId: destinationMap.id,
+            targetX: destinationX,
+            targetY: destinationY,
+          }
         : undefined,
     };
 
@@ -137,7 +204,11 @@ export class MovementService {
       void this.persistence
         .persistSnapshot(snapshot, 'portal')
         .then(() => {
-          this.worldState.markPersisted(snapshot.characterId, snapshot.connectionId, snapshot.revision);
+          this.worldState.markPersisted(
+            snapshot.characterId,
+            snapshot.connectionId,
+            snapshot.revision,
+          );
         })
         .catch((error: unknown) => {
           this.logger.error(
