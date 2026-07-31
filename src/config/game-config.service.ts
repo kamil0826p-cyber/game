@@ -17,6 +17,11 @@ const integerFromEnvironment = (defaultValue: number, minimum: number, maximum: 
     return Number(value);
   }, z.number().int().min(minimum).max(maximum));
 
+const optionalUrl = z.preprocess(
+  (value: unknown) => (value === undefined || value === '' ? undefined : value),
+  z.url().optional(),
+);
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: integerFromEnvironment(3000, 1, 65535),
@@ -39,6 +44,20 @@ const environmentSchema = z.object({
   SOCKET_PING_INTERVAL_MS: integerFromEnvironment(25_000, 5000, 120_000),
   SOCKET_PING_TIMEOUT_MS: integerFromEnvironment(20_000, 5000, 120_000),
 
+  MAX_CHARACTER_LEVEL: integerFromEnvironment(100, 1, 1000),
+  PROGRESSION_RULESET_VERSION: z.string().trim().min(1).max(64).default('v1'),
+  COMBAT_ROUND_MODE: z.enum(['CLASSIC', 'SIMULTANEOUS']).default('CLASSIC'),
+  COMBAT_TURN_TIMEOUT_MS: integerFromEnvironment(12_000, 3000, 60_000),
+  COMBAT_MAX_TEAM_SIZE: integerFromEnvironment(5, 1, 10),
+
+  TELEMETRY_ENABLED: booleanFromEnvironment(false),
+  TELEMETRY_ENDPOINT: optionalUrl,
+  TELEMETRY_BATCH_SIZE: integerFromEnvironment(100, 1, 1000),
+  TELEMETRY_MAX_QUEUE: integerFromEnvironment(10_000, 100, 100_000),
+  TELEMETRY_FLUSH_MS: integerFromEnvironment(5000, 250, 60_000),
+  TELEMETRY_REQUEST_TIMEOUT_MS: integerFromEnvironment(5000, 250, 30_000),
+  TELEMETRY_SHUTDOWN_TIMEOUT_MS: integerFromEnvironment(3000, 100, 30_000),
+
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_BASE64: z.string().optional(),
@@ -59,6 +78,9 @@ export class GameConfigService {
 
     if (this.environment.FOV_HALF_WIDTH > this.environment.MAX_FOV_HALF_WIDTH) throw new Error('FOV_HALF_WIDTH cannot exceed MAX_FOV_HALF_WIDTH.');
     if (this.environment.FOV_HALF_HEIGHT > this.environment.MAX_FOV_HALF_HEIGHT) throw new Error('FOV_HALF_HEIGHT cannot exceed MAX_FOV_HALF_HEIGHT.');
+    if (this.environment.TELEMETRY_ENABLED && !this.environment.TELEMETRY_ENDPOINT) {
+      throw new Error('TELEMETRY_ENDPOINT is required when TELEMETRY_ENABLED is true.');
+    }
   }
 
   get values(): Readonly<GameEnvironment> {
