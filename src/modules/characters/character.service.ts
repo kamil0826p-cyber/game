@@ -50,12 +50,27 @@ export class CharacterService {
   ) {}
 
   async synchronizeFirebaseUser(auth: AuthContext): Promise<FirebaseUserRecord> {
-    const user = await this.prisma.user.upsert({
-      where: { firebaseUid: auth.firebaseUid },
-      create: { firebaseUid: auth.firebaseUid, email: auth.email, displayName: auth.displayName },
-      update: { email: auth.email, displayName: auth.displayName },
-      select: { id: true, firebaseUid: true, email: true, displayName: true, role: true },
-    });
+    let created = false;
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          firebaseUid: auth.firebaseUid,
+          email: auth.email,
+          displayName: auth.displayName,
+        },
+        select: { id: true, firebaseUid: true, email: true, displayName: true, role: true },
+      });
+      created = true;
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) throw error;
+      user = await this.prisma.user.update({
+        where: { firebaseUid: auth.firebaseUid },
+        data: { email: auth.email, displayName: auth.displayName },
+        select: { id: true, firebaseUid: true, email: true, displayName: true, role: true },
+      });
+    }
+    if (created) this.telemetry.emit('account_registered', { userId: user.id }, {});
     return {
       id: user.id,
       firebaseUid: user.firebaseUid,
@@ -164,49 +179,6 @@ export class CharacterService {
       }
       throw error;
     }
-  }
-
-  async migrateCharacterProgression(
-    userId: string,
-    characterId: string,
-  ): Promise<PersistedCharacterState> {
-    const updated = await this.prisma.$transaction(async (transaction) => {
-      await transaction.$queryRaw`
-        SELECT "id"
-        FROM "Character"
-        WHERE "id" = ${characterId}::uuid
-        FOR UPDATE
-      `;
-      const character = await transaction.character.findFirst({
-        where: { id: characterId, userId },
-      });
-      if (!character) {
-        throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
-      }
-
-      const level = this.progression.clampLevel(character.level);
-      const stats = this.progression.calculateBaseStats(character.class, level);
-      const hpRatio = character.maxHp > 0 ? character.hp / character.maxHp : 1;
-      const energyRatio = character.maxEnergy > 0 ? character.energy / character.maxEnergy : 1;
-      return transaction.character.update({
-        where: { id: character.id },
-        data: {
-          level,
-          experience: level >= this.progression.maximumLevel ? 0 : Math.max(0, character.experience),
-          maxHp: stats.maxHp,
-          hp: Math.max(0, Math.min(stats.maxHp, Math.round(stats.maxHp * hpRatio))),
-          maxEnergy: stats.maxEnergy,
-          energy: Math.max(0, Math.min(stats.maxEnergy, Math.round(stats.maxEnergy * energyRatio))),
-          strength: stats.strength,
-          agility: stats.agility,
-          intelligence: stats.intelligence,
-          armor: stats.armor,
-          stateVersion: { increment: 1 },
-          lastSavedAt: new Date(),
-        },
-      });
-    });
-    return this.toPersistedState(updated);
   }
 
   async updateOutfit(
