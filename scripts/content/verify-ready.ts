@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Pool } from 'pg';
-import { compileContentSnapshot } from '../../src/content/content-validator.js';
+import { compileContentPackage } from '../../src/content/content-package.js';
 import { loadDeployedContentSnapshot } from '../../src/content/deployed-content.repository.js';
 import { calculateLegacyContentHash, CONTENT_PATCH_ID } from './content-sources.js';
 
@@ -35,7 +35,7 @@ const main = async (): Promise<void> => {
       );
     }
 
-    const compiled = compileContentSnapshot(await loadDeployedContentSnapshot(client));
+    const compiled = compileContentPackage(await loadDeployedContentSnapshot(client));
     console.log(`Content readiness passed (${CONTENT_PATCH_ID}, deployed hash ${compiled.hash}).`);
   } finally {
     client.release();
