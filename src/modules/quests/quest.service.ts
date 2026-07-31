@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import type { CharacterClass } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import type { SupportedLocale } from '../../i18n/localization.service.js';
-import { applyExperience, statGrowthForLevels } from '../mobs/character-progression.js';
+import { TelemetryService } from '../../telemetry/telemetry.service.js';
+import { ProgressionService } from '../characters/progression.service.js';
 import { parseNpcDialogueDefinition } from '../npcs/npc-dialogue.js';
-import { skillPointsGainedBetweenLevels } from '../skills/skill.rules.js';
+import { skillsForClass } from '../skills/skill.catalog.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import {
   areQuestStepsComplete,
@@ -59,7 +61,11 @@ function progressChanged(previous: QuestProgressState, next: QuestProgressState)
 
 @Injectable()
 export class QuestService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly progression: ProgressionService,
+    private readonly telemetry: TelemetryService,
+  ) {}
 
   async getLog(characterId: string, locale: SupportedLocale, mapId: string): Promise<QuestLogSnapshot> {
     const [quests, inventoryCounts, npcRecords] = await Promise.all([
@@ -107,7 +113,7 @@ export class QuestService {
   }
 
   async accept(session: PlayerSession, questKey: string): Promise<QuestMutationResult> {
-    const state = await this.prisma.$transaction(async (transaction) => {
+    const result = await this.prisma.$transaction(async (transaction) => {
       const quest = await transaction.questDefinition.findUnique({ where: { key: questKey } });
       if (!quest) throw new GameError(GAME_ERROR_CODES.QUEST_NOT_FOUND, 'errors.quests.notFound');
       const { steps } = this.requireDefinition(quest);
@@ -118,13 +124,20 @@ export class QuestService {
         where: { characterId_questDefinitionId: { characterId: session.characterId, questDefinitionId: quest.id } },
       });
       if (existing?.status === 'REWARDED' || existing?.status === 'COMPLETED') throw new GameError(GAME_ERROR_CODES.QUEST_ALREADY_COMPLETED, 'errors.quests.alreadyCompleted');
-      if (existing?.status === 'ACTIVE') return 'ACTIVE' as const;
+      if (existing?.status === 'ACTIVE') return { state: 'ACTIVE' as const, started: false };
       const progress = questProgressJson(emptyQuestProgress(steps));
       if (existing) await transaction.characterQuest.update({ where: { id: existing.id }, data: { status: 'ACTIVE', progress, startedAt: new Date(), completedAt: null } });
       else await transaction.characterQuest.create({ data: { characterId: session.characterId, questDefinitionId: quest.id, status: 'ACTIVE', progress, startedAt: new Date() } });
-      return 'ACTIVE' as const;
+      return { state: 'ACTIVE' as const, started: true };
     });
-    return { questKey, state, completed: false };
+    if (result.started) {
+      this.telemetry.emit('quest_started', {
+        userId: session.userId,
+        characterId: session.characterId,
+        realmId: session.realmId,
+      }, { questKey });
+    }
+    return { questKey, state: result.state, completed: false };
   }
 
   async turnIn(session: PlayerSession, questKey: string, locale: SupportedLocale): Promise<QuestMutationResult> {
@@ -155,23 +168,47 @@ export class QuestService {
       });
       if (claimed.count !== 1) throw new GameError(GAME_ERROR_CODES.QUEST_ALREADY_COMPLETED, 'errors.quests.alreadyCompleted');
       await this.consumeRequiredItems(transaction, items, consumableRequirements(steps));
-      const progression = applyExperience(character.level, character.experience, rewards.experience);
-      const growth = statGrowthForLevels(progression.levelsGained);
-      const maxHp = character.maxHp + growth.maxHp;
-      const maxEnergy = character.maxEnergy + growth.maxEnergy;
+      const characterClass = character.class as CharacterClass;
+      const progression = this.progression.applyExperience(character.level, character.experience, rewards.experience);
+      const previousBase = this.progression.calculateBaseStats(characterClass, character.level);
+      const nextBase = this.progression.calculateBaseStats(characterClass, progression.level);
+      const growth = {
+        maxHp: nextBase.maxHp - previousBase.maxHp,
+        maxEnergy: nextBase.maxEnergy - previousBase.maxEnergy,
+        strength: nextBase.strength - previousBase.strength,
+        agility: nextBase.agility - previousBase.agility,
+        intelligence: nextBase.intelligence - previousBase.intelligence,
+        armor: nextBase.armor - previousBase.armor,
+      };
+      const maxHp = Math.max(1, character.maxHp + growth.maxHp);
+      const maxEnergy = Math.max(0, character.maxEnergy + growth.maxEnergy);
+      const capacity = skillsForClass(characterClass).reduce((sum, skill) => sum + skill.maxRank, 0);
+      const beforePoints = this.progression.calculateSkillPointBudget(character.level, 0, capacity).earned;
+      const afterPoints = this.progression.calculateSkillPointBudget(progression.level, 0, capacity).earned;
       const updated = await transaction.character.update({
         where: { id: character.id },
         data: {
           level: progression.level, experience: progression.experience,
-          hp: Math.min(maxHp, character.hp + growth.maxHp), maxHp,
-          energy: Math.min(maxEnergy, character.energy + growth.maxEnergy), maxEnergy,
-          strength: character.strength + growth.strength, agility: character.agility + growth.agility,
-          intelligence: character.intelligence + growth.intelligence, armor: character.armor + growth.armor,
+          hp: Math.min(maxHp, Math.max(0, character.hp + Math.max(0, growth.maxHp))), maxHp,
+          energy: Math.min(maxEnergy, Math.max(0, character.energy + Math.max(0, growth.maxEnergy))), maxEnergy,
+          strength: Math.max(0, character.strength + growth.strength), agility: Math.max(0, character.agility + growth.agility),
+          intelligence: Math.max(0, character.intelligence + growth.intelligence), armor: Math.max(0, character.armor + growth.armor),
           silver: { increment: rewards.silver }, stateVersion: { increment: 1 }, lastSavedAt: new Date(),
         },
       });
       if (rewards.silver > 0) await this.writeCurrencyLedger(transaction, characterQuest.id, character.id, rewards.silver, updated.silver, questKey);
-      return { completed: true as const, state: 'REWARDED' as const, updated, reward: { ...rewards, levelsGained: progression.levelsGained, skillPointsGained: skillPointsGainedBetweenLevels(character.level, progression.level) } };
+      return {
+        completed: true as const,
+        state: 'REWARDED' as const,
+        updated,
+        startedAt: characterQuest.startedAt?.getTime(),
+        reward: {
+          ...rewards,
+          experience: progression.appliedExperience,
+          levelsGained: progression.levelsGained,
+          skillPointsGained: Math.max(0, afterPoints - beforePoints),
+        },
+      };
     });
     if (!result.completed) return { questKey, state: result.state, completed: false };
     const updated = result.updated;
@@ -179,6 +216,26 @@ export class QuestService {
     session.stateRevision = Math.max(session.stateRevision + 1, updated.stateVersion);
     session.persistedRevision = Math.max(session.persistedRevision, updated.stateVersion);
     session.dirty = false;
+    this.telemetry.emit('quest_completed', {
+      userId: session.userId,
+      characterId: session.characterId,
+      realmId: session.realmId,
+    }, {
+      questKey,
+      ...(result.startedAt ? { durationMs: Math.max(0, Date.now() - result.startedAt) } : {}),
+    });
+    if (result.reward.silver > 0) {
+      this.telemetry.emit('currency_changed', {
+        userId: session.userId,
+        characterId: session.characterId,
+        realmId: session.realmId,
+      }, {
+        currency: 'SILVER',
+        direction: 'CREDIT',
+        amount: result.reward.silver,
+        reason: 'QUEST_REWARD',
+      });
+    }
     return { questKey, state: 'REWARDED', completed: true, reward: result.reward, character: { level: updated.level, experience: updated.experience, gold: updated.gold, silver: updated.silver } };
   }
 
