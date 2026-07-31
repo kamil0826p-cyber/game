@@ -20,11 +20,13 @@ import { RealmModule } from './modules/realm/realm.module.js';
 import { RealtimeModule } from './modules/realtime/realtime.module.js';
 import { SkillModule } from './modules/skills/skill.module.js';
 import { WorldModule } from './modules/world/world.module.js';
+import { TelemetryModule } from './telemetry/telemetry.module.js';
 
 @Module({
   imports: [
     GameConfigModule,
     DatabaseModule,
+    TelemetryModule,
     LocalizationModule,
     AuthModule,
     RealmModule,
