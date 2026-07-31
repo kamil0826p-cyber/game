@@ -3,8 +3,10 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   static:
@@ -12,7 +14,6 @@ jobs:
     timeout-minutes: 20
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
       CONTENT_READINESS_CHECK: "false"
       OUTBOX_ENABLED: "false"
     steps:
@@ -20,6 +21,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
       - run: npm ci
       - run: npm --prefix frontend ci
       - run: npm run prisma:validate
@@ -31,7 +36,7 @@ jobs:
 
   database:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -55,11 +60,17 @@ jobs:
       GAME_REALM_INSTANCE_ID: ci-primary
       CONTENT_READINESS_CHECK: "false"
       OUTBOX_ENABLED: "false"
+      RUN_DB_TESTS: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
+          cache: npm
       - run: npm ci
-      - run: npm run db:prepare
+      - run: npm run prisma:validate
+      - run: npm run prisma:generate
+      - run: npm run prisma:migrate:deploy
+      - run: npm run content:deploy -- --operation-id=ci-${{ github.sha }} --author=github-actions
       - run: npm run content:dry-run
+      - run: npm run test:integration

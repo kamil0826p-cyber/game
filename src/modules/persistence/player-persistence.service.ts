@@ -161,11 +161,15 @@ export class PlayerPersistenceService {
       mapId: snapshot.mapId,
       occurredAt: new Date(snapshot.capturedAt),
       payload: {
-        characterId: snapshot.characterId,
+        combatId: operationId,
+        participants: [{
+          characterId: snapshot.characterId,
+          hp: snapshot.hp,
+          energy: snapshot.energy,
+          withdrawn: false,
+        }],
         revision: snapshot.revision,
         combatState: snapshot.combatState,
-        hp: snapshot.hp,
-        energy: snapshot.energy,
         position: { x: snapshot.x, y: snapshot.y },
         contributions: finished
           ? [{
@@ -173,7 +177,7 @@ export class PlayerPersistenceService {
               subjectId: snapshot.characterId,
               kind: 'COMBAT_PARTICIPATION',
               amount: 1,
-              metadata: { mapId: snapshot.mapId },
+              metadata: { mapId: snapshot.mapId, eligible: true, actions: 1 },
             }]
           : [],
       },
