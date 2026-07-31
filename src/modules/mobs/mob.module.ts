@@ -9,14 +9,32 @@ import { TradeModule } from '../player/trade/trade.module.js';
 import { QuestModule } from '../quests/quest.module.js';
 import { SkillModule } from '../skills/skill.module.js';
 import { WorldModule } from '../world/world.module.js';
+import { MobAiPlannerService } from './mob-ai-planner.service.js';
 import { MobCoordinatorService } from './mob-coordinator.service.js';
 import { MobGateway } from './mob.gateway.js';
 import { MobRewardService } from './mob-reward.service.js';
 import { PveCombatService } from './pve-combat.service.js';
 
 @Module({
-  imports: [CombatModule, GroupModule, MapModule, MovementModule, PersistenceModule, TradeModule, QuestModule, SkillModule, WorldModule],
-  providers: [KeyedSerialExecutor, MobRewardService, MobCoordinatorService, PveCombatService, MobGateway],
+  imports: [
+    CombatModule,
+    GroupModule,
+    MapModule,
+    MovementModule,
+    PersistenceModule,
+    TradeModule,
+    QuestModule,
+    SkillModule,
+    WorldModule,
+  ],
+  providers: [
+    KeyedSerialExecutor,
+    MobAiPlannerService,
+    MobRewardService,
+    MobCoordinatorService,
+    PveCombatService,
+    MobGateway,
+  ],
   exports: [MobCoordinatorService, PveCombatService],
 })
 export class MobModule {}
