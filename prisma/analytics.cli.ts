@@ -3,6 +3,18 @@ import { randomBytes } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '../src/generated/prisma/client.js';
 
+const REPORT_VIEWS = {
+  funnel: 'AnalyticsFunnelDaily',
+  retention: 'AnalyticsRetentionDaily',
+  economy: 'AnalyticsEconomyDaily',
+  rewards: 'AnalyticsRewardFlowsDaily',
+  combat: 'AnalyticsCombatHealthDaily',
+  queue: 'AnalyticsQueueHealth',
+  anomalies: 'AnalyticsAnomalies',
+} as const;
+
+type ReportCommand = keyof typeof REPORT_VIEWS;
+
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
   return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length);
@@ -16,11 +28,15 @@ function integer(name: string, fallback?: number): number | undefined {
   return value;
 }
 
+function isReportCommand(command: string): command is ReportCommand {
+  return Object.prototype.hasOwnProperty.call(REPORT_VIEWS, command);
+}
+
 async function report(prisma: PrismaClient, view: string, limit: number): Promise<void> {
-  if (!['AnalyticsFunnelDaily', 'AnalyticsRetentionDaily', 'AnalyticsEconomyDaily', 'AnalyticsCombatHealthDaily', 'AnalyticsQueueHealth', 'AnalyticsAnomalies'].includes(view)) {
-    throw new Error(`Unknown analytics report ${view}.`);
-  }
-  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`SELECT * FROM "${view}" ORDER BY 1 DESC LIMIT $1`, limit);
+  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+    `SELECT * FROM "${view}" ORDER BY 1 DESC LIMIT $1`,
+    limit,
+  );
   process.stdout.write(`${JSON.stringify(rows, (_, value) => typeof value === 'bigint' ? Number(value) : value, 2)}\n`);
 }
 
@@ -72,18 +88,10 @@ async function main(): Promise<void> {
   try {
     const command = process.argv[2] ?? 'queue';
     const limit = integer('limit', 100)!;
-    const views: Record<string, string> = {
-      funnel: 'AnalyticsFunnelDaily',
-      retention: 'AnalyticsRetentionDaily',
-      economy: 'AnalyticsEconomyDaily',
-      combat: 'AnalyticsCombatHealthDaily',
-      queue: 'AnalyticsQueueHealth',
-      anomalies: 'AnalyticsAnomalies',
-    };
-    if (views[command]) await report(prisma, views[command]!, limit);
+    if (isReportCommand(command)) await report(prisma, REPORT_VIEWS[command], limit);
     else if (command === 'experiment:set') await setExperiment(prisma);
     else if (command === 'experiment:disable') await disableExperiment(prisma);
-    else throw new Error('Usage: npm run analytics -- funnel|retention|economy|combat|queue|anomalies|experiment:set|experiment:disable');
+    else throw new Error('Usage: npm run analytics -- funnel|retention|economy|rewards|combat|queue|anomalies|experiment:set|experiment:disable');
   } finally {
     await prisma.$disconnect();
   }
