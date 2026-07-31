@@ -12,8 +12,8 @@ export interface CombatTelegraphPayload {
   skillKey?: string;
   createdTurn: number;
   resolvesOnTurn: number;
-  counterKinds: CombatTelegraphCounterKind[];
-  publicMetadata: Record<string, string | number | boolean>;
+  counterKinds: readonly CombatTelegraphCounterKind[];
+  publicMetadata: Readonly<Record<string, string | number | boolean>>;
 }
 
 declare module './socket.events.js' {
