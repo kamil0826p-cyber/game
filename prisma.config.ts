@@ -21,6 +21,10 @@ export default defineConfig({
       'public.EventInbox',
       'public.ContributionLedger',
       'public.RewardAuditLedger',
+      'public.AnalyticsEvent',
+      'public.AnalyticsDelivery',
+      'public.AnalyticsExperiment',
+      'public.AnalyticsExperimentAssignment',
     ],
   },
 });
