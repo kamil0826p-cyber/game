@@ -47,7 +47,6 @@ type InventoryRecord = {
   character?: any;
 };
 
-
 export class ItemServiceBase {
   constructor(
     protected readonly prisma: PrismaService,
@@ -61,7 +60,6 @@ export class ItemServiceBase {
   getMerchant(userId: string, characterId: string, npcId: string): Promise<MerchantSnapshot> {
     return this.merchantSnapshot(userId, characterId, npcId);
   }
-
 
   protected async merchantSnapshot(userId: string, characterId: string, npcId: string): Promise<MerchantSnapshot> {
     const character = await this.prisma.character.findFirst({
@@ -228,7 +226,7 @@ export class ItemServiceBase {
     tx: Prisma.TransactionClient,
     characterId: string,
     itemDefinitionId: string,
-    stackLimit: number;,
+    stackLimit: number,
     quantity: number,
     instanceData: Prisma.InputJsonValue,
   ): Promise<void> {
