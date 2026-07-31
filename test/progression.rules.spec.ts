@@ -3,6 +3,7 @@ import {
   applyExperience,
   calculateBaseStats,
   calculateSkillPointBudget,
+  experienceRequiredForNextLevel,
   PROGRESSION_RULESETS,
 } from '../src/modules/characters/progression.rules.js';
 
@@ -25,13 +26,42 @@ describe('progression rules', () => {
     expect(result.level).toBe(5);
     expect(result.reachedCap).toBe(true);
     expect(result.experience).toBe(0);
-    expect(result.discardedExperience).toBeGreaterThan(0);
+    expect(result.appliedExperience).toBeGreaterThan(0);
+    expect(result.appliedExperience + result.discardedExperience).toBe(1_000_000);
+  });
+
+  it('reports only the newly awarded XP used to reach the cap', () => {
+    const needed = experienceRequiredForNextLevel(4, ruleset);
+    const result = applyExperience(4, needed - 10, 100, 5, ruleset);
+    expect(result).toMatchObject({
+      level: 5,
+      experience: 0,
+      levelsGained: 1,
+      appliedExperience: 10,
+      discardedExperience: 90,
+      reachedCap: true,
+    });
   });
 
   it('does not accumulate experience while already capped', () => {
     const result = applyExperience(30, 999, 500, 30, ruleset);
-    expect(result).toMatchObject({ level: 30, experience: 0, levelsGained: 0, reachedCap: true });
-    expect(result.discardedExperience).toBe(500);
+    expect(result).toMatchObject({
+      level: 30,
+      experience: 0,
+      levelsGained: 0,
+      appliedExperience: 0,
+      discardedExperience: 500,
+      reachedCap: true,
+    });
+  });
+
+  it('normalizes legacy overflow before applying a new award', () => {
+    const firstRequirement = experienceRequiredForNextLevel(1, ruleset);
+    const result = applyExperience(1, firstRequirement + 25, 50, 10, ruleset);
+    expect(result.level).toBe(2);
+    expect(result.experience).toBe(75);
+    expect(result.appliedExperience).toBe(50);
+    expect(result.discardedExperience).toBe(0);
   });
 
   it('never awards more skill points than the build can spend', () => {
