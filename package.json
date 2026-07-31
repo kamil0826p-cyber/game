@@ -19,7 +19,7 @@
     "prisma:validate": "prisma validate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:seed": "npm run content:deploy -- --operation-id=developer-seed",
+    "prisma:seed": "npm run content:deploy",
     "content:compile": "tsx prisma/content.cli.ts compile",
     "content:validate": "tsx prisma/content.cli.ts validate",
     "content:dry-run": "tsx prisma/content.cli.ts dry-run",
