@@ -1,5 +1,5 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
-import type { Direction } from '../../contracts/game';
+import type { CharacterGender, Direction } from '../../contracts/game';
 import { outfitImageCandidates } from '../../mock/outfitCatalog';
 
 export interface OutfitSheetFrames {
@@ -37,10 +37,13 @@ const createFrames = (baseTexture: Texture): OutfitSheetFrames => {
   return { frameDurationMs: 120, frames };
 };
 
-const loadFrames = async (outfitKey: string): Promise<OutfitSheetFrames> => {
+const loadFrames = async (
+  outfitKey: string,
+  gender: CharacterGender,
+): Promise<OutfitSheetFrames> => {
   const errors: unknown[] = [];
 
-  for (const url of outfitImageCandidates(outfitKey)) {
+  for (const url of outfitImageCandidates(outfitKey, gender)) {
     try {
       const baseTexture = await Assets.load<Texture>(url);
       if (baseTexture.source.width !== SHEET_WIDTH || baseTexture.source.height !== SHEET_HEIGHT) {
@@ -52,22 +55,26 @@ const loadFrames = async (outfitKey: string): Promise<OutfitSheetFrames> => {
       return createFrames(baseTexture);
     } catch (error) {
       errors.push(error);
-      console.warn(`Outfit candidate failed for ${outfitKey}: ${url}`, error);
+      console.warn(`Outfit candidate failed for ${outfitKey} (${gender}): ${url}`, error);
     }
   }
 
-  throw new AggregateError(errors, `No outfit image candidate could be loaded for ${outfitKey}.`);
+  throw new AggregateError(errors, `No outfit image candidate could be loaded for ${outfitKey} (${gender}).`);
 };
 
-export const getOutfitSheetFrames = (outfitKey: string): Promise<OutfitSheetFrames | undefined> => {
-  const cached = frameCache.get(outfitKey);
+export const getOutfitSheetFrames = (
+  outfitKey: string,
+  gender: CharacterGender = 'MALE',
+): Promise<OutfitSheetFrames | undefined> => {
+  const cacheKey = `${gender}:${outfitKey}`;
+  const cached = frameCache.get(cacheKey);
   if (cached) return cached;
 
-  const loading = loadFrames(outfitKey).catch((error: unknown) => {
-    frameCache.delete(outfitKey);
-    console.error(`Failed to load outfit ${outfitKey}.`, error);
+  const loading = loadFrames(outfitKey, gender).catch((error: unknown) => {
+    frameCache.delete(cacheKey);
+    console.error(`Failed to load outfit ${outfitKey} (${gender}).`, error);
     return undefined;
   });
-  frameCache.set(outfitKey, loading);
+  frameCache.set(cacheKey, loading);
   return loading;
 };

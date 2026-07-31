@@ -3,12 +3,15 @@ import { ZodError } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, SocketAck, SocketErrorPayload, WorldSpawnPayload } from '../../contracts/socket.events.js';
 import {
+  createCharacterSchema,
   selectCharacterSchema,
   updateCharacterOutfitSchema,
+  type CreateCharacterPayload,
   type SelectCharacterPayload,
   type UpdateCharacterOutfitPayload,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import { CharacterService } from '../characters/character.service.js';
 import type { CharacterRosterEntry, CharacterRosterPayload } from './session-lifecycle.service.js';
 import { SessionLifecycleService } from './session-lifecycle.service.js';
 
@@ -16,13 +19,51 @@ import { SessionLifecycleService } from './session-lifecycle.service.js';
 export class CharacterRosterGateway {
   constructor(
     private readonly lifecycle: SessionLifecycleService,
+    private readonly characters: CharacterService,
     private readonly localization: LocalizationService,
   ) {}
 
   @SubscribeMessage('character:list')
   async list(@ConnectedSocket() client: GameSocket): Promise<SocketAck<CharacterRosterPayload>> {
     try {
-      return { ok: true, data: await this.lifecycle.listCharacters(client) };
+      const roster = await this.lifecycle.listCharacters(client);
+      const userId = client.data.userId;
+      if (!userId) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+      const persisted = await this.characters.listCharactersForCurrentRealm(userId);
+      const genderById = new Map(
+        persisted.map((character) => [character.id, character.gender ?? 'MALE'] as const),
+      );
+      return {
+        ok: true,
+        data: {
+          ...roster,
+          characters: roster.characters.map((character) => ({
+            ...character,
+            gender: genderById.get(character.characterId) ?? 'MALE',
+          })),
+        },
+      };
+    } catch (error) {
+      return { ok: false, error: this.toSocketError(error, client) };
+    }
+  }
+
+  @SubscribeMessage('character:createWithAppearance')
+  async createWithAppearance(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() rawPayload: unknown,
+  ): Promise<SocketAck<WorldSpawnPayload>> {
+    try {
+      const payload: CreateCharacterPayload = createCharacterSchema.parse(rawPayload);
+      return {
+        ok: true,
+        data: await this.lifecycle.createCharacter(client, {
+          name: payload.name,
+          characterClass: payload.characterClass,
+          gender: payload.gender,
+          outfitKey: payload.outfitKey,
+        }),
+      };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }

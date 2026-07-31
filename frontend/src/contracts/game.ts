@@ -1,6 +1,9 @@
 export const CHARACTER_CLASSES = ['MAGE', 'WARRIOR', 'ARCHER'] as const;
 export type CharacterClass = (typeof CHARACTER_CLASSES)[number];
 
+export const CHARACTER_GENDERS = ['MALE', 'FEMALE'] as const;
+export type CharacterGender = (typeof CHARACTER_GENDERS)[number];
+
 export const DIRECTIONS = ['NORTH', 'EAST', 'SOUTH', 'WEST'] as const;
 export type Direction = (typeof DIRECTIONS)[number];
 
@@ -32,6 +35,7 @@ export interface PublicPlayerState {
   characterId: string;
   name: string;
   characterClass: CharacterClass;
+  gender?: CharacterGender;
   level: number;
   outfitKey: string;
   mapId: string;

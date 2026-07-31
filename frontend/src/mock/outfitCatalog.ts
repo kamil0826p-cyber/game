@@ -1,4 +1,4 @@
-import type { CharacterClass } from '../contracts/game';
+import type { CharacterClass, CharacterGender } from '../contracts/game';
 export interface ClientOutfitDefinition { key: string; label: string; characterClass: CharacterClass; unlockLevel: number; description: string; }
 const outfit = (key: string, label: string, characterClass: CharacterClass, unlockLevel: number, description: string): ClientOutfitDefinition => ({ key, label, characterClass, unlockLevel, description });
 export const OUTFIT_CATALOG: Readonly<Record<CharacterClass, readonly ClientOutfitDefinition[]>> = {
@@ -11,15 +11,28 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
   WARRIOR: { label: 'Warrior', role: 'Armored vanguard', description: 'High health, strength, and armor for close combat.', accent: 'text-rose-300' },
   ARCHER: { label: 'Archer', role: 'Agile marksman', description: 'High agility with balanced health and energy.', accent: 'text-emerald-300' },
 };
-const assetUrl = (outfitKey: string, extension: 'png' | 'svg'): string => `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.${extension}?v=14`;
+const genderFolder = (gender: CharacterGender): string => gender.toLowerCase();
+const genderAssetUrl = (outfitKey: string, gender: CharacterGender): string =>
+  `${import.meta.env.BASE_URL}assets/sprites/${genderFolder(gender)}/${encodeURIComponent(outfitKey)}.png?v=15`;
+const legacyAssetUrl = (outfitKey: string, extension: 'png' | 'svg'): string =>
+  `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.${extension}?v=15`;
 const fallbackKeyFor = (outfitKey: string): string => {
   if (outfitKey.startsWith('mage-') && outfitKey !== 'mage-apprentice') return 'mage-archmage';
   if (outfitKey.startsWith('warrior-') && outfitKey !== 'warrior-recruit') return 'warrior-champion';
   if (outfitKey.startsWith('archer-') && outfitKey !== 'archer-scout') return 'archer-ranger';
   return outfitKey;
 };
-export const outfitImageUrl = (outfitKey: string): string => assetUrl(outfitKey, 'png');
-export const outfitImageCandidates = (outfitKey: string): readonly string[] => {
+export const outfitImageUrl = (outfitKey: string, gender: CharacterGender = 'MALE'): string =>
+  genderAssetUrl(outfitKey, gender);
+export const outfitImageCandidates = (
+  outfitKey: string,
+  gender: CharacterGender = 'MALE',
+): readonly string[] => {
   const fallback = fallbackKeyFor(outfitKey);
-  return [...new Set([assetUrl(outfitKey, 'png'), assetUrl(outfitKey, 'svg'), assetUrl(fallback, 'png')])];
+  return [...new Set([
+    genderAssetUrl(outfitKey, gender),
+    legacyAssetUrl(outfitKey, 'png'),
+    legacyAssetUrl(outfitKey, 'svg'),
+    legacyAssetUrl(fallback, 'png'),
+  ])];
 };

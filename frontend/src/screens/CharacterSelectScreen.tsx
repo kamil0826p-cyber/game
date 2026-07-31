@@ -13,6 +13,7 @@ import { CLASS_PRESENTATION, OUTFIT_CATALOG } from '../mock/outfitCatalog';
 import { CharacterCreatorScreen } from './CharacterCreatorScreen';
 
 const classLabelKey = { MAGE: 'class.mage', WARRIOR: 'class.warrior', ARCHER: 'class.archer' } as const;
+const genderLabel = (gender: CharacterRosterEntry['gender']): string => gender === 'FEMALE' ? 'Female' : 'Male';
 
 function OutfitArrow({ direction }: { direction: 'left' | 'right' }): React.JSX.Element {
   return (
@@ -77,7 +78,9 @@ export function CharacterSelectScreen(): React.JSX.Element {
     setError(null);
     try {
       const updated = await connection.updateCharacterOutfit(selected.characterId, next.key);
-      setCharacters((current) => current.map((entry) => entry.characterId === updated.characterId ? updated : entry));
+      setCharacters((current) => current.map((entry) => entry.characterId === updated.characterId
+        ? { ...updated, gender: entry.gender ?? 'MALE' }
+        : entry));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not change outfit.');
     } finally {
@@ -104,8 +107,8 @@ export function CharacterSelectScreen(): React.JSX.Element {
             <div className="grid gap-2">
               {characters.map((character) => (
                 <button key={character.characterId} type="button" onClick={() => setSelectedId(character.characterId)} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${selected?.characterId === character.characterId ? 'border-amber-400/60 bg-amber-500/10' : 'border-white/10 bg-slate-950/35 hover:border-amber-400/30'}`}>
-                  <OutfitPreview outfitKey={character.outfitKey} characterClass={character.characterClass} size="small" animated={false} />
-                  <span><strong className="block font-display text-lg text-amber-100">{character.name}</strong><span className="text-xs text-slate-400">Lv. {character.level} {t(classLabelKey[character.characterClass])}</span></span>
+                  <OutfitPreview outfitKey={character.outfitKey} characterClass={character.characterClass} gender={character.gender ?? 'MALE'} size="small" animated={false} />
+                  <span><strong className="block font-display text-lg text-amber-100">{character.name}</strong><span className="text-xs text-slate-400">Lv. {character.level} {t(classLabelKey[character.characterClass])} · {genderLabel(character.gender)}</span></span>
                 </button>
               ))}
             </div>
@@ -115,17 +118,17 @@ export function CharacterSelectScreen(): React.JSX.Element {
 
           {selected ? <div className="grid gap-6 md:grid-cols-[0.85fr_1.15fr]">
             <div>
-              <div className="character-pedestal"><OutfitPreview outfitKey={selected.outfitKey} characterClass={selected.characterClass} /></div>
+              <div className="character-pedestal"><OutfitPreview outfitKey={selected.outfitKey} characterClass={selected.characterClass} gender={selected.gender ?? 'MALE'} /></div>
               <div className="mt-4 flex items-center justify-between gap-3">
                 <button type="button" className="preview-arrow" disabled={busy} onClick={() => void changeOutfit(-1)} aria-label="Previous outfit"><OutfitArrow direction="left" /></button>
-                <div className="text-center"><p className="eyebrow">Outfit</p><h3 className="font-display text-lg text-amber-100">{unlockedOutfits.find((outfit) => outfit.key === selected.outfitKey)?.label ?? selected.outfitKey}</h3><p className="mt-1 text-xs text-slate-400">{unlockedOutfits.length} of 10 unlocked</p></div>
+                <div className="text-center"><p className="eyebrow">Outfit</p><h3 className="font-display text-lg text-amber-100">{unlockedOutfits.find((outfit) => outfit.key === selected.outfitKey)?.label ?? selected.outfitKey}</h3><p className="mt-1 text-xs text-slate-400">{unlockedOutfits.length} of {OUTFIT_CATALOG[selected.characterClass].length} unlocked</p></div>
                 <button type="button" className="preview-arrow" disabled={busy} onClick={() => void changeOutfit(1)} aria-label="Next outfit"><OutfitArrow direction="right" /></button>
               </div>
             </div>
             <div className="flex flex-col justify-center">
               <h2 className="font-display text-4xl text-slate-50">{selected.name}</h2>
               <p className={`mt-2 text-sm font-semibold uppercase tracking-[0.18em] ${CLASS_PRESENTATION[selected.characterClass].accent}`}>{t('common.level')} {selected.level} {t(classLabelKey[selected.characterClass])}</p>
-              <div className="mt-6 grid grid-cols-2 gap-3 text-sm"><Info label={t('common.position')} value={`${selected.x}, ${selected.y}`} /><Info label={t('common.outfit')} value={selected.outfitKey} /><Info label="Experience" value={String(selected.experience)} /><Info label={t('common.realm')} value={state.realm?.slug ?? 'world-1'} /></div>
+              <div className="mt-6 grid grid-cols-2 gap-3 text-sm"><Info label="Gender" value={genderLabel(selected.gender)} /><Info label={t('common.position')} value={`${selected.x}, ${selected.y}`} /><Info label={t('common.outfit')} value={selected.outfitKey} /><Info label="Experience" value={String(selected.experience)} /><Info label={t('common.realm')} value={state.realm?.slug ?? 'world-1'} /></div>
               <div className="mt-6 grid gap-3 sm:grid-cols-2"><Meter label={t('hud.health')} value={selected.hp} max={selected.maxHp} tone="health" /><Meter label={t('hud.energy')} value={selected.energy} max={selected.maxEnergy} tone="energy" /></div>
               {error ? <p role="alert" className="mt-5 rounded-lg border border-rose-500/40 bg-rose-950/50 p-3 text-sm text-rose-100">{error}</p> : null}
               <Button className="mt-8 justify-center py-3 text-base" onClick={() => void enterWorld()} type="button" busy={busy}>{t('character.enterWorld')}</Button>

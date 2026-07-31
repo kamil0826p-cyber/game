@@ -28,6 +28,7 @@ interface CharacterRow {
   realmId: string;
   name: string;
   class: string;
+  gender?: string;
   level: number;
   experience: number;
   outfitKey: string;
@@ -137,6 +138,7 @@ export class CharacterService {
             realmId: realm.id,
             name: input.name,
             class: input.characterClass,
+            gender: input.gender ?? 'MALE',
             level: 1,
             experience: 0,
             outfitKey,
@@ -199,6 +201,7 @@ export class CharacterService {
       realmId: character.realmId,
       name: character.name,
       characterClass: character.class as PersistedCharacterState['characterClass'],
+      gender: (character.gender ?? 'MALE') as PersistedCharacterState['gender'],
       level: character.level,
       experience: character.experience,
       outfitKey: character.outfitKey,

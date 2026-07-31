@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CHARACTER_CLASSES, DIRECTIONS } from '../common/domain/game.types.js';
+import { CHARACTER_CLASSES, CHARACTER_GENDERS, DIRECTIONS } from '../common/domain/game.types.js';
 
 const requestId = z.string().min(1).max(64);
 const itemId = z.string().uuid();
@@ -21,6 +21,7 @@ export const createCharacterSchema = z.object({
   requestId,
   name: z.string().trim().min(3).max(20).regex(/^[A-Za-z][A-Za-z0-9 _-]*$/),
   characterClass: z.enum(CHARACTER_CLASSES),
+  gender: z.enum(CHARACTER_GENDERS).default('MALE'),
   outfitKey: outfitKey.optional(),
 }).strict();
 export const selectCharacterSchema = z.object({ requestId, characterId }).strict();
