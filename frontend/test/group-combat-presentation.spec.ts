@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { CombatParticipantPayload, CombatSnapshot } from '../src/contracts/socket';
 import {
+  combatEffectPointForActor,
   combatFormationSlots,
   combatRosterColumns,
   combatTeams,
   selectCombatTarget,
 } from '../src/game/combat/combatPresentation';
 
-const participant = (actorId: string, teamId: string, hp = 100): CombatParticipantPayload => ({
+const participant = (
+  actorId: string,
+  teamId: string,
+  hp = 100,
+  overrides: Partial<CombatParticipantPayload> = {},
+): CombatParticipantPayload => ({
   actorId,
   teamId,
   withdrawn: false,
@@ -24,6 +30,7 @@ const participant = (actorId: string, teamId: string, hp = 100): CombatParticipa
   shield: 0,
   statuses: [],
   skills: [],
+  ...overrides,
 });
 
 const snapshot = (participants: CombatParticipantPayload[]): CombatSnapshot => ({
@@ -98,6 +105,26 @@ describe('group combat presentation', () => {
     expect(group.every((slot) => slot.x > 50)).toBe(true);
     expect(group.slice(0, 5).every((slot) => slot.scale === 0.7)).toBe(true);
     expect(group.slice(5).every((slot) => slot.scale <= 0.72)).toBe(true);
+  });
+
+  it('moves combat effects down with a scaled-down mob sprite', () => {
+    const mobActorId = 'mob:small-rabbit';
+    const combat = snapshot([
+      participant('self', 'a'),
+      participant(mobActorId, 'b', 100, {
+        kind: 'MOB',
+        outfitKey: 'mob-rabbit-spawn',
+        renderScale: 0.5,
+      }),
+    ]);
+    const slot = combatFormationSlots(1, 'right')[0]!;
+
+    combatTeams(combat, 'self');
+    const point = combatEffectPointForActor(slot, mobActorId);
+
+    expect(point.x).toBe(slot.effectX);
+    expect(point.y).toBeCloseTo(slot.y - (slot.y - slot.effectY) * 0.5);
+    expect(point.y).toBeGreaterThan(slot.effectY);
   });
 
   it('keeps a living selected target and falls back after defeat', () => {
