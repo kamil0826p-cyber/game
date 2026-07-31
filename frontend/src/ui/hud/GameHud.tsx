@@ -13,6 +13,7 @@ import { GuildOverlay } from '../guilds/GuildOverlay';
 import { ModalHost } from '../modals/ModalHost';
 import { NpcInteractionLayer } from '../npcs/NpcInteractionLayer';
 import { PlayerInteractionLayer } from '../interactions/PlayerInteractionLayer';
+import { SettingsOverlay } from '../settings/SettingsOverlay';
 import { ActionBar } from './ActionBar';
 import { ChatPanel } from './ChatPanel';
 import { ConnectionOverlay } from './ConnectionOverlay';
@@ -128,6 +129,7 @@ export function GameHud(): React.JSX.Element | null {
       <PortalTransition state={state.portalTransition} />
       <ConnectionOverlay reconnecting={state.phase === 'reconnecting'} />
       <ModalHost />
+      <SettingsOverlay />
       <GuildOverlay />
       <NpcInteractionLayer />
       <PlayerInteractionLayer />
