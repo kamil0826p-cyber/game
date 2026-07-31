@@ -1,0 +1,3 @@
+ALTER TABLE "AnalyticsEvent"
+  ALTER COLUMN "operationId" TYPE VARCHAR(256),
+  ALTER COLUMN "correlationId" TYPE VARCHAR(256);
