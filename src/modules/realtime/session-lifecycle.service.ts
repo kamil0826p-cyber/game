@@ -4,11 +4,13 @@ import type { PersistedCharacterState } from '../../common/domain/game.types.js'
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { GameConfigService } from '../../config/game-config.service.js';
 import type { GameSocket, WorldSpawnPayload } from '../../contracts/socket.events.js';
+import type { SupportedLocale } from '../../i18n/localization.service.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import { TelemetryService } from '../../telemetry/telemetry.service.js';
 import { CharacterService, MAX_CHARACTERS_PER_REALM } from '../characters/character.service.js';
-import { CombatService } from '../combat/combat.service.js';
 import type { CreateCharacterInput } from '../characters/character.types.js';
 import { getUnlockedOutfits } from '../characters/outfit.catalog.js';
+import { CombatService } from '../combat/combat.service.js';
 import { MapService } from '../maps/map.service.js';
 import type { RuntimeMap } from '../maps/runtime-map.types.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
@@ -49,6 +51,7 @@ export interface CharacterRosterPayload {
 @Injectable()
 export class SessionLifecycleService {
   private readonly logger = new Logger(SessionLifecycleService.name);
+  private readonly enteredAtByConnectionId = new Map<string, number>();
 
   constructor(
     private readonly config: GameConfigService,
@@ -66,6 +69,7 @@ export class SessionLifecycleService {
     private readonly sessionClaims: SessionClaimExecutor,
     private readonly skills: SkillService,
     private readonly combats: CombatService,
+    private readonly telemetry: TelemetryService,
   ) {}
 
   async initializeConnection(client: GameSocket): Promise<void> {
@@ -163,8 +167,15 @@ export class SessionLifecycleService {
 
     this.worldState.activateSession(session);
     client.data.sessionState = 'IN_WORLD';
+    this.enteredAtByConnectionId.set(session.connectionId, Date.now());
     const payload = await this.buildPayload(session, map, this.visibility.addSession(session));
     client.emit('world:spawn', payload);
+    this.telemetry.emit('world_entered', {
+      sessionId: session.connectionId,
+      userId: session.userId,
+      characterId: session.characterId,
+      realmId: session.realmId,
+    }, { mapId: map.id });
     return payload;
   }
 
@@ -184,6 +195,7 @@ export class SessionLifecycleService {
     });
 
     if (snapshot) await this.persistence.queueDetachedSnapshot(snapshot);
+    this.emitSessionEnded(session, 'DISCONNECTED');
   }
 
   private prepareCharacterSelection(client: GameSocket, character: PersistedCharacterState): Promise<WorldSpawnPayload> {
@@ -307,12 +319,28 @@ export class SessionLifecycleService {
     try {
       await this.persistence.queueDetachedSnapshot(snapshot);
     } finally {
+      this.emitSessionEnded(existing, 'SESSION_REPLACED');
       this.publisher.emit(existing.socketId, 'notification', {
         code: 'SESSION_REPLACED',
         message: this.localization.translate('notifications.sessionReplaced', existing.locale),
       });
       this.publisher.disconnect(existing.socketId);
     }
+  }
+
+  private emitSessionEnded(session: PlayerSession, reason: string): void {
+    const enteredAt = this.enteredAtByConnectionId.get(session.connectionId);
+    this.enteredAtByConnectionId.delete(session.connectionId);
+    if (enteredAt === undefined) return;
+    this.telemetry.emit('session_ended', {
+      sessionId: session.connectionId,
+      userId: session.userId,
+      characterId: session.characterId,
+      realmId: session.realmId,
+    }, {
+      durationMs: Math.max(0, Date.now() - enteredAt),
+      reason,
+    });
   }
 
   private assertSocketConnected(client: GameSocket): void {
