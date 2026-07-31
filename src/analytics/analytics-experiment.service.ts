@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
-import type { ExperimentDefinition, ExperimentVariant } from './analytics.types.js';
+import type { ExperimentDefinition, ExperimentSubjectType, ExperimentVariant } from './analytics.types.js';
 
 interface RawExperiment {
   key: string;
@@ -58,7 +58,7 @@ export class AnalyticsExperimentService {
 
   async assignment(input: {
     experimentKey: string;
-    subjectType: 'ACCOUNT' | 'CHARACTER';
+    subjectType: ExperimentSubjectType;
     subjectId: string;
   }): Promise<{ variant: string; experimentVersion?: number }> {
     const rows = await this.prisma.$queryRaw<RawExperiment[]>(Prisma.sql`
