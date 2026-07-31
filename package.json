@@ -24,6 +24,8 @@
     "content:validate": "tsx scripts/content/validate-deployed.ts",
     "content:deploy": "tsx scripts/content/deploy.ts",
     "content:verify": "tsx scripts/content/verify-ready.ts",
+    "progression:migrate": "tsx scripts/progression/migrate-characters.ts",
+    "progression:migrate:dry": "tsx scripts/progression/migrate-characters.ts --dry-run",
     "dev:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run content:deploy",
     "deploy:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run content:deploy && npm run content:verify",
     "format:check": "prettier --check .",
@@ -34,7 +36,7 @@
     "frontend:typecheck": "npm --prefix frontend run typecheck",
     "frontend:test": "npm --prefix frontend run test",
     "check:static": "npm run format:check && npm run typecheck && npm test && npm run build && npm run frontend:typecheck && npm run frontend:test && npm run frontend:build",
-    "check:integration": "npm run prisma:validate && npm run prisma:migrate:deploy && npm run content:deploy && npm run content:deploy && npm run content:verify",
+    "check:integration": "npm run prisma:validate && npm run prisma:migrate:deploy && npm run content:deploy && npm run content:deploy && npm run content:verify && npm run progression:migrate:dry",
     "check:all": "npm run check:static && npm run check:integration"
   },
   "dependencies": {
