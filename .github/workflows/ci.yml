@@ -69,6 +69,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run prisma:validate
-      - run: npm run db:prepare -- --operation-id=ci-${{ github.sha }} --author=github-actions
+      - run: npm run prisma:generate
+      - run: npm run prisma:migrate:deploy
+      - run: npm run content:deploy -- --operation-id=ci-${{ github.sha }} --author=github-actions
       - run: npm run content:dry-run
       - run: npm run test:integration
