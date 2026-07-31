@@ -116,6 +116,7 @@ export class AnalyticsTrackingService {
   }
 
   combatStarted(session: PlayerSession, snapshot: CombatSnapshot): Promise<void> {
+    const startedAt = snapshot.startedAt ?? Date.now();
     const difficultyLevel = combatDifficultyLevel(snapshot);
     return this.bestEffort({
       operationId: `combat-start:${snapshot.combatId}:${session.characterId}`,
@@ -123,12 +124,13 @@ export class AnalyticsTrackingService {
       actorCharacterId: session.characterId,
       realmId: session.realmId,
       mapId: snapshot.mapId,
+      occurredAt: new Date(startedAt),
       payload: {
         accountId: session.userId,
         characterId: session.characterId,
         sessionId: session.socketId,
         combatId: snapshot.combatId,
-        startedAt: snapshot.startedAt ?? Date.now(),
+        startedAt,
         zoneType: snapshot.zoneType,
         mode: combatMode(snapshot),
         ...(difficultyLevel !== undefined ? { difficultyLevel } : {}),
@@ -142,32 +144,39 @@ export class AnalyticsTrackingService {
     snapshot: CombatSnapshot,
     command: { action: 'BASIC_ATTACK' | 'SKILL'; skillKey?: string; targetActorId?: string },
   ): Promise<void> {
-    const latest = snapshot.recentActions.at(-1);
-    const sequence = latest?.sequence ?? snapshot.turnNumber;
+    const resolution = [...snapshot.recentActions].reverse().find((candidate) =>
+      candidate.actorId === session.characterId &&
+      candidate.action === command.action &&
+      (command.action !== 'SKILL' || candidate.skillKey === command.skillKey));
+    if (!resolution) {
+      this.logger.warn(`Accepted combat action for ${snapshot.combatId} had no matching server resolution.`);
+      return Promise.resolve();
+    }
     return this.bestEffort({
-      operationId: `combat-action:${snapshot.combatId}:${sequence}`,
+      operationId: `combat-action:${snapshot.combatId}:${resolution.sequence}`,
       type: 'CombatActionAccepted',
       actorCharacterId: session.characterId,
       realmId: session.realmId,
       mapId: snapshot.mapId,
+      occurredAt: new Date(resolution.occurredAt),
       payload: {
         accountId: session.userId,
         characterId: session.characterId,
         sessionId: session.socketId,
         combatId: snapshot.combatId,
-        sequence,
+        sequence: resolution.sequence,
         turnNumber: snapshot.turnNumber,
-        action: command.action,
-        ...(command.skillKey ? { skillKey: command.skillKey } : {}),
-        ...(command.targetActorId ? { targetActorId: command.targetActorId } : {}),
-        results: latest?.results.map((result) => ({
+        action: resolution.action,
+        ...(resolution.skillKey ? { skillKey: resolution.skillKey } : {}),
+        ...(resolution.targetActorId ? { targetActorId: resolution.targetActorId } : {}),
+        results: resolution.results.map((result) => ({
           targetActorId: result.targetActorId,
           hpDelta: result.hpDelta,
           energyDelta: result.energyDelta,
           shieldAbsorbed: result.shieldAbsorbed,
           dodged: result.dodged,
           statusesApplied: result.statusesApplied.map((status) => status.key),
-        })) ?? [],
+        })),
       },
     });
   }
@@ -182,6 +191,7 @@ export class AnalyticsTrackingService {
       actorCharacterId: session.characterId,
       realmId: session.realmId,
       mapId: snapshot.mapId,
+      occurredAt: new Date(finishedAt),
       payload: {
         accountId: session.userId,
         characterId: session.characterId,
