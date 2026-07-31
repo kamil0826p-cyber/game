@@ -10,8 +10,10 @@ import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
 import {
   skillRequestSchema,
+  skillRespecSchema,
   skillUnlockSchema,
   type SkillRequestPayload,
+  type SkillRespecPayload,
   type SkillUnlockPayload,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
@@ -52,7 +54,19 @@ export class SkillGateway {
     );
   }
 
-  private async handle<TPayload extends SkillRequestPayload | SkillUnlockPayload>(
+  @SubscribeMessage('skills:respec')
+  respecSkills(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<SkillTreeSnapshot>> {
+    return this.handle(client, skillRespecSchema, raw, (session) =>
+      this.skills.respec(session.userId, session.characterId),
+    );
+  }
+
+  private async handle<
+    TPayload extends SkillRequestPayload | SkillUnlockPayload | SkillRespecPayload,
+  >(
     client: GameSocket,
     schema: ZodType<TPayload>,
     raw: unknown,
