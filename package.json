@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "typecheck": "npm run prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "npm run prisma:generate && vitest run",
+    "test:integration": "npm run prisma:generate && vitest run test/integration",
     "test:watch": "npm run prisma:generate && vitest",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
