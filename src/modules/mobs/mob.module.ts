@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { KeyedSerialExecutor } from '../../common/utils/keyed-serial-executor.js';
+import { CharacterModule } from '../characters/character.module.js';
 import { CombatModule } from '../combat/combat.module.js';
 import { GroupModule } from '../groups/group.module.js';
 import { MapModule } from '../maps/map.module.js';
@@ -17,6 +18,7 @@ import { PveCombatService } from './pve-combat.service.js';
 
 @Module({
   imports: [
+    CharacterModule,
     CombatModule,
     GroupModule,
     MapModule,
