@@ -27,6 +27,17 @@ function participantFacts(snapshot: CombatSnapshot): Array<Record<string, unknow
   }));
 }
 
+function combatMode(snapshot: CombatSnapshot): 'PVE' | 'PVP' {
+  return snapshot.participants.some((participant) => participant.kind === 'MOB') ? 'PVE' : 'PVP';
+}
+
+function combatDifficultyLevel(snapshot: CombatSnapshot): number | undefined {
+  const mobLevels = snapshot.participants
+    .filter((participant) => participant.kind === 'MOB')
+    .map((participant) => participant.level);
+  return mobLevels.length > 0 ? Math.max(...mobLevels) : undefined;
+}
+
 @Injectable()
 export class AnalyticsTrackingService {
   private readonly logger = new Logger(AnalyticsTrackingService.name);
@@ -105,6 +116,7 @@ export class AnalyticsTrackingService {
   }
 
   combatStarted(session: PlayerSession, snapshot: CombatSnapshot): Promise<void> {
+    const difficultyLevel = combatDifficultyLevel(snapshot);
     return this.bestEffort({
       operationId: `combat-start:${snapshot.combatId}`,
       type: 'CombatStarted',
@@ -118,6 +130,8 @@ export class AnalyticsTrackingService {
         combatId: snapshot.combatId,
         startedAt: snapshot.startedAt ?? Date.now(),
         zoneType: snapshot.zoneType,
+        mode: combatMode(snapshot),
+        ...(difficultyLevel !== undefined ? { difficultyLevel } : {}),
         participants: participantFacts(snapshot),
       },
     });
@@ -163,6 +177,7 @@ export class AnalyticsTrackingService {
   combatResolved(session: PlayerSession, snapshot: CombatSnapshot): Promise<void> {
     const startedAt = snapshot.startedAt ?? snapshot.createdAt;
     const finishedAt = snapshot.finishedAt ?? Date.now();
+    const difficultyLevel = combatDifficultyLevel(snapshot);
     return this.bestEffort({
       operationId: `combat-resolved:${snapshot.combatId}`,
       type: 'CombatResolved',
@@ -179,6 +194,9 @@ export class AnalyticsTrackingService {
         durationMs: Math.max(0, finishedAt - startedAt),
         turns: snapshot.turnNumber,
         participantCount: snapshot.participants.length,
+        zoneType: snapshot.zoneType,
+        mode: combatMode(snapshot),
+        ...(difficultyLevel !== undefined ? { difficultyLevel } : {}),
         participants: participantFacts(snapshot),
       },
     });
