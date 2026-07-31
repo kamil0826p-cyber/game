@@ -1,5 +1,6 @@
 import type { CharacterClass } from '../../common/domain/game.types.js';
 import type { CombatActorInput } from '../combat/combat.types.js';
+import type { MobAiProfile } from './mob-ai.types.js';
 import type { MobLootEntry, MobRank } from './mob.catalog.js';
 
 export type MobRuntimeState = 'ALIVE' | 'IN_COMBAT' | 'RESPAWNING';
@@ -18,6 +19,8 @@ export interface RuntimeMob {
   renderScale: number;
   respawnMs: number;
   experience: number;
+  skillKeys: readonly string[];
+  aiProfile: MobAiProfile;
   stats: {
     maxHp: number;
     maxEnergy: number;
