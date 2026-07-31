@@ -1,0 +1,34 @@
+{
+  "key": "warrior-vs-mage-3v3",
+  "runs": 5000,
+  "seed": 20260801,
+  "maximumTurns": 250,
+  "teamA": {
+    "size": 3,
+    "fighter": {
+      "key": "warrior-level-10",
+      "characterClass": "WARRIOR",
+      "level": 10,
+      "hp": 260,
+      "energy": 95,
+      "strength": 32,
+      "agility": 16,
+      "intelligence": 8,
+      "armor": 22
+    }
+  },
+  "teamB": {
+    "size": 3,
+    "fighter": {
+      "key": "mage-level-10",
+      "characterClass": "MAGE",
+      "level": 10,
+      "hp": 175,
+      "energy": 190,
+      "strength": 8,
+      "agility": 18,
+      "intelligence": 36,
+      "armor": 10
+    }
+  }
+}
