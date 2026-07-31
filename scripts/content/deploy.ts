@@ -10,7 +10,7 @@ import {
   getContentPatch,
   releaseContentDeploymentLock,
 } from '../../src/content/content-patch-registry.js';
-import { compileContentSnapshot } from '../../src/content/content-validator.js';
+import { compileContentPackage } from '../../src/content/content-package.js';
 import { loadDeployedContentSnapshot } from '../../src/content/deployed-content.repository.js';
 import { calculateLegacyContentHash, CONTENT_PATCH_ID } from './content-sources.js';
 
@@ -54,7 +54,7 @@ const main = async (): Promise<void> => {
           `Content patch ${CONTENT_PATCH_ID} changed after it was applied. Create a new patch ID instead of mutating history.`,
         );
       }
-      const compiled = compileContentSnapshot(await loadDeployedContentSnapshot(client));
+      const compiled = compileContentPackage(await loadDeployedContentSnapshot(client));
       console.log(`Content is current (${CONTENT_PATCH_ID}, deployed hash ${compiled.hash}).`);
       return;
     }
@@ -72,7 +72,7 @@ const main = async (): Promise<void> => {
     await beginContentPatch(client, CONTENT_PATCH_ID, hash);
     try {
       await runRawSeed();
-      const compiled = compileContentSnapshot(await loadDeployedContentSnapshot(client));
+      const compiled = compileContentPackage(await loadDeployedContentSnapshot(client));
       await completeContentPatch(client, CONTENT_PATCH_ID, hash);
       console.log(`Applied ${CONTENT_PATCH_ID}; deployed content hash ${compiled.hash}.`);
     } catch (error) {
