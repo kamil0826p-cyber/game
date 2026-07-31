@@ -28,6 +28,7 @@ export interface ExperienceApplicationResult {
   level: number;
   experience: number;
   levelsGained: number;
+  appliedExperience: number;
   discardedExperience: number;
   reachedCap: boolean;
 }
@@ -129,6 +130,7 @@ export const applyExperience = (
   let level = previousLevel;
   let experience = Math.max(0, Math.trunc(currentExperience));
   let remainingAward = Math.max(0, Math.trunc(awardedExperience));
+  let appliedExperience = 0;
 
   if (level >= cap) {
     return {
@@ -136,32 +138,45 @@ export const applyExperience = (
       level,
       experience: 0,
       levelsGained: 0,
+      appliedExperience: 0,
       discardedExperience: remainingAward,
       reachedCap: true,
     };
   }
 
-  experience += remainingAward;
-  remainingAward = 0;
   while (level < cap) {
     const required = experienceRequiredForNextLevel(level, ruleset);
+    if (experience >= required) {
+      experience -= required;
+      level += 1;
+      continue;
+    }
+    if (remainingAward <= 0) break;
+    const requiredFromAward = required - experience;
+    const appliedNow = Math.min(requiredFromAward, remainingAward);
+    experience += appliedNow;
+    appliedExperience += appliedNow;
+    remainingAward -= appliedNow;
     if (experience < required) break;
-    experience -= required;
+    experience = 0;
     level += 1;
   }
 
-  let discardedExperience = 0;
-  if (level >= cap) {
-    discardedExperience = experience;
-    experience = 0;
+  if (level < cap && remainingAward > 0) {
+    experience += remainingAward;
+    appliedExperience += remainingAward;
+    remainingAward = 0;
   }
+
+  if (level >= cap) experience = 0;
 
   return {
     previousLevel,
     level,
     experience,
     levelsGained: level - previousLevel,
-    discardedExperience,
+    appliedExperience,
+    discardedExperience: remainingAward,
     reachedCap: level >= cap,
   };
 };
