@@ -33,6 +33,11 @@ export interface CombatStagePosition {
   row: 'front' | 'back';
 }
 
+export interface CombatEffectPoint {
+  x: number;
+  y: number;
+}
+
 interface ArenaAnchor {
   x: number;
   y: number;
@@ -55,6 +60,14 @@ const BACK_LEFT_ANCHORS: readonly ArenaAnchor[] = [
   { x: 8.6, y: 56.4, effectY: 45, layer: 23 },
   { x: 28.4, y: 56.4, effectY: 45, layer: 27 },
 ];
+
+// CombatVfx receives formation positions separately from participant data.
+const combatantRenderScaleByActorId = new Map<string, number>();
+
+function safeRenderScale(renderScale: number | undefined): number {
+  const scale = renderScale !== undefined && Number.isFinite(renderScale) ? renderScale : 1;
+  return Math.max(0.2, Math.min(3, scale));
+}
 
 export function isSelfCastCombatAction(action: CombatActionResolutionPayload | undefined): boolean {
   return Boolean(
@@ -91,8 +104,28 @@ export function getCombatVfxFamily(
 
 function withMobRenderScale(participant: CombatParticipantPayload): CombatParticipantPayload {
   if (participant.kind !== 'MOB' || participant.renderScale !== undefined) return participant;
-  const mob = Object.values(mobStore.getSnapshot()).find((candidate) => candidate.outfitKey === participant.outfitKey);
+  const mob = Object.values(mobStore.getSnapshot()).find(
+    (candidate) => candidate.outfitKey === participant.outfitKey,
+  );
   return mob ? { ...participant, renderScale: mob.renderScale } : participant;
+}
+
+export function combatEffectPoint(
+  position: CombatStagePosition,
+  renderScale = 1,
+): CombatEffectPoint {
+  const scale = safeRenderScale(renderScale);
+  return {
+    x: position.effectX,
+    y: position.y - (position.y - position.effectY) * scale,
+  };
+}
+
+export function combatEffectPointForActor(
+  position: CombatStagePosition,
+  actorId: string,
+): CombatEffectPoint {
+  return combatEffectPoint(position, combatantRenderScaleByActorId.get(actorId) ?? 1);
 }
 
 export function combatTeams(
@@ -100,6 +133,13 @@ export function combatTeams(
   ownCharacterId: string,
 ): CombatTeamView | undefined {
   const participants = combat.participants.map(withMobRenderScale);
+  combatantRenderScaleByActorId.clear();
+  for (const participant of participants) {
+    combatantRenderScaleByActorId.set(
+      participant.actorId,
+      participant.kind === 'MOB' ? safeRenderScale(participant.renderScale) : 1,
+    );
+  }
   const own = participants.find((participant) => participant.characterId === ownCharacterId);
   if (!own) return undefined;
   const ownTeamId = own.teamId ?? combat.teams?.find((team) => team.actorIds.includes(own.actorId))?.teamId;
