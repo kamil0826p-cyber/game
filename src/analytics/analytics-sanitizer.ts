@@ -50,6 +50,13 @@ export const CRITICAL_ANALYTICS_EVENTS = new Set<DomainEventRecord['type']>([
   'CurrencyChanged',
 ]);
 
+function normalizedKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .toLowerCase();
+}
+
 function sanitizeValue(value: unknown, depth: number): unknown {
   if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
   if (typeof value === 'string') return value.slice(0, MAX_STRING_LENGTH);
@@ -62,7 +69,7 @@ function sanitizeValue(value: unknown, depth: number): unknown {
   if (typeof value !== 'object') return undefined;
   const entries: Array<[string, unknown]> = [];
   for (const [key, child] of Object.entries(value as Record<string, unknown>).slice(0, MAX_OBJECT_KEYS)) {
-    if (FORBIDDEN_KEY.test(key)) continue;
+    if (FORBIDDEN_KEY.test(normalizedKey(key))) continue;
     const sanitized = sanitizeValue(child, depth + 1);
     if (sanitized !== undefined) entries.push([key, sanitized]);
   }
