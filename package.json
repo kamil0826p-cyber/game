@@ -8,9 +8,9 @@
   "engines": { "node": ">=22.0.0" },
   "scripts": {
     "build": "npm run prisma:generate && nest build",
-    "start": "npm run prisma:prepare && node dist/main.js",
-    "start:dev": "npm run prisma:prepare && nest start --watch",
-    "start:debug": "npm run prisma:prepare && nest start --debug --watch",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
     "typecheck": "npm run prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "npm run prisma:generate && vitest run",
     "test:watch": "npm run prisma:generate && vitest",
@@ -18,8 +18,14 @@
     "prisma:validate": "prisma validate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:seed": "prisma db seed",
-    "prisma:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run prisma:seed",
+    "prisma:seed:raw": "prisma db seed",
+    "prisma:seed": "npm run content:deploy",
+    "prisma:prepare": "npm run dev:prepare",
+    "content:validate": "tsx scripts/content/validate-deployed.ts",
+    "content:deploy": "tsx scripts/content/deploy.ts",
+    "content:verify": "tsx scripts/content/verify-ready.ts",
+    "dev:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run content:deploy",
+    "deploy:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run content:deploy && npm run content:verify",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "frontend:install": "npm --prefix frontend install",
@@ -27,7 +33,9 @@
     "frontend:build": "npm --prefix frontend run build",
     "frontend:typecheck": "npm --prefix frontend run typecheck",
     "frontend:test": "npm --prefix frontend run test",
-    "check:all": "npm run typecheck && npm test && npm run frontend:typecheck && npm run frontend:test && npm run frontend:build"
+    "check:static": "npm run format:check && npm run typecheck && npm test && npm run build && npm run frontend:typecheck && npm run frontend:test && npm run frontend:build",
+    "check:integration": "npm run prisma:validate && npm run prisma:migrate:deploy && npm run content:deploy && npm run content:deploy && npm run content:verify",
+    "check:all": "npm run check:static && npm run check:integration"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28", "@nestjs/core": "11.1.28", "@nestjs/platform-express": "11.1.28", "@nestjs/platform-socket.io": "11.1.28", "@nestjs/websockets": "11.1.28", "@prisma/adapter-pg": "7.9.1", "@prisma/client": "7.9.1", "@socket.io/redis-adapter": "^8.3.0", "dotenv": "^17.2.1", "firebase-admin": "14.2.0", "helmet": "^8.1.0", "pg": "^8.16.3", "redis": "^5.8.2", "reflect-metadata": "^0.2.2", "rxjs": "^7.8.2", "socket.io": "^4.8.1", "zod": "^4.1.12"
