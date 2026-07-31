@@ -6,8 +6,15 @@ import { Prisma, PrismaClient } from '../src/generated/prisma/client.js';
 const REPORT_VIEWS = {
   funnel: 'AnalyticsFunnelDaily',
   retention: 'AnalyticsRetentionDaily',
+  sessions: 'AnalyticsSessionHealthDaily',
   economy: 'AnalyticsEconomyDaily',
+  inflation: 'AnalyticsCurrencyInflationDaily',
+  supply: 'AnalyticsCurrencySupplyCurrent',
+  prices: 'AnalyticsItemPrices',
   rewards: 'AnalyticsRewardFlowsDaily',
+  trades: 'AnalyticsTradeDaily',
+  'skipped-loot': 'AnalyticsSkippedLootDaily',
+  crafting: 'AnalyticsCraftingDaily',
   combat: 'AnalyticsCombatHealthDaily',
   'combat-modes': 'AnalyticsCombatHealthByModeDaily',
   queue: 'AnalyticsQueueHealth',
@@ -119,7 +126,7 @@ async function main(): Promise<void> {
     if (isReportCommand(command)) await report(prisma, REPORT_VIEWS[command], limit);
     else if (command === 'experiment:set') await setExperiment(prisma);
     else if (command === 'experiment:disable') await disableExperiment(prisma);
-    else throw new Error('Usage: npm run analytics -- funnel|retention|economy|rewards|combat|combat-modes|queue|anomalies|experiment:set|experiment:disable');
+    else throw new Error(`Usage: npm run analytics -- ${Object.keys(REPORT_VIEWS).join('|')}|experiment:set|experiment:disable`);
   } finally {
     await prisma.$disconnect();
   }
