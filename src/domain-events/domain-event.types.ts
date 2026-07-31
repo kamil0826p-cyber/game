@@ -1,6 +1,8 @@
 import type { Prisma } from '../generated/prisma/client.js';
+import type { DomainEventType } from './domain-event.contracts.js';
 
 export type ContributionSubjectType = 'CHARACTER' | 'PARTY' | 'GUILD' | 'REALM';
+export type AuditResourceType = 'SILVER' | 'GOLD' | 'XP' | 'REPUTATION' | 'ITEM' | 'CONTRIBUTION';
 
 export interface DomainContribution {
   subjectType: ContributionSubjectType;
@@ -10,25 +12,40 @@ export interface DomainContribution {
   metadata?: Record<string, unknown>;
 }
 
+export interface DomainAuditEntry {
+  characterId?: string;
+  resourceType: AuditResourceType;
+  resourceKey?: string;
+  amount: number;
+  balanceAfter?: number;
+  reason: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DomainEventPayload extends Record<string, unknown> {
+  contributions?: DomainContribution[];
+  audit?: DomainAuditEntry[];
+}
+
 export interface DomainEventInput {
   eventId?: string;
   deduplicationKey?: string;
   operationId: string;
-  type: string;
+  type: DomainEventType;
   schemaVersion?: number;
   actorCharacterId?: string;
   realmId?: string;
   mapId?: string;
   regionKey?: string;
   occurredAt?: Date;
-  payload: Record<string, unknown> & { contributions?: DomainContribution[] };
+  payload: DomainEventPayload;
 }
 
 export interface DomainEventRecord {
   id: string;
   deduplicationKey: string;
   operationId: string;
-  type: string;
+  type: DomainEventType;
   schemaVersion: number;
   actorCharacterId: string | null;
   realmId: string | null;

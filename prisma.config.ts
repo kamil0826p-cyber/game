@@ -14,10 +14,13 @@ export default defineConfig({
   tables: {
     external: [
       'public.ContentRelease',
+      'public.ContentPatch',
+      'public.ContentDeploymentAttempt',
       'public.DomainEvent',
       'public.EventOutbox',
       'public.EventInbox',
       'public.ContributionLedger',
+      'public.RewardAuditLedger',
     ],
   },
 });
