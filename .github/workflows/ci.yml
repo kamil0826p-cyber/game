@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+
+      - name: Validate formatting types tests and builds
+        run: npm run check:static
+
+      - name: Audit production backend dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit production frontend dependencies
+        run: npm --prefix frontend audit --omit=dev --audit-level=high
+
+      - name: Upload frontend build on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-debug
+          path: frontend/dist
+          if-no-files-found: ignore
+          retention-days: 7
+
+  postgres-integration:
+    name: PostgreSQL migrations and content
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: static-checks
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: game
+          POSTGRES_PASSWORD: game
+          POSTGRES_DB: grid_mmorpg
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U game -d grid_mmorpg"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      DIRECT_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      GAME_REALM_SLUG: world-1
+      MAX_CHARACTER_LEVEL: 100
+      PROGRESSION_RULESET_VERSION: v1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npm run prisma:validate
+
+      - name: Prepare a clean database
+        run: npm run deploy:prepare
+
+      - name: Capture deployed state
+        id: before
+        shell: bash
+        run: |
+          echo "map_versions=$(psql "$DATABASE_URL" -Atc 'SELECT COALESCE(string_agg(key || ':' || version, ',' ORDER BY key), '') FROM "Map";')" >> "$GITHUB_OUTPUT"
+          echo "patches=$(psql "$DATABASE_URL" -Atc 'SELECT COUNT(*) FROM "ContentPatchRegistry" WHERE status = '\''APPLIED'\'';')" >> "$GITHUB_OUTPUT"
+
+      - name: Repeat migrations and content deployment
+        run: |
+          npm run prisma:migrate:deploy
+          npm run content:deploy
+          npm run content:verify
+
+      - name: Verify idempotency
+        shell: bash
+        env:
+          BEFORE_MAP_VERSIONS: ${{ steps.before.outputs.map_versions }}
+          BEFORE_PATCHES: ${{ steps.before.outputs.patches }}
+        run: |
+          after_map_versions=$(psql "$DATABASE_URL" -Atc 'SELECT COALESCE(string_agg(key || ':' || version, ',' ORDER BY key), '') FROM "Map";')
+          after_patches=$(psql "$DATABASE_URL" -Atc 'SELECT COUNT(*) FROM "ContentPatchRegistry" WHERE status = '\''APPLIED'\'';')
+          test "$BEFORE_MAP_VERSIONS" = "$after_map_versions"
+          test "$BEFORE_PATCHES" = "$after_patches"
+
+      - name: Dry-run progression migration
+        run: npm run progression:migrate:dry
+
+      - name: Export database diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          pg_dump --schema-only "$DATABASE_URL" > artifacts/schema.sql
+          psql "$DATABASE_URL" -c 'TABLE "ContentPatchRegistry";' > artifacts/content-patches.txt 2>&1 || true
+
+      - name: Upload database diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-integration-debug
+          path: artifacts
+          if-no-files-found: ignore
+          retention-days: 7
