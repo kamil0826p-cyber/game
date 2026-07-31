@@ -10,7 +10,6 @@ export default defineConfig({
   datasource: {
     url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? 'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public',
   },
-  experimental: { externalTables: true },
   tables: {
     external: [
       'public.ContentRelease',
