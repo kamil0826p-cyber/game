@@ -6,6 +6,7 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import { ZodError, type ZodType } from 'zod';
+import { AnalyticsTrackingService } from '../../analytics/analytics-tracking.service.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type {
   CombatSnapshot,
@@ -33,6 +34,7 @@ export class CombatGateway {
     private readonly combats: CombatService,
     private readonly world: WorldStateService,
     private readonly localization: LocalizationService,
+    private readonly analytics: AnalyticsTrackingService,
   ) {}
 
   @SubscribeMessage('combat:getActive')
@@ -50,9 +52,11 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatRequestSchema, raw, (session, payload) =>
-      this.combats.request(session.userId, session.characterId, payload.targetCharacterId),
-    );
+    return this.handle(client, combatRequestSchema, raw, async (session, payload) => {
+      const snapshot = await this.combats.request(session.userId, session.characterId, payload.targetCharacterId);
+      if (snapshot.status === 'ACTIVE') void this.analytics.combatStarted(session, snapshot);
+      return snapshot;
+    });
   }
 
   @SubscribeMessage('combat:respond')
@@ -60,9 +64,12 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatRespondSchema, raw, (session, payload) =>
-      this.combats.respond(session.userId, session.characterId, payload.combatId, payload.accept),
-    );
+    return this.handle(client, combatRespondSchema, raw, async (session, payload) => {
+      const snapshot = await this.combats.respond(session.userId, session.characterId, payload.combatId, payload.accept);
+      if (payload.accept && snapshot.status === 'ACTIVE') void this.analytics.combatStarted(session, snapshot);
+      else if (!['REQUESTED', 'ACTIVE'].includes(snapshot.status)) void this.analytics.combatResolved(session, snapshot);
+      return snapshot;
+    });
   }
 
   @SubscribeMessage('combat:act')
@@ -70,9 +77,11 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatActionSchema, raw, (session, payload) =>
-      this.combats.act(session.userId, session.characterId, payload.combatId, payload),
-    );
+    return this.handle(client, combatActionSchema, raw, async (session, payload) => {
+      const snapshot = await this.combats.act(session.userId, session.characterId, payload.combatId, payload);
+      void this.analytics.combatActionAccepted(session, snapshot, payload);
+      return snapshot;
+    });
   }
 
   @SubscribeMessage('combat:leave')
@@ -80,9 +89,11 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatLeaveSchema, raw, (session, payload) =>
-      this.combats.leave(session.userId, session.characterId, payload.combatId),
-    );
+    return this.handle(client, combatLeaveSchema, raw, async (session, payload) => {
+      const snapshot = await this.combats.leave(session.userId, session.characterId, payload.combatId);
+      if (!['REQUESTED', 'ACTIVE'].includes(snapshot.status)) void this.analytics.combatResolved(session, snapshot);
+      return snapshot;
+    });
   }
 
   private async handle<TPayload, TResult>(
