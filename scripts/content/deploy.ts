@@ -12,6 +12,10 @@ import {
 } from '../../src/content/content-patch-registry.js';
 import { compileContentPackage } from '../../src/content/content-package.js';
 import { loadDeployedContentSnapshot } from '../../src/content/deployed-content.repository.js';
+import {
+  captureMapVersions,
+  restoreUnchangedMapVersions,
+} from '../../src/content/map-version-guard.js';
 import { calculateLegacyContentHash, CONTENT_PATCH_ID } from './content-sources.js';
 
 const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
@@ -71,10 +75,14 @@ const main = async (): Promise<void> => {
 
     await beginContentPatch(client, CONTENT_PATCH_ID, hash);
     try {
+      const previousMapVersions = await captureMapVersions(client);
       await runRawSeed();
+      const restoredVersions = await restoreUnchangedMapVersions(client, previousMapVersions);
       const compiled = compileContentPackage(await loadDeployedContentSnapshot(client));
       await completeContentPatch(client, CONTENT_PATCH_ID, hash);
-      console.log(`Applied ${CONTENT_PATCH_ID}; deployed content hash ${compiled.hash}.`);
+      console.log(
+        `Applied ${CONTENT_PATCH_ID}; deployed content hash ${compiled.hash}; preserved ${restoredVersions} unchanged map version(s).`,
+      );
     } catch (error) {
       await failContentPatch(client, CONTENT_PATCH_ID, hash, error);
       throw error;
