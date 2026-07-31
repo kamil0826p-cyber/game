@@ -28,6 +28,7 @@ export interface CharacterRosterEntry {
   characterId: string;
   name: string;
   characterClass: PersistedCharacterState['characterClass'];
+  gender: NonNullable<PersistedCharacterState['gender']>;
   level: number;
   experience: number;
   outfitKey: string;
@@ -262,6 +263,7 @@ export class SessionLifecycleService {
       characterId: character.id,
       name: character.name,
       characterClass: character.characterClass,
+      gender: character.gender ?? 'MALE',
       level: character.level,
       experience: character.experience,
       outfitKey: character.outfitKey,
