@@ -20,7 +20,9 @@ Database triggers emit idempotent domain events for account registration, charac
 npm run analytics -- funnel
 npm run analytics -- retention
 npm run analytics -- economy
+npm run analytics -- rewards
 npm run analytics -- combat
+npm run analytics -- combat-modes
 npm run analytics -- queue
 npm run analytics -- anomalies
 ```
@@ -29,8 +31,10 @@ The commands read stable database views:
 
 - `AnalyticsFunnelDaily`: account → character → world → first combat → first choice → first group.
 - `AnalyticsRetentionDaily`: D1, D7 and D30 return sessions by first-session cohort.
-- `AnalyticsEconomyDaily`: sources, sinks, net flow and reconciliation gap against the authoritative currency ledger.
+- `AnalyticsEconomyDaily`: currency sources, sinks, net flow and reconciliation gap against the authoritative currency ledger.
+- `AnalyticsRewardFlowsDaily`: item, reputation, XP, contribution and other audited reward sources, sinks and net flow.
 - `AnalyticsCombatHealthDaily`: duration, turns, party size, surrender/disconnect and skill usage.
+- `AnalyticsCombatHealthByModeDaily`: the same combat-health metrics split by PVE/PVP mode, zone and server-derived difficulty level.
 - `AnalyticsQueueHealth`: queue depth, oldest work and maximum attempts.
 - `AnalyticsAnomalies`: non-zero economy reconciliation and dead deliveries.
 
@@ -38,7 +42,7 @@ Sampling is deterministic by event ID. Critical funnel, combat-resolution and cu
 
 ## Feature flags and experiments
 
-Definitions and assignments are persistent and versioned. Assignment uses a salted SHA-256 bucket and remains stable for the same subject and version. A disabled or missing experiment safely resolves to `control`.
+Definitions and assignments are persistent and versioned. Assignment uses a salted SHA-256 bucket and remains stable for the same subject and version. A disabled or missing experiment safely resolves to `control`. Assignment scope may be an account, character, realm, group or guild.
 
 ```bash
 npm run analytics -- experiment:set \
