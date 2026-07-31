@@ -18,6 +18,11 @@ enum CharacterClass {
   ARCHER
 }
 
+enum CharacterGender {
+  MALE
+  FEMALE
+}
+
 enum UserRole {
   USER
   MOD
@@ -143,14 +148,15 @@ model User {
 }
 
 model Character {
-  id         String         @id @default(uuid()) @db.Uuid
-  userId     String         @db.Uuid
-  realmId    String         @db.Uuid
-  name       String         @db.VarChar(24)
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @db.Uuid
+  realmId    String          @db.Uuid
+  name       String          @db.VarChar(24)
   class      CharacterClass
-  level      Int            @default(1)
-  experience Int            @default(0)
-  outfitKey  String         @db.VarChar(64)
+  gender     CharacterGender @default(MALE)
+  level      Int             @default(1)
+  experience Int             @default(0)
+  outfitKey  String          @db.VarChar(64)
 
   mapId       String      @db.Uuid
   x           Int

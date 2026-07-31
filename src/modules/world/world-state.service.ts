@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Direction } from '../../common/domain/game.types.js';
+import type { CharacterGender, Direction } from '../../common/domain/game.types.js';
 import { GameConfigService } from '../../config/game-config.service.js';
 import type { PublicPlayerState, SelfCharacterState } from '../../contracts/socket.events.js';
 import { SpatialIndexService } from './spatial-index.service.js';
@@ -39,6 +39,7 @@ export class WorldStateService {
       realmId: character.realmId,
       name: character.name,
       characterClass: character.characterClass,
+      gender: character.gender ?? 'MALE',
       level: character.level,
       experience: character.experience,
       silver: character.silver ?? 0,
@@ -198,11 +199,12 @@ export class WorldStateService {
     return sessions;
   }
 
-  toPublicState(session: PlayerSession): PublicPlayerState {
+  toPublicState(session: PlayerSession): PublicPlayerState & { gender: CharacterGender } {
     return {
       characterId: session.characterId,
       name: session.name,
       characterClass: session.characterClass,
+      gender: session.gender,
       level: session.level,
       outfitKey: session.outfitKey,
       mapId: session.mapId,
@@ -213,7 +215,7 @@ export class WorldStateService {
     };
   }
 
-  toSelfState(session: PlayerSession): SelfCharacterState {
+  toSelfState(session: PlayerSession): SelfCharacterState & { gender: CharacterGender } {
     return {
       ...this.toPublicState(session),
       experience: session.experience,

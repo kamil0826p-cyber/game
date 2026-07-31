@@ -3,8 +3,10 @@ import { ZodError } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, SocketAck, SocketErrorPayload, WorldSpawnPayload } from '../../contracts/socket.events.js';
 import {
+  createCharacterSchema,
   selectCharacterSchema,
   updateCharacterOutfitSchema,
+  type CreateCharacterPayload,
   type SelectCharacterPayload,
   type UpdateCharacterOutfitPayload,
 } from '../../contracts/socket.schemas.js';
@@ -23,6 +25,27 @@ export class CharacterRosterGateway {
   async list(@ConnectedSocket() client: GameSocket): Promise<SocketAck<CharacterRosterPayload>> {
     try {
       return { ok: true, data: await this.lifecycle.listCharacters(client) };
+    } catch (error) {
+      return { ok: false, error: this.toSocketError(error, client) };
+    }
+  }
+
+  @SubscribeMessage('character:createWithAppearance')
+  async createWithAppearance(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() rawPayload: unknown,
+  ): Promise<SocketAck<WorldSpawnPayload>> {
+    try {
+      const payload: CreateCharacterPayload = createCharacterSchema.parse(rawPayload);
+      return {
+        ok: true,
+        data: await this.lifecycle.createCharacter(client, {
+          name: payload.name,
+          characterClass: payload.characterClass,
+          gender: payload.gender,
+          outfitKey: payload.outfitKey,
+        }),
+      };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }

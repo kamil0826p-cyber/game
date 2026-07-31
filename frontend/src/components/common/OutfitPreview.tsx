@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { CharacterClass, Direction } from '../../contracts/game';
+import type { CharacterClass, CharacterGender, Direction } from '../../contracts/game';
 import { outfitImageCandidates } from '../../mock/outfitCatalog';
 
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
@@ -7,6 +7,7 @@ const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, N
 interface OutfitPreviewProps {
   outfitKey: string;
   characterClass: CharacterClass;
+  gender?: CharacterGender;
   direction?: Direction;
   size?: 'small' | 'large';
   animated?: boolean;
@@ -17,6 +18,7 @@ interface OutfitPreviewProps {
 export function OutfitPreview({
   outfitKey,
   characterClass: _characterClass,
+  gender = 'MALE',
   direction = 'SOUTH',
   size = 'large',
   animated = true,
@@ -37,7 +39,7 @@ export function OutfitPreview({
     const safeRenderScale = Math.max(0.2, Math.min(3, renderScale));
     const candidates = mob
       ? [`${import.meta.env.BASE_URL}assets/mobs/${encodeURIComponent(outfitKey)}.svg`]
-      : [...outfitImageCandidates(outfitKey)];
+      : [...outfitImageCandidates(outfitKey, gender)];
     let candidateIndex = 0;
     let frameId = 0;
     let start = performance.now();
@@ -51,7 +53,7 @@ export function OutfitPreview({
         image.src = next;
         return;
       }
-      console.error(`No outfit image candidate could be loaded for ${outfitKey}.`);
+      console.error(`No outfit image candidate could be loaded for ${outfitKey} (${gender}).`);
     };
 
     const draw = (now: number) => {
@@ -108,7 +110,7 @@ export function OutfitPreview({
       image.onload = null;
       image.onerror = null;
     };
-  }, [animated, direction, outfitKey, renderScale]);
+  }, [animated, direction, gender, outfitKey, renderScale]);
 
   return (
     <canvas
@@ -116,7 +118,7 @@ export function OutfitPreview({
       width={96}
       height={144}
       className={`pixelated ${size === 'small' ? 'h-20 w-14' : 'h-36 w-24'} ${className}`}
-      aria-label={`${outfitKey} animated outfit preview`}
+      aria-label={`${outfitKey} ${gender.toLowerCase()} animated outfit preview`}
     />
   );
 }

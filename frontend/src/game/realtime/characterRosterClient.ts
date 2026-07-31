@@ -1,4 +1,4 @@
-import type { CharacterClass } from '../../contracts/game';
+import type { CharacterClass, CharacterGender } from '../../contracts/game';
 import type { SocketAck, WorldSpawnPayload } from '../../contracts/socket';
 import { createRequestId } from '../../utils/requestId';
 import { gameStore } from '../state/gameStore';
@@ -8,6 +8,7 @@ export interface CharacterRosterEntry {
   characterId: string;
   name: string;
   characterClass: CharacterClass;
+  gender?: CharacterGender;
   level: number;
   experience: number;
   outfitKey: string;
@@ -43,7 +44,12 @@ declare module './GameSocketClient' {
     listCharacters(): Promise<CharacterRosterPayload>;
     selectCharacter(characterId: string): Promise<void>;
     updateCharacterOutfit(characterId: string, outfitKey: string): Promise<CharacterRosterEntry>;
-    createCharacterWithOutfit(name: string, characterClass: CharacterClass, outfitKey: string): Promise<void>;
+    createCharacterWithOutfit(
+      name: string,
+      characterClass: CharacterClass,
+      outfitKey: string,
+      gender: CharacterGender,
+    ): Promise<void>;
   }
 }
 
@@ -84,8 +90,21 @@ GameSocketClient.prototype.createCharacterWithOutfit = async function (
   name: string,
   characterClass: CharacterClass,
   outfitKey: string,
+  gender: CharacterGender,
 ): Promise<void> {
-  await this.createCharacter(name, characterClass);
-  const characterId = gameStore.getSnapshot().self?.characterId;
-  if (characterId) await this.updateCharacterOutfit(characterId, outfitKey);
+  const internal = this as unknown as InternalClient;
+  const payload = unwrap(await internal.withAck<WorldSpawnPayload>((ack) =>
+    internal.requireSocket().emit(
+      'character:createWithAppearance',
+      {
+        requestId: createRequestId('character-create-appearance'),
+        name,
+        characterClass,
+        gender,
+        outfitKey,
+      },
+      ack,
+    ),
+  ));
+  gameStore.spawn(payload);
 };

@@ -1,4 +1,8 @@
-import type { CharacterClass, CharacterStats } from '../../common/domain/game.types.js';
+import type {
+  CharacterClass,
+  CharacterGender,
+  CharacterStats,
+} from '../../common/domain/game.types.js';
 
 export type UserRole = 'USER' | 'MOD' | 'ADMIN';
 
@@ -13,6 +17,7 @@ export interface FirebaseUserRecord {
 export interface CreateCharacterInput {
   name: string;
   characterClass: CharacterClass;
+  gender?: CharacterGender;
   outfitKey?: string;
 }
 

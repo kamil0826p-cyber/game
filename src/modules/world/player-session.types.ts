@@ -1,5 +1,6 @@
 import type {
   CharacterClass,
+  CharacterGender,
   CharacterStats,
   CombatState,
   CurrencyBalance,
@@ -17,6 +18,7 @@ export interface PlayerSession extends CharacterStats, CurrencyBalance {
   realmId: string;
   name: string;
   characterClass: CharacterClass;
+  gender: CharacterGender;
   level: number;
   experience: number;
   outfitKey: string;
