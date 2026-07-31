@@ -54,7 +54,16 @@ export class GroupGateway {
     return this.handle(client, groupRespondSchema, raw, async (session, payload) => {
       const snapshot = await this.groups.respond(session, payload.inviteId, payload.accept);
       if (payload.accept && snapshot.group) {
-        void this.analytics.groupJoined(session, snapshot.group.id, snapshot.group.members.length);
+        for (const member of snapshot.group.members) {
+          const memberSession = this.worldState.getByCharacterId(member.characterId);
+          if (memberSession?.activeInWorld) {
+            void this.analytics.groupJoined(
+              memberSession,
+              snapshot.group.id,
+              snapshot.group.members.length,
+            );
+          }
+        }
       }
       return snapshot;
     });
