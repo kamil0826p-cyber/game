@@ -8,12 +8,34 @@ on:
       - agent/foundation-content-outbox
 
 jobs:
-  verify:
+  static:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      CONTENT_READINESS_CHECK: "false"
+      OUTBOX_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+      - run: npm ci
+      - run: npm --prefix frontend ci
+      - run: npm run prisma:validate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run frontend:typecheck
+      - run: npm run frontend:test
+      - run: npm run frontend:build
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17
         env:
           POSTGRES_USER: game
           POSTGRES_PASSWORD: game
@@ -39,17 +61,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
       - run: npm ci
-      - run: npm --prefix frontend ci
-      - run: npm run prisma:validate
       - run: npm run db:prepare -- --operation-id=ci-${{ github.sha }} --author=github-actions
       - run: npm run content:dry-run
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run frontend:typecheck
-      - run: npm run frontend:test
-      - run: npm run frontend:build
