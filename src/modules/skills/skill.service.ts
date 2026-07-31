@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { CharacterClass } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import type { Prisma } from '../../generated/prisma/client.js';
 import { ProgressionService } from '../characters/progression.service.js';
 import { repairSkillBuild } from './skill-build.rules.js';
 import { SKILL_CATALOG, skillsForClass } from './skill.catalog.js';
@@ -272,7 +273,7 @@ export class SkillService {
   }
 
   private async lockCharacter(
-    transaction: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+    transaction: Prisma.TransactionClient,
     characterId: string,
   ): Promise<void> {
     await transaction.$queryRaw`
@@ -284,7 +285,7 @@ export class SkillService {
   }
 
   private async applyRepair(
-    transaction: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+    transaction: Prisma.TransactionClient,
     characterId: string,
     removedKeys: readonly string[],
     kept: readonly { key: string; rank: number; originalRank: number }[],
