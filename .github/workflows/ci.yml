@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      CONTENT_READINESS_CHECK: "false"
+      OUTBOX_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+      - run: npm ci
+      - run: npm --prefix frontend ci
+      - run: npm run prisma:validate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run frontend:typecheck
+      - run: npm run frontend:test
+      - run: npm run frontend:build
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: game
+          POSTGRES_PASSWORD: game
+          POSTGRES_DB: grid_mmorpg
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U game -d grid_mmorpg"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      DIRECT_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      GAME_REALM_SLUG: world-1
+      GAME_REALM_NAME: World 1
+      GAME_REALM_INSTANCE_ID: ci-primary
+      CONTENT_READINESS_CHECK: "false"
+      OUTBOX_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+      - run: npm ci
+      - run: npm run db:prepare
+      - run: npm run content:dry-run

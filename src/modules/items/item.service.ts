@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 import type { CharacterClass, EquipmentSlot, ItemCategory } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
+import { isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 import type { InventorySnapshot, ItemRarity, MerchantSnapshot } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -23,29 +23,17 @@ type ItemMetadata = {
   sellPriceSilver: number;
   sellable?: boolean;
 };
-type CatalogDefinition = { key: string; name: string; description: string; stackLimit: number; metadata: ItemMetadata };
 type CharacterStats = { strength: number; agility: number; intelligence: number; armor: number; maxHp: number; maxEnergy: number };
-
-const CATALOG: readonly CatalogDefinition[] = [
-  { key: 'traveler-sword', name: 'Traveler Sword', description: 'A dependable steel blade for a beginning warrior.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'COMMON', icon: '⚔', equipmentSlot: 'MAIN_HAND', requiredClass: 'WARRIOR', minimumLevel: 5, statBonuses: { strength: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'apprentice-staff', name: 'Apprentice Staff', description: 'A simple focus for novice spellcasters.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'ARTIFACT', icon: '✦', equipmentSlot: 'MAIN_HAND', requiredClass: 'MAGE', minimumLevel: 5, statBonuses: { intelligence: 3, maxEnergy: 10 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'field-bow', name: 'Field Bow', description: 'A light bow made for quick shots.', stackLimit: 1, metadata: { category: 'EQUIPMENT', rarity: 'MYTHIC', icon: '➶', equipmentSlot: 'MAIN_HAND', requiredClass: 'ARCHER', minimumLevel: 5, statBonuses: { agility: 3 }, buyPriceSilver: 180, sellPriceSilver: 72 } },
-  { key: 'minor-health-potion', name: 'Minor Health Potion', description: 'Restores 35 health.', stackLimit: 20, metadata: { category: 'CONSUMABLE', rarity: 'COMMON', icon: '◆', effect: { hp: 35 }, buyPriceSilver: 24, sellPriceSilver: 9 } },
-  { key: 'field-rations', name: 'Field Rations', description: 'Restores 30 energy.', stackLimit: 20, metadata: { category: 'CONSUMABLE', rarity: 'COMMON', icon: '●', effect: { energy: 30 }, buyPriceSilver: 18, sellPriceSilver: 7 } },
-  { key: 'town-scroll', name: 'Town Scroll', description: 'A dormant scroll prepared for a future travel system.', stackLimit: 10, metadata: { category: 'QUEST', rarity: 'COMMON', icon: '▱', buyPriceSilver: 0, sellPriceSilver: 0, sellable: false } },
-];
 
 @Injectable()
 export class ItemService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getInventory(userId: string, characterId: string): Promise<InventorySnapshot> {
-    await this.ensureCatalogAndRemoveLegacyStarterItems(userId, characterId);
+  getInventory(userId: string, characterId: string): Promise<InventorySnapshot> {
     return this.snapshot(userId, characterId, true);
   }
 
-  async getMerchant(userId: string, characterId: string, npcId: string): Promise<MerchantSnapshot> {
-    await this.ensureCatalogAndRemoveLegacyStarterItems(userId, characterId);
+  getMerchant(userId: string, characterId: string, npcId: string): Promise<MerchantSnapshot> {
     return this.merchantSnapshot(userId, characterId, npcId);
   }
 
@@ -158,23 +146,6 @@ export class ItemService {
       else await tx.inventoryItem.update({ where: { id: item.id }, data: { quantity: { decrement: quantity } } });
     });
     return this.snapshot(userId, characterId, true);
-  }
-
-  private async ensureCatalogAndRemoveLegacyStarterItems(userId: string, characterId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const character = await tx.character.findFirst({ where: { id: characterId, userId }, select: { id: true } });
-      if (!character) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
-      await this.upsertCatalog(tx);
-      const legacy = await tx.inventoryItem.findMany({ where: { characterId }, select: { id: true, instanceData: true } });
-      const legacyIds = legacy.filter((item) => (item.instanceData as { starter?: unknown } | null)?.starter === true).map((item) => item.id);
-      if (legacyIds.length > 0) await tx.inventoryItem.deleteMany({ where: { id: { in: legacyIds } } });
-    });
-  }
-
-  private async upsertCatalog(tx: Prisma.TransactionClient): Promise<void> {
-    for (const definition of CATALOG) {
-      await tx.itemDefinition.upsert({ where: { key: definition.key }, create: { key: definition.key, name: definition.name, description: definition.description, stackLimit: definition.stackLimit, metadata: definition.metadata as unknown as Prisma.InputJsonValue }, update: { name: definition.name, description: definition.description, stackLimit: definition.stackLimit, metadata: definition.metadata as unknown as Prisma.InputJsonValue } });
-    }
   }
 
   private async merchantSnapshot(userId: string, characterId: string, npcId: string): Promise<MerchantSnapshot> {
