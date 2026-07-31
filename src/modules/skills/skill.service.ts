@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import type { CharacterClass } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import type { CharacterClass } from '../../common/domain/game.types.js';
 import { ProgressionService } from '../characters/progression.service.js';
+import { repairSkillBuild } from './skill-build.rules.js';
 import { SKILL_CATALOG, skillsForClass } from './skill.catalog.js';
 import { getSkillEligibility } from './skill.rules.js';
 import type { SkillTreeSnapshot } from './skill.types.js';
@@ -46,13 +47,7 @@ export class SkillService {
 
   async unlock(userId: string, characterId: string, skillKey: string): Promise<SkillTreeSnapshot> {
     await this.prisma.$transaction(async (transaction) => {
-      await transaction.$queryRaw`
-        SELECT "id"
-        FROM "Character"
-        WHERE "id" = ${characterId}::uuid
-        FOR UPDATE
-      `;
-
+      await this.lockCharacter(transaction, characterId);
       const character = await transaction.character.findFirst({
         where: { id: characterId, userId },
         select: {
@@ -72,6 +67,25 @@ export class SkillService {
       }
 
       const characterClass = character.class as CharacterClass;
+      const repaired = repairSkillBuild(
+        characterClass,
+        character.level,
+        this.getEarnedPointBudget(characterClass, character.level),
+        SKILL_CATALOG,
+        character.skills.map((entry) => ({
+          key: entry.skillDefinition.key,
+          rank: entry.rank,
+        })),
+      );
+      if (repaired.removed.length > 0 || repaired.kept.some((entry) => entry.rank !== entry.originalRank)) {
+        await this.applyRepair(
+          transaction,
+          characterId,
+          repaired.removed.map((entry) => entry.key),
+          repaired.kept,
+        );
+      }
+
       const skill = SKILL_CATALOG.find(
         (candidate) => candidate.key === skillKey && candidate.characterClass === characterClass,
       );
@@ -79,12 +93,12 @@ export class SkillService {
         throw new GameError(GAME_ERROR_CODES.SKILL_NOT_AVAILABLE, 'errors.skills.notAvailable');
       }
 
-      const unlockedKeys = new Set(character.skills.map((entry) => entry.skillDefinition.key));
+      const unlockedKeys = new Set(repaired.kept.map((entry) => entry.key));
       if (unlockedKeys.has(skill.key)) return;
 
       const points = this.progression.calculateSkillPointBudget(
         character.level,
-        character.skills.reduce((sum, entry) => sum + entry.rank, 0),
+        repaired.spentPoints,
         this.getPointCapacity(characterClass),
       );
       const eligibility = getSkillEligibility(
@@ -131,6 +145,61 @@ export class SkillService {
       });
     });
 
+    return this.getSnapshot(userId, characterId);
+  }
+
+  async respec(userId: string, characterId: string): Promise<SkillTreeSnapshot> {
+    await this.prisma.$transaction(async (transaction) => {
+      await this.lockCharacter(transaction, characterId);
+      const character = await transaction.character.findFirst({
+        where: { id: characterId, userId },
+        select: { id: true },
+      });
+      if (!character) {
+        throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+      }
+      await transaction.characterSkill.deleteMany({ where: { characterId } });
+    });
+    return this.getSnapshot(userId, characterId);
+  }
+
+  async repairBuild(userId: string, characterId: string): Promise<SkillTreeSnapshot> {
+    await this.prisma.$transaction(async (transaction) => {
+      await this.lockCharacter(transaction, characterId);
+      const character = await transaction.character.findFirst({
+        where: { id: characterId, userId },
+        select: {
+          class: true,
+          level: true,
+          skills: {
+            select: {
+              rank: true,
+              skillDefinition: { select: { key: true } },
+            },
+          },
+        },
+      });
+      if (!character) {
+        throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+      }
+      const characterClass = character.class as CharacterClass;
+      const repaired = repairSkillBuild(
+        characterClass,
+        character.level,
+        this.getEarnedPointBudget(characterClass, character.level),
+        SKILL_CATALOG,
+        character.skills.map((entry) => ({
+          key: entry.skillDefinition.key,
+          rank: entry.rank,
+        })),
+      );
+      await this.applyRepair(
+        transaction,
+        characterId,
+        repaired.removed.map((entry) => entry.key),
+        repaired.kept,
+      );
+    });
     return this.getSnapshot(userId, characterId);
   }
 
@@ -200,6 +269,49 @@ export class SkillService {
         };
       }),
     };
+  }
+
+  private async lockCharacter(
+    transaction: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+    characterId: string,
+  ): Promise<void> {
+    await transaction.$queryRaw`
+      SELECT "id"
+      FROM "Character"
+      WHERE "id" = ${characterId}::uuid
+      FOR UPDATE
+    `;
+  }
+
+  private async applyRepair(
+    transaction: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+    characterId: string,
+    removedKeys: readonly string[],
+    kept: readonly { key: string; rank: number; originalRank: number }[],
+  ): Promise<void> {
+    if (removedKeys.length > 0) {
+      await transaction.characterSkill.deleteMany({
+        where: {
+          characterId,
+          skillDefinition: { key: { in: [...removedKeys] } },
+        },
+      });
+    }
+    for (const entry of kept) {
+      if (entry.rank === entry.originalRank) continue;
+      await transaction.characterSkill.updateMany({
+        where: { characterId, skillDefinition: { key: entry.key } },
+        data: { rank: entry.rank, cooldownTurnsRemaining: 0 },
+      });
+    }
+  }
+
+  private getEarnedPointBudget(characterClass: CharacterClass, level: number): number {
+    return this.progression.calculateSkillPointBudget(
+      level,
+      0,
+      this.getPointCapacity(characterClass),
+    ).earned;
   }
 
   private getPointCapacity(characterClass: CharacterClass): number {
