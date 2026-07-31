@@ -6,6 +6,7 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import { ZodError, type ZodType } from 'zod';
+import { AnalyticsTrackingService } from '../../analytics/analytics-tracking.service.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type {
   CombatSnapshot,
@@ -33,6 +34,7 @@ export class CombatGateway {
     private readonly combats: CombatService,
     private readonly world: WorldStateService,
     private readonly localization: LocalizationService,
+    private readonly analytics: AnalyticsTrackingService,
   ) {}
 
   @SubscribeMessage('combat:getActive')
@@ -70,9 +72,16 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatActionSchema, raw, (session, payload) =>
-      this.combats.act(session.userId, session.characterId, payload.combatId, payload),
-    );
+    return this.handle(client, combatActionSchema, raw, async (session, payload) => {
+      const snapshot = await this.combats.act(
+        session.userId,
+        session.characterId,
+        payload.combatId,
+        payload,
+      );
+      void this.analytics.combatActionAccepted(session, snapshot, payload);
+      return snapshot;
+    });
   }
 
   @SubscribeMessage('combat:leave')

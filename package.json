@@ -26,6 +26,8 @@
     "content:deploy": "tsx prisma/content.cli.ts deploy",
     "content:rollback": "tsx prisma/content.cli.ts rollback",
     "events:replay": "tsx prisma/domain-events.cli.ts replay",
+    "analytics": "tsx prisma/analytics.cli.ts",
+    "balance:simulate": "tsx prisma/balance-simulator.cli.ts",
     "db:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run content:deploy",
     "format:check": "prettier --check .",
     "format": "prettier --write .",

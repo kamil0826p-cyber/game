@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalyticsModule } from './analytics/analytics.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { GameConfigModule } from './config/game-config.module.js';
 import { ContentModule } from './content/content.module.js';
@@ -28,6 +29,7 @@ import { WorldModule } from './modules/world/world.module.js';
     GameConfigModule,
     DatabaseModule,
     DomainEventsModule,
+    AnalyticsModule,
     ContentModule,
     LocalizationModule,
     AuthModule,

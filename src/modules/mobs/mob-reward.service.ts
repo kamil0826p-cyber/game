@@ -129,6 +129,7 @@ export class MobRewardService {
           mobDefinitionKey: mob.definitionKey,
           characterId: character.id,
           mobLevel: mob.level,
+          skippedLoot: loot.skipped.map((item) => ({ itemKey: item.itemKey, quantity: item.quantity })),
           audit: [
             ...(experienceAward > 0 ? [{
               characterId: character.id,
