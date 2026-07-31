@@ -2,13 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { CharacterClass } from '../../common/domain/game.types.js';
+import { ProgressionService } from '../characters/progression.service.js';
 import { SKILL_CATALOG, skillsForClass } from './skill.catalog.js';
-import { calculateSkillPoints, getSkillEligibility } from './skill.rules.js';
+import { getSkillEligibility } from './skill.rules.js';
 import type { SkillTreeSnapshot } from './skill.types.js';
 
 @Injectable()
 export class SkillService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly progression: ProgressionService,
+  ) {}
 
   async getSnapshot(userId: string, characterId: string): Promise<SkillTreeSnapshot> {
     const character = await this.prisma.character.findFirst({
@@ -56,6 +60,7 @@ export class SkillService {
           level: true,
           skills: {
             select: {
+              rank: true,
               skillDefinitionId: true,
               skillDefinition: { select: { key: true } },
             },
@@ -77,7 +82,11 @@ export class SkillService {
       const unlockedKeys = new Set(character.skills.map((entry) => entry.skillDefinition.key));
       if (unlockedKeys.has(skill.key)) return;
 
-      const points = calculateSkillPoints(character.level, character.skills.length);
+      const points = this.progression.calculateSkillPointBudget(
+        character.level,
+        character.skills.reduce((sum, entry) => sum + entry.rank, 0),
+        this.getPointCapacity(characterClass),
+      );
       const eligibility = getSkillEligibility(
         skill,
         character.level,
@@ -148,11 +157,15 @@ export class SkillService {
   ): SkillTreeSnapshot {
     const unlockedByKey = new Map(unlocked.map((skill) => [skill.key, skill]));
     const unlockedKeys = new Set(unlockedByKey.keys());
-    const points = calculateSkillPoints(characterLevel, unlocked.length);
+    const points = this.progression.calculateSkillPointBudget(
+      characterLevel,
+      unlocked.reduce((sum, skill) => sum + skill.rank, 0),
+      this.getPointCapacity(characterClass),
+    );
 
     return {
       characterClass,
-      characterLevel,
+      characterLevel: this.progression.clampLevel(characterLevel),
       points,
       skills: skillsForClass(characterClass).map((skill) => {
         const characterSkill = unlockedByKey.get(skill.key);
@@ -187,5 +200,9 @@ export class SkillService {
         };
       }),
     };
+  }
+
+  private getPointCapacity(characterClass: CharacterClass): number {
+    return skillsForClass(characterClass).reduce((sum, skill) => sum + skill.maxRank, 0);
   }
 }
