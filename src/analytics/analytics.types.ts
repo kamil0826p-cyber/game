@@ -5,6 +5,7 @@ export const ANALYTICS_CONSUMER = 'analytics-ingestion-v1';
 
 export type AnalyticsProviderKind = 'disabled' | 'stdout' | 'http';
 export type AnalyticsDeliveryStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED' | 'DEAD' | 'DISABLED';
+export type ExperimentSubjectType = 'ACCOUNT' | 'CHARACTER' | 'REALM' | 'GROUP' | 'GUILD';
 
 export interface AnalyticsEnvelope {
   envelopeVersion: typeof ANALYTICS_ENVELOPE_VERSION;
