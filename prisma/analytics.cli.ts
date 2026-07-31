@@ -17,6 +17,8 @@ const REPORT_VIEWS = {
   crafting: 'AnalyticsCraftingDaily',
   combat: 'AnalyticsCombatHealthDaily',
   'combat-modes': 'AnalyticsCombatHealthByModeDaily',
+  'party-sizes': 'AnalyticsCombatPartySizeDaily',
+  skills: 'AnalyticsSkillPerformanceDaily',
   queue: 'AnalyticsQueueHealth',
   anomalies: 'AnalyticsAnomalies',
 } as const;
