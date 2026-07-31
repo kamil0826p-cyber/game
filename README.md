@@ -16,7 +16,8 @@ TypeScript monorepo containing a NestJS/Socket.IO backend and a React/PixiJS cli
 - `frontend/` — browser client
 - `prisma/` — schema, migrations and bootstrap content
 - `scripts/content/` — versioned content deployment and validation
-- `scripts/progression/` — safe character progression migration
+- `scripts/progression/` — safe character and skill-build migrations
+- `analytics/` — reference funnel, retention, combat and economy queries
 - `test/` — backend unit and integration-oriented tests
 - `docs/` — design and operational decisions
 
@@ -47,7 +48,7 @@ npm run check:integration
 npm run check:all
 ```
 
-`check:static` runs formatting, backend/frontend type checks, tests and builds. `check:integration` requires PostgreSQL and verifies Prisma migrations, repeatable content deployment, content integrity and a progression migration dry-run.
+`check:static` runs formatting, backend/frontend type checks, tests and builds. `check:integration` requires PostgreSQL and verifies Prisma migrations, repeatable content deployment, content integrity, a progression migration dry-run and a skill-build repair dry-run.
 
 The same gates run in `.github/workflows/ci.yml` for every pull request and push to `main`.
 
@@ -58,11 +59,12 @@ npm run build
 npm run deploy:prepare
 npm run progression:migrate:dry
 npm run progression:migrate
-npm run content:verify
+npm run skills:repair:dry
+npm run skills:repair
 npm run start
 ```
 
-`npm run start` only starts the compiled server. It does not modify the database.
+`npm run start` first performs a read-only content readiness check and then starts the compiled server. It never generates Prisma Client, migrates the schema, seeds content or mutates gameplay data.
 
 See [development and deployment operations](docs/OPERATIONS.md) for locks, patch rules, rollback and CI diagnostics.
 
@@ -71,12 +73,14 @@ See [development and deployment operations](docs/OPERATIONS.md) for locks, patch
 - configurable maximum character level;
 - versioned, class-specific stat curves;
 - deterministic experience and skill-point policies;
-- safe migration preserving equipped-item bonuses;
+- safe migrations preserving equipped-item bonuses and repairing illegal skill builds;
+- atomic skill respec;
 - fast classical combat turns with a server-owned deadline;
 - deterministic timeout fallback;
 - data-driven mob skills, phases and legal-action AI;
 - authoritative telegraph lifecycle and counter hooks;
 - versioned telemetry contracts with bounded nonblocking delivery;
+- reference SQL for funnels, D1/D7 retention, combat and economy;
 - content validation for references, map bounds, dialogue graphs, loot and skill cycles;
 - durable, idempotent content patch registry.
 
@@ -91,6 +95,6 @@ See [development and deployment operations](docs/OPERATIONS.md) for locks, patch
 - The client sends commands; the server validates and resolves them.
 - Resource-granting operations must be transactional and idempotent.
 - Reconnect and retries must not duplicate rewards or actions.
-- Runtime startup must not migrate schemas or deploy content.
+- Runtime startup may perform read-only readiness checks, but must not migrate schemas or deploy content.
 - Content definitions use stable keys and versioned validation.
 - Authentication tokens, private messages and arbitrary client metadata must not enter telemetry.
