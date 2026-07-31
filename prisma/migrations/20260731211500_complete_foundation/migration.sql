@@ -74,6 +74,52 @@ CREATE UNIQUE INDEX "DomainEvent_type_operationId_key"
 CREATE INDEX "EventOutbox_stale_processing_idx"
   ON "EventOutbox"("lockedAt") WHERE "status" = 'PROCESSING';
 
+CREATE OR REPLACE FUNCTION "stamp_character_quest_content"()
+RETURNS TRIGGER AS $$
+DECLARE
+  content_version TEXT;
+  quest_key TEXT;
+  quest_definition JSONB;
+BEGIN
+  IF NEW."status" NOT IN ('ACTIVE', 'READY', 'COMPLETED')
+     OR COALESCE(NEW."progress", '{}'::jsonb) ? '__contentSnapshot' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT release."version", definition."key", jsonb_build_object(
+    'key', definition."key",
+    'name', definition."name",
+    'description', definition."description",
+    'minimumLevel', definition."minimumLevel",
+    'steps', definition."steps",
+    'rewards', definition."rewards"
+  ) INTO content_version, quest_key, quest_definition
+  FROM "QuestDefinition" AS definition
+  LEFT JOIN LATERAL (
+    SELECT "version" FROM "ContentRelease" WHERE "state" = 'ACTIVE' LIMIT 1
+  ) AS release ON TRUE
+  WHERE definition."id" = NEW."questDefinitionId";
+
+  IF quest_key IS NULL THEN RETURN NEW; END IF;
+  NEW."progress" := jsonb_set(
+    COALESCE(NEW."progress", '{}'::jsonb),
+    '{__contentSnapshot}',
+    jsonb_build_object(
+      'instanceType', 'QUEST',
+      'contentVersion', COALESCE(content_version, 'unversioned'),
+      'definitionKey', quest_key,
+      'definition', quest_definition
+    ),
+    true
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "CharacterQuest_content_snapshot_trigger"
+BEFORE INSERT OR UPDATE OF "status", "progress" ON "CharacterQuest"
+FOR EACH ROW EXECUTE FUNCTION "stamp_character_quest_content"();
+
 CREATE OR REPLACE FUNCTION "emit_character_quest_domain_event"()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -89,7 +135,7 @@ BEGIN
   SELECT "key", "rewards" INTO quest_key, quest_rewards
   FROM "QuestDefinition" WHERE "id" = NEW."questDefinitionId";
 
-  IF NEW."status" = 'ACTIVE' AND (TG_OP = 'INSERT' OR OLD."status" IS DISTINCT FROM 'ACTIVE') THEN
+  IF NEW."status" = 'ACTIVE' AND (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD."status" IS DISTINCT FROM 'ACTIVE')) THEN
     event_type := 'QuestChoiceMade';
     operation_id := 'quest-choice:' || NEW."id"::text || ':accept';
     event_payload := jsonb_build_object(
@@ -98,7 +144,7 @@ BEGIN
       'npcKey', 'quest:' || quest_key,
       'choiceId', 'ACCEPT'
     );
-  ELSIF NEW."status" = 'REWARDED' AND (TG_OP = 'INSERT' OR OLD."status" IS DISTINCT FROM 'REWARDED') THEN
+  ELSIF NEW."status" = 'REWARDED' AND (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD."status" IS DISTINCT FROM 'REWARDED')) THEN
     event_type := 'QuestRewardGranted';
     operation_id := 'quest-reward:' || NEW."id"::text;
     silver_reward := COALESCE((quest_rewards->>'silver')::integer, 0);
@@ -243,6 +289,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER "TradeSession_completed_domain_event_trigger"
+CREATE TRIGER "TradeSession_completed_domain_event_trigger"
 AFTER INSERT OR UPDATE OF "status" ON "TradeSession"
 FOR EACH ROW EXECUTE FUNCTION "emit_trade_completed_domain_event"();
