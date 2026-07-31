@@ -130,7 +130,7 @@ export async function applyManifest(
       UPDATE "CharacterQuest"
       SET "progress" = jsonb_set(COALESCE("progress", '{}'::jsonb), '{__contentSnapshot}', ${snapshot}::jsonb, true)
       WHERE "questDefinitionId" = ${deployed.id}::uuid
-        AND "status" IN ('ACTIVE', 'READY', 'COMPLETED')
+        AND "status" IN ('ACTIVE', 'COMPLETED')
         AND NOT (COALESCE("progress", '{}'::jsonb) ? '__contentSnapshot')
     `);
   }
@@ -271,5 +271,3 @@ export async function applyManifest(
   if (!defaultMapId) throw new Error(`Default map ${manifest.realm.defaultMapKey} is missing.`);
   await tx.realm.update({ where: { id: realm.id }, data: { defaultMapId } });
 }
-
-
