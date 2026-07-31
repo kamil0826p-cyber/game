@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
 import { ZodError, type ZodType } from 'zod';
+import { AnalyticsTrackingService } from '../../analytics/analytics-tracking.service.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GroupSnapshot } from '../../contracts/group.events.js';
 import {
@@ -24,52 +25,40 @@ export class GroupGateway {
     private readonly groups: GroupService,
     private readonly worldState: WorldStateService,
     private readonly localization: LocalizationService,
+    private readonly analytics: AnalyticsTrackingService,
   ) {}
 
   @SubscribeMessage('group:get')
-  get(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<GroupSnapshot>> {
+  get(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GroupSnapshot>> {
     return this.handle(client, groupGetSchema, raw, (session) => this.groups.getSnapshot(session));
   }
 
   @SubscribeMessage('group:invite')
-  invite(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<GroupSnapshot>> {
+  invite(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GroupSnapshot>> {
     return this.handle(client, groupInviteSchema, raw, (session, payload) =>
-      this.groups.invite(session, payload.targetCharacterId),
-    );
+      this.groups.invite(session, payload.targetCharacterId));
   }
 
   @SubscribeMessage('group:respond')
-  respond(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<GroupSnapshot>> {
-    return this.handle(client, groupRespondSchema, raw, (session, payload) =>
-      this.groups.respond(session, payload.inviteId, payload.accept),
-    );
+  respond(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GroupSnapshot>> {
+    return this.handle(client, groupRespondSchema, raw, async (session, payload) => {
+      const snapshot = await this.groups.respond(session, payload.inviteId, payload.accept);
+      if (payload.accept && snapshot.group) {
+        void this.analytics.groupJoined(session, snapshot.group.id, snapshot.group.members.length);
+      }
+      return snapshot;
+    });
   }
 
   @SubscribeMessage('group:leave')
-  leave(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<GroupSnapshot>> {
+  leave(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GroupSnapshot>> {
     return this.handle(client, groupLeaveSchema, raw, (session) => this.groups.leave(session));
   }
 
   @SubscribeMessage('group:kick')
-  kick(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<GroupSnapshot>> {
+  kick(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GroupSnapshot>> {
     return this.handle(client, groupKickSchema, raw, (session, payload) =>
-      this.groups.kick(session, payload.targetCharacterId),
-    );
+      this.groups.kick(session, payload.targetCharacterId));
   }
 
   private async handle<TPayload, TResult>(
@@ -97,26 +86,12 @@ export class GroupGateway {
   private toSocketError(error: unknown, client: GameSocket): SocketErrorPayload {
     const locale = client.data.locale ?? 'en';
     if (error instanceof GameError) {
-      return {
-        code: error.code,
-        message: this.localization.translate(error.messageKey, locale),
-        ...(error.details ? { details: error.details } : {}),
-      };
+      return { code: error.code, message: this.localization.translate(error.messageKey, locale), ...(error.details ? { details: error.details } : {}) };
     }
     if (error instanceof ZodError) {
-      return {
-        code: GAME_ERROR_CODES.INVALID_PAYLOAD,
-        message: this.localization.translate('errors.payload.invalid', locale),
-        details: { issues: error.issues },
-      };
+      return { code: GAME_ERROR_CODES.INVALID_PAYLOAD, message: this.localization.translate('errors.payload.invalid', locale), details: { issues: error.issues } };
     }
-    this.logger.error(
-      'Unhandled group gateway error.',
-      error instanceof Error ? error.stack : undefined,
-    );
-    return {
-      code: GAME_ERROR_CODES.INTERNAL_ERROR,
-      message: this.localization.translate('errors.internal', locale),
-    };
+    this.logger.error('Unhandled group gateway error.', error instanceof Error ? error.stack : undefined);
+    return { code: GAME_ERROR_CODES.INTERNAL_ERROR, message: this.localization.translate('errors.internal', locale) };
   }
 }
