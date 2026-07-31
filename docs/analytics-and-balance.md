@@ -30,6 +30,8 @@ npm run analytics -- skipped-loot
 npm run analytics -- crafting
 npm run analytics -- combat
 npm run analytics -- combat-modes
+npm run analytics -- party-sizes
+npm run analytics -- skills
 npm run analytics -- queue
 npm run analytics -- anomalies
 ```
@@ -49,6 +51,8 @@ The commands read stable database views:
 - `AnalyticsCraftingDaily`: recipe volume and unique crafters once crafting emits `CraftCompleted`.
 - `AnalyticsCombatHealthDaily`: duration, turns, party size, surrender/disconnect and skill usage.
 - `AnalyticsCombatHealthByModeDaily`: the same combat metrics split by PVE/PVP mode, zone and server-derived difficulty.
+- `AnalyticsCombatPartySizeDaily`: distribution and health metrics for party sizes from solo to ten-player teams.
+- `AnalyticsSkillPerformanceDaily`: uses, damage, healing, absorbed shields, dodges and status applications per skill.
 - `AnalyticsQueueHealth`: queue depth, oldest work and maximum attempts.
 - `AnalyticsAnomalies`: non-zero economy reconciliation and dead deliveries.
 
@@ -70,7 +74,7 @@ npm run analytics -- experiment:disable --key=onboarding-v2
 
 ## Deterministic balance simulator
 
-The simulator imports the production `CombatEngine` and skill catalog directly. It never imports Prisma, reward services or domain-event publishers. Scenarios support teams from 1 to 10, fixed seeds and thousands of fights.
+The simulator imports the production `CombatEngine` and skill catalog directly. It never imports Prisma, reward services or domain-event publishers. A side contains one or more fighter profiles with counts whose total is between 1 and 10. A suite may contain solo, homogeneous and mixed-composition scenarios and runs them in one reproducible report.
 
 ```bash
 npm run balance:simulate -- run --input=prisma/balance.example.json
@@ -80,4 +84,4 @@ npm run balance:simulate -- compare \
   --output=artifacts/balance/report.json
 ```
 
-Reports include team win counts, draws/timeouts, average turns, estimated duration, basic/skill action counts, per-skill usage and baseline-to-candidate deltas. Scenario inputs are plain JSON and simulation has no database write path.
+Reports include compositions, team win counts, draws/timeouts, average turns, estimated duration, dominant actions, per-skill usage and effectiveness, plus baseline-to-candidate deltas for every scenario. The included reference suite covers solo, mixed 3v3 and mixed 10v10. Scenario inputs are plain JSON and simulation has no database write path.
