@@ -52,11 +52,9 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatRequestSchema, raw, async (session, payload) => {
-      const snapshot = await this.combats.request(session.userId, session.characterId, payload.targetCharacterId);
-      if (snapshot.status === 'ACTIVE') void this.analytics.combatStarted(session, snapshot);
-      return snapshot;
-    });
+    return this.handle(client, combatRequestSchema, raw, (session, payload) =>
+      this.combats.request(session.userId, session.characterId, payload.targetCharacterId),
+    );
   }
 
   @SubscribeMessage('combat:respond')
@@ -64,12 +62,9 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatRespondSchema, raw, async (session, payload) => {
-      const snapshot = await this.combats.respond(session.userId, session.characterId, payload.combatId, payload.accept);
-      if (payload.accept && snapshot.status === 'ACTIVE') void this.analytics.combatStarted(session, snapshot);
-      else if (!['REQUESTED', 'ACTIVE'].includes(snapshot.status)) void this.analytics.combatResolved(session, snapshot);
-      return snapshot;
-    });
+    return this.handle(client, combatRespondSchema, raw, (session, payload) =>
+      this.combats.respond(session.userId, session.characterId, payload.combatId, payload.accept),
+    );
   }
 
   @SubscribeMessage('combat:act')
@@ -78,7 +73,12 @@ export class CombatGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
     return this.handle(client, combatActionSchema, raw, async (session, payload) => {
-      const snapshot = await this.combats.act(session.userId, session.characterId, payload.combatId, payload);
+      const snapshot = await this.combats.act(
+        session.userId,
+        session.characterId,
+        payload.combatId,
+        payload,
+      );
       void this.analytics.combatActionAccepted(session, snapshot, payload);
       return snapshot;
     });
@@ -89,11 +89,9 @@ export class CombatGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
-    return this.handle(client, combatLeaveSchema, raw, async (session, payload) => {
-      const snapshot = await this.combats.leave(session.userId, session.characterId, payload.combatId);
-      if (!['REQUESTED', 'ACTIVE'].includes(snapshot.status)) void this.analytics.combatResolved(session, snapshot);
-      return snapshot;
-    });
+    return this.handle(client, combatLeaveSchema, raw, (session, payload) =>
+      this.combats.leave(session.userId, session.characterId, payload.combatId),
+    );
   }
 
   private async handle<TPayload, TResult>(
