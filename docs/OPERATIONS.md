@@ -33,7 +33,7 @@ Static checks do not require a running PostgreSQL instance:
 npm run check:static
 ```
 
-Integration checks require the configured database and intentionally exercise migrations, content deployment, content validation and a dry-run progression migration:
+Integration checks require the configured database and intentionally exercise migrations, content deployment, content validation, a dry-run progression migration and a dry-run skill-build repair:
 
 ```bash
 npm run check:integration
@@ -47,7 +47,7 @@ npm run check:all
 
 ## Production deployment
 
-The deployment identity needs schema migration and content deployment permissions. The runtime identity should only need application data permissions.
+The deployment identity needs schema migration and content deployment permissions. The runtime identity should only need read/write application data permissions plus read access required by readiness checks.
 
 ```bash
 npm ci --omit=dev=false
@@ -55,11 +55,12 @@ npm run build
 npm run deploy:prepare
 npm run progression:migrate:dry
 npm run progression:migrate
-npm run content:verify
+npm run skills:repair:dry
+npm run skills:repair
 npm run start
 ```
 
-`npm run start` only starts `dist/main.js`. It never runs Prisma generation, migrations or seed logic.
+`npm run start` performs `content:verify`, which reads the patch registry and deployed definitions, and then starts `dist/main.js`. It never generates Prisma Client, deploys schema migrations, runs seed logic or mutates gameplay data.
 
 ## Content patches
 
@@ -81,14 +82,18 @@ Rules:
 
 ## Progression migration
 
-Always inspect the dry run first:
+Always inspect dry runs first:
 
 ```bash
 npm run progression:migrate:dry
+npm run skills:repair:dry
 npm run progression:migrate
+npm run skills:repair
 ```
 
-The migration uses a transaction and advisory lock, clamps levels to the configured maximum, recalculates class curves and preserves bonuses from equipped item definitions. Current HP and energy ratios are preserved.
+The character migration uses a transaction and advisory lock, clamps levels to the configured maximum, recalculates class curves and preserves bonuses from equipped item definitions. Current HP and energy ratios are preserved.
+
+The skill-build repair also runs under an advisory lock. It removes unknown, wrong-class, over-level, over-budget and prerequisite-invalid skills in deterministic tree order, caps excessive ranks and resets adjusted cooldowns. The normal `skills:respec` command atomically removes the complete build after locking the character row.
 
 ## Rollback
 
@@ -108,6 +113,6 @@ Prisma migrations are treated as forward-only in normal operation. Destructive r
 `.github/workflows/ci.yml` runs on every pull request and push to `main`.
 
 - `Static checks`: formatting, backend/frontend type checks, tests, builds and production dependency audits.
-- `PostgreSQL migrations and content`: clean database preparation, repeated migration/content deployment, idempotency assertions, readiness validation and progression migration dry-run.
+- `PostgreSQL migrations and content`: clean database preparation, repeated migration/content deployment, idempotency assertions, readiness validation, progression migration dry-run and skill-build repair dry-run.
 
 Failed integration jobs upload schema and content registry diagnostics for seven days.
