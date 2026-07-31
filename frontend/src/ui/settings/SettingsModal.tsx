@@ -40,7 +40,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.E
               role="switch"
               aria-checked={musicEnabled}
               aria-label={copy.music}
-              className={`relative h-7 w-12 rounded-full border transition-colors ${
+              className={`relative h-7 w-12 overflow-hidden rounded-full border p-0 transition-colors ${
                 musicEnabled
                   ? 'border-amber-300/70 bg-amber-500/35'
                   : 'border-slate-500/70 bg-slate-800/80'
@@ -48,8 +48,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.E
               onClick={() => gameSettingsStore.setMusicEnabled(!musicEnabled)}
             >
               <span
-                className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border border-white/30 bg-slate-100 shadow transition-transform ${
-                  musicEnabled ? 'translate-x-6' : 'translate-x-1'
+                className={`absolute left-1 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border border-white/30 bg-slate-100 shadow transition-transform duration-200 ${
+                  musicEnabled ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
             </button>
