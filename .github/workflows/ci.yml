@@ -123,8 +123,10 @@ jobs:
           test "$BEFORE_MAP_VERSIONS" = "$after_map_versions"
           test "$BEFORE_PATCHES" = "$after_patches"
 
-      - name: Dry-run progression migration
-        run: npm run progression:migrate:dry
+      - name: Dry-run progression migrations
+        run: |
+          npm run progression:migrate:dry
+          npm run skills:repair:dry
 
       - name: Export database diagnostics on failure
         if: failure()
