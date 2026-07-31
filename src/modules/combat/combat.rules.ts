@@ -1,9 +1,29 @@
 import { isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 
-export const COMBAT_TURN_TTL_MS = 30_000;
+const integerFromEnvironment = (
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number => {
+  const raw = process.env[name];
+  const parsed = raw === undefined || raw === '' ? fallback : Number(raw);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
+  }
+  return parsed;
+};
+
+export const COMBAT_TURN_TTL_MS = integerFromEnvironment(
+  'COMBAT_TURN_TIMEOUT_MS',
+  12_000,
+  3000,
+  60_000,
+);
 export const COMBAT_EVENT_HISTORY_LIMIT = 48;
 export const COMBAT_RESULT_RETENTION_MS = 15_000;
-export const COMBAT_TEAM_LIMIT = 10;
+export const COMBAT_TEAM_LIMIT = integerFromEnvironment('COMBAT_MAX_TEAM_SIZE', 5, 1, 10);
+export const COMBAT_DEFAULT_TIMEOUT_ACTION = 'BASIC_ATTACK' as const;
 
 export interface CombatPosition {
   mapId: string;
