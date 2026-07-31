@@ -118,7 +118,7 @@ export class AnalyticsTrackingService {
   combatStarted(session: PlayerSession, snapshot: CombatSnapshot): Promise<void> {
     const difficultyLevel = combatDifficultyLevel(snapshot);
     return this.bestEffort({
-      operationId: `combat-start:${snapshot.combatId}`,
+      operationId: `combat-start:${snapshot.combatId}:${session.characterId}`,
       type: 'CombatStarted',
       actorCharacterId: session.characterId,
       realmId: session.realmId,
@@ -169,8 +169,6 @@ export class AnalyticsTrackingService {
           statusesApplied: result.statusesApplied.map((status) => status.key),
         })) ?? [],
       },
-    }).then(async () => {
-      if (snapshot.status === 'FINISHED') await this.combatResolved(session, snapshot);
     });
   }
 
