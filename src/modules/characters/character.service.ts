@@ -1,26 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '../../auth/auth-context.interface.js';
-import type {
-  CharacterClass,
-  PersistedCharacterState,
-} from '../../common/domain/game.types.js';
+import type { PersistedCharacterState } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { TelemetryService } from '../../telemetry/telemetry.service.js';
 import { RealmService } from '../realm/realm.service.js';
 import { getDefaultOutfit, isOutfitUnlocked } from './outfit.catalog.js';
-import type {
-  CreateCharacterInput,
-  FirebaseUserRecord,
-  StartingCharacterTemplate,
-} from './character.types.js';
+import { ProgressionService } from './progression.service.js';
+import type { CreateCharacterInput, FirebaseUserRecord } from './character.types.js';
 
 export const MAX_CHARACTERS_PER_REALM = 5;
-
-const STARTING_TEMPLATES: Readonly<Record<CharacterClass, StartingCharacterTemplate>> = {
-  MAGE: { hp: 75, maxHp: 75, energy: 120, maxEnergy: 120, strength: 4, agility: 7, intelligence: 14, armor: 2 },
-  WARRIOR: { hp: 130, maxHp: 130, energy: 70, maxEnergy: 70, strength: 14, agility: 7, intelligence: 3, armor: 8 },
-  ARCHER: { hp: 95, maxHp: 95, energy: 95, maxEnergy: 95, strength: 7, agility: 14, intelligence: 5, armor: 4 },
-};
 
 interface CharacterRow {
   id: string;
@@ -56,6 +45,8 @@ export class CharacterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realmService: RealmService,
+    private readonly progression: ProgressionService,
+    private readonly telemetry: TelemetryService,
   ) {}
 
   async synchronizeFirebaseUser(auth: AuthContext): Promise<FirebaseUserRecord> {
@@ -101,7 +92,7 @@ export class CharacterService {
 
   async createCharacter(userId: string, input: CreateCharacterInput): Promise<PersistedCharacterState> {
     const realm = await this.realmService.getCurrentRealm();
-    const template = STARTING_TEMPLATES[input.characterClass];
+    const stats = this.progression.calculateBaseStats(input.characterClass, 1);
     const defaultOutfit = getDefaultOutfit(input.characterClass).key;
     const requestedOutfit = input.outfitKey ?? defaultOutfit;
     const outfitKey = isOutfitUnlocked(input.characterClass, 1, requestedOutfit)
@@ -147,19 +138,24 @@ export class CharacterService {
             y: map.spawnY,
             direction: 'SOUTH',
             combatState: 'IDLE',
-            hp: template.hp,
-            maxHp: template.maxHp,
-            energy: template.energy,
-            maxEnergy: template.maxEnergy,
-            strength: template.strength,
-            agility: template.agility,
-            intelligence: template.intelligence,
-            armor: template.armor,
+            hp: stats.maxHp,
+            maxHp: stats.maxHp,
+            energy: stats.maxEnergy,
+            maxEnergy: stats.maxEnergy,
+            strength: stats.strength,
+            agility: stats.agility,
+            intelligence: stats.intelligence,
+            armor: stats.armor,
             silver: 0,
             gold: 0,
           },
         });
       });
+      this.telemetry.emit(
+        'character_created',
+        { userId, characterId: character.id, realmId: character.realmId },
+        { characterClass: input.characterClass },
+      );
       return this.toPersistedState(character);
     } catch (error) {
       if (error instanceof GameError) throw error;
@@ -168,6 +164,49 @@ export class CharacterService {
       }
       throw error;
     }
+  }
+
+  async migrateCharacterProgression(
+    userId: string,
+    characterId: string,
+  ): Promise<PersistedCharacterState> {
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT "id"
+        FROM "Character"
+        WHERE "id" = ${characterId}::uuid
+        FOR UPDATE
+      `;
+      const character = await transaction.character.findFirst({
+        where: { id: characterId, userId },
+      });
+      if (!character) {
+        throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
+      }
+
+      const level = this.progression.clampLevel(character.level);
+      const stats = this.progression.calculateBaseStats(character.class, level);
+      const hpRatio = character.maxHp > 0 ? character.hp / character.maxHp : 1;
+      const energyRatio = character.maxEnergy > 0 ? character.energy / character.maxEnergy : 1;
+      return transaction.character.update({
+        where: { id: character.id },
+        data: {
+          level,
+          experience: level >= this.progression.maximumLevel ? 0 : Math.max(0, character.experience),
+          maxHp: stats.maxHp,
+          hp: Math.max(0, Math.min(stats.maxHp, Math.round(stats.maxHp * hpRatio))),
+          maxEnergy: stats.maxEnergy,
+          energy: Math.max(0, Math.min(stats.maxEnergy, Math.round(stats.maxEnergy * energyRatio))),
+          strength: stats.strength,
+          agility: stats.agility,
+          intelligence: stats.intelligence,
+          armor: stats.armor,
+          stateVersion: { increment: 1 },
+          lastSavedAt: new Date(),
+        },
+      });
+    });
+    return this.toPersistedState(updated);
   }
 
   async updateOutfit(
