@@ -20,6 +20,7 @@ const createSession = (): PlayerSession => ({
   realmId: 'realm-a',
   name: 'Hero',
   characterClass: 'WARRIOR',
+  gender: 'MALE',
   level: 1,
   experience: 0,
   silver: 0,
