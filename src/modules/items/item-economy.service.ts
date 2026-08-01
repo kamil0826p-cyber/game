@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -23,6 +23,9 @@ const MARKET_LISTING_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const MARKET_ACTIVE_LISTING_LIMIT = 20;
 const MARKET_LISTING_FEE_RATE = 0.02;
 const MARKET_COMMISSION_RATE = 0.05;
+
+type CraftOrderResolution = 'COMPLETED' | 'EXPIRED';
+type MarketPurchaseResolution = 'COMPLETED' | 'EXPIRED';
 
 @Injectable()
 export class ItemEconomyService {
@@ -51,9 +54,19 @@ export class ItemEconomyService {
       const character = await this.requireCharacter(transaction, userId, characterId);
       const ledgerOperationId = `craft:${normalizedOperationId}`;
       const repeated = await transaction.characterCurrencyLedger.findUnique({
-        where: { characterId_operationId: { characterId, operationId: ledgerOperationId } },
+        where: {
+          characterId_operationId: {
+            characterId,
+            operationId: ledgerOperationId,
+          },
+        },
       });
-      if (repeated) return;
+      if (repeated) {
+        if (this.metadataString(repeated.metadata, 'recipeKey') !== recipe.key) {
+          this.invalid({ reason: 'OPERATION_ID_REUSED' });
+        }
+        return;
+      }
       this.assertRecipeAccess(character, recipe);
       const output = await transaction.itemDefinition.findUnique({
         where: { key: recipe.outputItemKey },
@@ -126,7 +139,12 @@ export class ItemEconomyService {
           },
         },
       });
-      if (existing) return existing.id;
+      if (existing) {
+        if (existing.recipeKey !== recipe.key || existing.recipeVersion !== recipe.version) {
+          this.invalid({ reason: 'OPERATION_ID_REUSED' });
+        }
+        return existing.id;
+      }
       const character = await this.requireCharacter(transaction, userId, characterId);
       this.assertRecipeAccess(character, recipe);
       const output = await transaction.itemDefinition.findUnique({
@@ -190,73 +208,106 @@ export class ItemEconomyService {
     operationId: string,
   ) {
     const normalizedOperationId = this.operationId(operationId);
-    await this.prisma.$transaction(async (transaction) => {
-      await this.lockOperation(transaction, `craft-order:${orderId}`);
-      const crafter = await this.requireCharacter(transaction, userId, crafterCharacterId);
-      const order = await transaction.itemCraftOrder.findUnique({ where: { id: orderId } });
-      if (!order || order.status !== 'OPEN') this.invalid({ orderId });
-      if (order.expiresAt.getTime() <= Date.now()) {
-        await this.refundCraftOrder(transaction, order, 'EXPIRED', normalizedOperationId);
-        this.invalid({ orderId, reason: 'ORDER_EXPIRED' });
-      }
-      if (order.ownerCharacterId === crafterCharacterId) {
-        this.invalid({ orderId, reason: 'CRAFT_ORDER_SELF_FULFILL' });
-      }
-      const recipe = this.requireRecipe(order.recipeKey);
-      if (recipe.version !== order.recipeVersion) this.invalid({ orderId, reason: 'RECIPE_VERSION_MISMATCH' });
-      this.assertRecipeAccess(crafter, recipe);
-      const output = await transaction.itemDefinition.findUniqueOrThrow({
-        where: { id: order.outputItemDefinitionId },
-      });
-      const metadata = parseItemDefinitionMetadata(output.metadata);
-      const snapshot = this.craftedSnapshot({
-        definitionKey: output.key,
-        metadata,
-        characterId: order.ownerCharacterId,
-        operationId: normalizedOperationId,
-        recipe,
-        crafterCharacterId,
-      });
-      await this.inventory.grant(transaction, {
-        characterId: order.ownerCharacterId,
-        definition: output,
-        quantity: order.outputQuantity,
-        snapshot,
-        operationId: `craft-order-output:${order.id}`,
-        reason: `CRAFT_ORDER:${order.id}`,
-      });
-      await transaction.itemCraftOrder.update({
-        where: { id: order.id },
-        data: {
-          status: 'COMPLETED',
+    const resolution = await this.prisma.$transaction<CraftOrderResolution>(
+      async (transaction) => {
+        await this.lockOperation(transaction, `craft-order:${orderId}`);
+        const crafter = await this.requireCharacter(
+          transaction,
+          userId,
           crafterCharacterId,
-          completedAt: new Date(),
-          silverEscrow: 0,
-          inputEscrow: [],
-        },
-      });
-      await this.inventory.recordEvent(transaction, {
-        characterId: order.ownerCharacterId,
-        operationId: normalizedOperationId,
-        eventType: 'CRAFT_ORDER_COMPLETED',
-        itemDefinitionKey: output.key,
-        quantity: order.outputQuantity,
-        metadata: {
-          orderId: order.id,
-          recipeKey: recipe.key,
+        );
+        const repeated = await transaction.itemEconomyEvent.findUnique({
+          where: {
+            characterId_operationId_eventType: {
+              characterId: crafterCharacterId,
+              operationId: normalizedOperationId,
+              eventType: 'CRAFT_ORDER_FULFILLED',
+            },
+          },
+        });
+        if (repeated) {
+          if (this.metadataString(repeated.metadata, 'orderId') !== orderId) {
+            this.invalid({ reason: 'OPERATION_ID_REUSED' });
+          }
+          return 'COMPLETED';
+        }
+
+        const order = await transaction.itemCraftOrder.findUnique({ where: { id: orderId } });
+        if (!order || order.status !== 'OPEN') this.invalid({ orderId });
+        if (order.expiresAt.getTime() <= Date.now()) {
+          await this.refundCraftOrder(
+            transaction,
+            order,
+            'EXPIRED',
+            `expire:${order.id}`,
+          );
+          return 'EXPIRED';
+        }
+        if (order.ownerCharacterId === crafterCharacterId) {
+          this.invalid({ orderId, reason: 'CRAFT_ORDER_SELF_FULFILL' });
+        }
+        const recipe = this.requireRecipe(order.recipeKey);
+        if (recipe.version !== order.recipeVersion) {
+          this.invalid({ orderId, reason: 'RECIPE_VERSION_MISMATCH' });
+        }
+        this.assertRecipeAccess(crafter, recipe);
+        const output = await transaction.itemDefinition.findUniqueOrThrow({
+          where: { id: order.outputItemDefinitionId },
+        });
+        const metadata = parseItemDefinitionMetadata(output.metadata);
+        const snapshot = this.craftedSnapshot({
+          definitionKey: output.key,
+          metadata,
+          characterId: order.ownerCharacterId,
+          operationId: normalizedOperationId,
+          recipe,
           crafterCharacterId,
-          consumedSilver: order.silverEscrow,
-        },
-      });
-      await this.inventory.recordEvent(transaction, {
-        characterId: crafterCharacterId,
-        operationId: normalizedOperationId,
-        eventType: 'CRAFT_ORDER_FULFILLED',
-        itemDefinitionKey: output.key,
-        quantity: order.outputQuantity,
-        metadata: { orderId: order.id, ownerCharacterId: order.ownerCharacterId },
-      });
-    });
+        });
+        await this.inventory.grant(transaction, {
+          characterId: order.ownerCharacterId,
+          definition: output,
+          quantity: order.outputQuantity,
+          snapshot,
+          operationId: `craft-order-output:${order.id}`,
+          reason: `CRAFT_ORDER:${order.id}`,
+        });
+        await transaction.itemCraftOrder.update({
+          where: { id: order.id },
+          data: {
+            status: 'COMPLETED',
+            crafterCharacterId,
+            completedAt: new Date(),
+            silverEscrow: 0,
+            inputEscrow: [],
+          },
+        });
+        await this.inventory.recordEvent(transaction, {
+          characterId: order.ownerCharacterId,
+          operationId: normalizedOperationId,
+          eventType: 'CRAFT_ORDER_COMPLETED',
+          itemDefinitionKey: output.key,
+          quantity: order.outputQuantity,
+          metadata: {
+            orderId: order.id,
+            recipeKey: recipe.key,
+            crafterCharacterId,
+            consumedSilver: order.silverEscrow,
+          },
+        });
+        await this.inventory.recordEvent(transaction, {
+          characterId: crafterCharacterId,
+          operationId: normalizedOperationId,
+          eventType: 'CRAFT_ORDER_FULFILLED',
+          itemDefinitionKey: output.key,
+          quantity: order.outputQuantity,
+          metadata: { orderId: order.id, ownerCharacterId: order.ownerCharacterId },
+        });
+        return 'COMPLETED';
+      },
+    );
+    if (resolution === 'EXPIRED') {
+      this.invalid({ orderId, reason: 'ORDER_EXPIRED_REFUNDED' });
+    }
     return this.snapshot(userId, crafterCharacterId);
   }
 
@@ -273,10 +324,43 @@ export class ItemEconomyService {
       const order = await transaction.itemCraftOrder.findFirst({
         where: { id: orderId, ownerCharacterId: characterId },
       });
-      if (!order || order.status !== 'OPEN') this.invalid({ orderId });
+      if (!order) this.invalid({ orderId });
+      if (order.status === 'CANCELLED' || order.status === 'EXPIRED') return;
+      if (order.status !== 'OPEN') this.invalid({ orderId });
       await this.refundCraftOrder(transaction, order, 'CANCELLED', normalizedOperationId);
     });
     return this.snapshot(userId, characterId);
+  }
+
+  async expireCraftOrders(limit = 100): Promise<number> {
+    const orders = await this.prisma.itemCraftOrder.findMany({
+      where: { status: 'OPEN', expiresAt: { lte: new Date() } },
+      orderBy: { expiresAt: 'asc' },
+      take: this.boundedLimit(limit),
+    });
+    let expired = 0;
+    for (const order of orders) {
+      const changed = await this.prisma.$transaction(async (transaction) => {
+        await this.lockOperation(transaction, `craft-order:${order.id}`);
+        const current = await transaction.itemCraftOrder.findUnique({ where: { id: order.id } });
+        if (
+          !current ||
+          current.status !== 'OPEN' ||
+          current.expiresAt.getTime() > Date.now()
+        ) {
+          return false;
+        }
+        await this.refundCraftOrder(
+          transaction,
+          current,
+          'EXPIRED',
+          `expire:${current.id}`,
+        );
+        return true;
+      });
+      if (changed) expired += 1;
+    }
+    return expired;
   }
 
   async salvage(
@@ -298,7 +382,12 @@ export class ItemEconomyService {
           },
         },
       });
-      if (repeated) return;
+      if (repeated) {
+        if (repeated.inventoryItemId !== itemId) {
+          this.invalid({ reason: 'OPERATION_ID_REUSED' });
+        }
+        return;
+      }
       const item = await transaction.inventoryItem.findFirst({
         where: {
           id: itemId,
@@ -349,7 +438,9 @@ export class ItemEconomyService {
         });
         const result = resolveLootProtection({
           chance: profile.rare.chance,
-          roll: this.deterministicRoll(`${characterId}:${normalizedOperationId}:${profile.rare.pityKey}`),
+          roll: this.deterministicRoll(
+            `${characterId}:${normalizedOperationId}:${profile.rare.pityKey}`,
+          ),
           misses: pity?.misses ?? 0,
           guaranteedAfterMisses: profile.rare.guaranteedAfterMisses,
         });
@@ -416,7 +507,15 @@ export class ItemEconomyService {
           },
         },
       });
-      if (existing) return existing.id;
+      if (existing) {
+        if (
+          existing.quantity !== quantity ||
+          existing.priceSilver !== priceSilver
+        ) {
+          this.invalid({ reason: 'OPERATION_ID_REUSED' });
+        }
+        return existing.id;
+      }
       const character = await this.requireCharacter(transaction, userId, characterId);
       const activeListings = await transaction.itemMarketListing.count({
         where: { sellerCharacterId: characterId, status: 'ACTIVE' },
@@ -490,120 +589,146 @@ export class ItemEconomyService {
     operationId: string,
   ) {
     const normalizedOperationId = this.operationId(operationId);
-    await this.prisma.$transaction(async (transaction) => {
-      await this.lockOperation(transaction, `market:${listingId}`);
-      const buyer = await this.requireCharacter(transaction, userId, buyerCharacterId);
-      const listing = await transaction.itemMarketListing.findUnique({ where: { id: listingId } });
-      if (!listing || listing.status !== 'ACTIVE') this.invalid({ listingId });
-      if (listing.sellerCharacterId === buyerCharacterId) {
-        this.invalid({ listingId, reason: 'MARKET_SELF_TRADE' });
-      }
-      if (listing.expiresAt.getTime() <= Date.now()) {
-        await this.returnListing(transaction, listing, 'EXPIRED', normalizedOperationId);
-        this.invalid({ listingId, reason: 'MARKET_LISTING_EXPIRED' });
-      }
-      const buyerLedgerId = `market-buy:${normalizedOperationId}`;
-      const repeated = await transaction.characterCurrencyLedger.findUnique({
-        where: {
-          characterId_operationId: {
+    const resolution = await this.prisma.$transaction<MarketPurchaseResolution>(
+      async (transaction) => {
+        await this.lockOperation(transaction, `market:${listingId}`);
+        const buyer = await this.requireCharacter(transaction, userId, buyerCharacterId);
+        const buyerLedgerId = `market-buy:${normalizedOperationId}`;
+        const repeated = await transaction.characterCurrencyLedger.findUnique({
+          where: {
+            characterId_operationId: {
+              characterId: buyerCharacterId,
+              operationId: buyerLedgerId,
+            },
+          },
+        });
+        if (repeated) {
+          if (this.metadataString(repeated.metadata, 'listingId') !== listingId) {
+            this.invalid({ reason: 'OPERATION_ID_REUSED' });
+          }
+          return 'COMPLETED';
+        }
+        const listing = await transaction.itemMarketListing.findUnique({
+          where: { id: listingId },
+        });
+        if (!listing || listing.status !== 'ACTIVE') this.invalid({ listingId });
+        if (listing.sellerCharacterId === buyerCharacterId) {
+          this.invalid({ listingId, reason: 'MARKET_SELF_TRADE' });
+        }
+        if (listing.expiresAt.getTime() <= Date.now()) {
+          await this.returnListing(
+            transaction,
+            listing,
+            'EXPIRED',
+            `expire:${listing.id}`,
+          );
+          return 'EXPIRED';
+        }
+        const seller = await transaction.character.findUniqueOrThrow({
+          where: { id: listing.sellerCharacterId },
+          select: { id: true, silver: true },
+        });
+        const definition = await transaction.itemDefinition.findUniqueOrThrow({
+          where: { id: listing.itemDefinitionId },
+        });
+        const metadata = parseItemDefinitionMetadata(definition.metadata);
+        const snapshot = readItemInstanceSnapshot({
+          instanceData: listing.instanceData,
+          definitionKey: definition.key,
+          metadata,
+        });
+        const buyerSilver = this.debitSilver(buyer.silver, listing.priceSilver);
+        const commission = Math.max(
+          1,
+          Math.floor(listing.priceSilver * MARKET_COMMISSION_RATE),
+        );
+        const sellerRevenue = listing.priceSilver - commission;
+        const sellerSilver = seller.silver + sellerRevenue;
+        await transaction.character.update({
+          where: { id: buyerCharacterId },
+          data: { silver: buyerSilver },
+        });
+        await transaction.character.update({
+          where: { id: seller.id },
+          data: { silver: sellerSilver },
+        });
+        await transaction.characterCurrencyLedger.create({
+          data: {
             characterId: buyerCharacterId,
             operationId: buyerLedgerId,
+            currency: 'SILVER',
+            direction: 'DEBIT',
+            amount: listing.priceSilver,
+            reason: 'MARKET_PURCHASE',
+            balanceAfter: buyerSilver,
+            metadata: { listingId, sellerCharacterId: seller.id, commission },
           },
-        },
-      });
-      if (repeated) return;
-      const seller = await transaction.character.findUniqueOrThrow({
-        where: { id: listing.sellerCharacterId },
-        select: { id: true, silver: true },
-      });
-      const definition = await transaction.itemDefinition.findUniqueOrThrow({
-        where: { id: listing.itemDefinitionId },
-      });
-      const metadata = parseItemDefinitionMetadata(definition.metadata);
-      const snapshot = readItemInstanceSnapshot({
-        instanceData: listing.instanceData,
-        definitionKey: definition.key,
-        metadata,
-      });
-      const buyerSilver = this.debitSilver(buyer.silver, listing.priceSilver);
-      const commission = Math.max(1, Math.floor(listing.priceSilver * MARKET_COMMISSION_RATE));
-      const sellerRevenue = listing.priceSilver - commission;
-      const sellerSilver = seller.silver + sellerRevenue;
-      await transaction.character.update({
-        where: { id: buyerCharacterId },
-        data: { silver: buyerSilver },
-      });
-      await transaction.character.update({
-        where: { id: seller.id },
-        data: { silver: sellerSilver },
-      });
-      await transaction.characterCurrencyLedger.create({
-        data: {
+        });
+        await transaction.characterCurrencyLedger.create({
+          data: {
+            characterId: seller.id,
+            operationId: `market-sale:${listing.id}`,
+            currency: 'SILVER',
+            direction: 'CREDIT',
+            amount: sellerRevenue,
+            reason: 'MARKET_SALE',
+            balanceAfter: sellerSilver,
+            metadata: { listingId, buyerCharacterId, commission },
+          },
+        });
+        await this.inventory.grant(transaction, {
           characterId: buyerCharacterId,
-          operationId: buyerLedgerId,
-          currency: 'SILVER',
-          direction: 'DEBIT',
-          amount: listing.priceSilver,
-          reason: 'MARKET_PURCHASE',
-          balanceAfter: buyerSilver,
-          metadata: { listingId, sellerCharacterId: seller.id, commission },
-        },
-      });
-      await transaction.characterCurrencyLedger.create({
-        data: {
-          characterId: seller.id,
-          operationId: `market-sale:${listing.id}`,
-          currency: 'SILVER',
-          direction: 'CREDIT',
-          amount: sellerRevenue,
-          reason: 'MARKET_SALE',
-          balanceAfter: sellerSilver,
-          metadata: { listingId, buyerCharacterId, commission },
-        },
-      });
-      await this.inventory.grant(transaction, {
-        characterId: buyerCharacterId,
-        definition,
-        quantity: listing.quantity,
-        snapshot: this.transferSnapshot(snapshot, seller.id, buyerCharacterId, normalizedOperationId),
-        operationId: `market-delivery:${listing.id}`,
-        reason: `MARKET:${listing.id}`,
-      });
-      await transaction.itemMarketListing.update({
-        where: { id: listing.id },
-        data: {
-          status: 'SOLD',
-          buyerCharacterId,
-          closedAt: new Date(),
-        },
-      });
-      await transaction.itemMarketPriceSample.create({
-        data: {
-          listingId: listing.id,
-          itemDefinitionKey: definition.key,
-          unitPriceSilver: Math.floor(listing.priceSilver / listing.quantity),
+          definition,
           quantity: listing.quantity,
-        },
-      });
-      await this.inventory.recordEvent(transaction, {
-        characterId: buyerCharacterId,
-        operationId: normalizedOperationId,
-        eventType: 'MARKET_PURCHASED',
-        itemDefinitionKey: definition.key,
-        quantity: listing.quantity,
-        silverDelta: -listing.priceSilver,
-        metadata: { listingId, sellerCharacterId: seller.id, commission },
-      });
-      await this.inventory.recordEvent(transaction, {
-        characterId: seller.id,
-        operationId: listing.id,
-        eventType: 'MARKET_SOLD',
-        itemDefinitionKey: definition.key,
-        quantity: listing.quantity,
-        silverDelta: sellerRevenue,
-        metadata: { listingId, buyerCharacterId, commission },
-      });
-    });
+          snapshot: this.transferSnapshot(
+            snapshot,
+            seller.id,
+            buyerCharacterId,
+            normalizedOperationId,
+          ),
+          operationId: `market-delivery:${listing.id}`,
+          reason: `MARKET:${listing.id}`,
+        });
+        await transaction.itemMarketListing.update({
+          where: { id: listing.id },
+          data: {
+            status: 'SOLD',
+            buyerCharacterId,
+            closedAt: new Date(),
+          },
+        });
+        await transaction.itemMarketPriceSample.create({
+          data: {
+            listingId: listing.id,
+            itemDefinitionKey: definition.key,
+            unitPriceSilver: Math.floor(listing.priceSilver / listing.quantity),
+            quantity: listing.quantity,
+          },
+        });
+        await this.inventory.recordEvent(transaction, {
+          characterId: buyerCharacterId,
+          operationId: normalizedOperationId,
+          eventType: 'MARKET_PURCHASED',
+          itemDefinitionKey: definition.key,
+          quantity: listing.quantity,
+          silverDelta: -listing.priceSilver,
+          metadata: { listingId, sellerCharacterId: seller.id, commission },
+        });
+        await this.inventory.recordEvent(transaction, {
+          characterId: seller.id,
+          operationId: listing.id,
+          eventType: 'MARKET_SOLD',
+          itemDefinitionKey: definition.key,
+          quantity: listing.quantity,
+          silverDelta: sellerRevenue,
+          metadata: { listingId, buyerCharacterId, commission },
+        });
+        return 'COMPLETED';
+      },
+    );
+    if (resolution === 'EXPIRED') {
+      this.invalid({ listingId, reason: 'MARKET_LISTING_EXPIRED_RETURNED' });
+    }
     return this.snapshot(userId, buyerCharacterId);
   }
 
@@ -620,7 +745,9 @@ export class ItemEconomyService {
       const listing = await transaction.itemMarketListing.findFirst({
         where: { id: listingId, sellerCharacterId: characterId },
       });
-      if (!listing || listing.status !== 'ACTIVE') this.invalid({ listingId });
+      if (!listing) this.invalid({ listingId });
+      if (listing.status === 'CANCELLED' || listing.status === 'EXPIRED') return;
+      if (listing.status !== 'ACTIVE') this.invalid({ listingId });
       await this.returnListing(transaction, listing, 'CANCELLED', normalizedOperationId);
     });
     return this.snapshot(userId, characterId);
@@ -630,71 +757,79 @@ export class ItemEconomyService {
     const listings = await this.prisma.itemMarketListing.findMany({
       where: { status: 'ACTIVE', expiresAt: { lte: new Date() } },
       orderBy: { expiresAt: 'asc' },
-      take: Math.max(1, Math.min(500, Math.trunc(limit))),
+      take: this.boundedLimit(limit),
     });
     let expired = 0;
     for (const listing of listings) {
-      await this.prisma.$transaction(async (transaction) => {
+      const changed = await this.prisma.$transaction(async (transaction) => {
         await this.lockOperation(transaction, `market:${listing.id}`);
-        const current = await transaction.itemMarketListing.findUnique({ where: { id: listing.id } });
-        if (!current || current.status !== 'ACTIVE' || current.expiresAt.getTime() > Date.now()) return;
-        await this.returnListing(transaction, current, 'EXPIRED', `expire:${current.id}`);
-        expired += 1;
+        const current = await transaction.itemMarketListing.findUnique({
+          where: { id: listing.id },
+        });
+        if (
+          !current ||
+          current.status !== 'ACTIVE' ||
+          current.expiresAt.getTime() > Date.now()
+        ) {
+          return false;
+        }
+        await this.returnListing(
+          transaction,
+          current,
+          'EXPIRED',
+          `expire:${current.id}`,
+        );
+        return true;
       });
+      if (changed) expired += 1;
     }
     return expired;
   }
 
   async market(itemKey?: string) {
+    await this.expireMarketListings(50);
     const definition = itemKey
       ? await this.prisma.itemDefinition.findUnique({ where: { key: itemKey } })
       : undefined;
+    if (itemKey && !definition) return [];
     const listings = await this.prisma.itemMarketListing.findMany({
       where: {
         status: 'ACTIVE',
         expiresAt: { gt: new Date() },
-        itemDefinitionId: definition?.id,
+        ...(definition ? { itemDefinitionId: definition.id } : {}),
       },
       orderBy: [{ priceSilver: 'asc' }, { createdAt: 'asc' }],
       take: 100,
     });
     const definitions = await this.prisma.itemDefinition.findMany({
-      where: { id: { in: [...new Set(listings.map((listing) => listing.itemDefinitionId))] } },
+      where: {
+        id: { in: [...new Set(listings.map((listing) => listing.itemDefinitionId))] },
+      },
       select: { id: true, key: true, name: true, metadata: true },
     });
     const byId = new Map(definitions.map((entry) => [entry.id, entry]));
-    return Promise.all(listings.map(async (listing) => {
-      const item = byId.get(listing.itemDefinitionId)!;
-      return {
-        id: listing.id,
-        sellerCharacterId: listing.sellerCharacterId,
-        itemDefinitionKey: item.key,
-        itemName: item.name,
-        rarity: parseItemDefinitionMetadata(item.metadata).rarity,
-        quantity: listing.quantity,
-        priceSilver: listing.priceSilver,
-        expiresAt: listing.expiresAt.getTime(),
-        historicalMedianSilver: await this.marketMedian(item.key),
-      };
-    }));
+    return Promise.all(
+      listings.map(async (listing) => {
+        const item = byId.get(listing.itemDefinitionId);
+        if (!item) throw new Error('MARKET_ITEM_DEFINITION_MISSING');
+        return {
+          id: listing.id,
+          sellerCharacterId: listing.sellerCharacterId,
+          itemDefinitionKey: item.key,
+          itemName: item.name,
+          rarity: parseItemDefinitionMetadata(item.metadata).rarity,
+          quantity: listing.quantity,
+          priceSilver: listing.priceSilver,
+          expiresAt: listing.expiresAt.getTime(),
+          historicalMedianSilver: await this.marketMedian(item.key),
+        };
+      }),
+    );
   }
 
   async claims(userId: string, characterId: string) {
     await this.assertOwnedCharacter(userId, characterId);
-    const claims = await this.inventory.listOpenClaims(characterId);
-    const definitions = await this.prisma.itemDefinition.findMany({
-      where: { id: { in: [...new Set(claims.map((claim) => claim.itemDefinitionId))] } },
-      select: { id: true, key: true, name: true },
-    });
-    const byId = new Map(definitions.map((definition) => [definition.id, definition]));
-    return claims.map((claim) => ({
-      id: claim.id,
-      itemDefinitionKey: byId.get(claim.itemDefinitionId)?.key ?? 'unknown',
-      itemName: byId.get(claim.itemDefinitionId)?.name ?? 'Unknown item',
-      quantity: claim.quantity,
-      reason: claim.reason,
-      expiresAt: claim.expiresAt.getTime(),
-    }));
+    return this.claimPayloads(characterId);
   }
 
   async claim(
@@ -717,12 +852,13 @@ export class ItemEconomyService {
 
   async snapshot(userId: string, characterId: string) {
     await this.assertOwnedCharacter(userId, characterId);
+    await Promise.all([this.expireCraftOrders(50), this.expireMarketListings(50)]);
     const [character, claims, orders, listings] = await Promise.all([
       this.prisma.character.findUniqueOrThrow({
         where: { id: characterId },
         select: { silver: true },
       }),
-      this.claims(userId, characterId),
+      this.claimPayloads(characterId),
       this.prisma.itemCraftOrder.findMany({
         where: {
           OR: [{ ownerCharacterId: characterId }, { crafterCharacterId: characterId }],
@@ -760,6 +896,25 @@ export class ItemEconomyService {
         expiresAt: listing.expiresAt.getTime(),
       })),
     };
+  }
+
+  private async claimPayloads(characterId: string) {
+    const claims = await this.inventory.listOpenClaims(characterId);
+    const definitions = await this.prisma.itemDefinition.findMany({
+      where: {
+        id: { in: [...new Set(claims.map((claim) => claim.itemDefinitionId))] },
+      },
+      select: { id: true, key: true, name: true },
+    });
+    const byId = new Map(definitions.map((definition) => [definition.id, definition]));
+    return claims.map((claim) => ({
+      id: claim.id,
+      itemDefinitionKey: byId.get(claim.itemDefinitionId)?.key ?? 'unknown',
+      itemName: byId.get(claim.itemDefinitionId)?.name ?? 'Unknown item',
+      quantity: claim.quantity,
+      reason: claim.reason,
+      expiresAt: claim.expiresAt.getTime(),
+    }));
   }
 
   private async getCraftOrder(userId: string, characterId: string, orderId: string) {
@@ -811,7 +966,7 @@ export class ItemEconomyService {
       select: { unitPriceSilver: true },
     });
     if (samples.length === 0) return undefined;
-    return samples[Math.floor(samples.length / 2)]!.unitPriceSilver;
+    return samples[Math.floor(samples.length / 2)]?.unitPriceSilver;
   }
 
   private async refundCraftOrder(
@@ -1050,15 +1205,16 @@ export class ItemEconomyService {
       if (
         typeof input.itemDefinitionId !== 'string' ||
         typeof input.itemKey !== 'string' ||
+        typeof input.quantity !== 'number' ||
         !Number.isInteger(input.quantity) ||
-        Number(input.quantity) < 1
+        input.quantity < 1
       ) {
         throw new Error('CRAFT_ESCROW_INVALID');
       }
       return {
         itemDefinitionId: input.itemDefinitionId,
         itemKey: input.itemKey,
-        quantity: Number(input.quantity),
+        quantity: input.quantity,
       };
     });
   }
@@ -1088,9 +1244,16 @@ export class ItemEconomyService {
   ) {
     const character = await transaction.character.findFirst({
       where: { id: characterId, userId },
-      select: { id: true, level: true, silver: true, map: { select: { key: true } } },
+      select: {
+        id: true,
+        level: true,
+        silver: true,
+        map: { select: { key: true } },
+      },
     });
-    if (!character) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    if (!character) {
+      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    }
     return character;
   }
 
@@ -1099,22 +1262,29 @@ export class ItemEconomyService {
       where: { id: characterId, userId },
       select: { id: true },
     });
-    if (!character) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    if (!character) {
+      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    }
   }
 
   private debitSilver(current: number, amount: number): number {
     this.positiveSilver(amount, true);
     if (current < amount) {
-      throw new GameError(GAME_ERROR_CODES.INSUFFICIENT_SILVER, 'errors.items.insufficientSilver', {
-        required: amount,
-        available: current,
-      });
+      throw new GameError(
+        GAME_ERROR_CODES.INSUFFICIENT_SILVER,
+        'errors.items.insufficientSilver',
+        { required: amount, available: current },
+      );
     }
     return current - amount;
   }
 
   private positiveSilver(value: number, allowZero = false): void {
-    if (!Number.isInteger(value) || value < (allowZero ? 0 : 1) || value > 2_147_483_647) {
+    if (
+      !Number.isInteger(value) ||
+      value < (allowZero ? 0 : 1) ||
+      value > 2_147_483_647
+    ) {
       this.invalid();
     }
   }
@@ -1123,6 +1293,10 @@ export class ItemEconomyService {
     const normalized = value.trim();
     if (!normalized || normalized.length > 96) this.invalid();
     return normalized;
+  }
+
+  private boundedLimit(limit: number): number {
+    return Math.max(1, Math.min(500, Math.trunc(limit)));
   }
 
   private deterministicRoll(seed: string): number {
@@ -1137,6 +1311,12 @@ export class ItemEconomyService {
 
   private json(value: unknown): Prisma.InputJsonValue {
     return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+  }
+
+  private metadataString(value: Prisma.JsonValue, key: string): string | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const candidate = (value as Record<string, unknown>)[key];
+    return typeof candidate === 'string' ? candidate : undefined;
   }
 
   private async lockCharacter(
