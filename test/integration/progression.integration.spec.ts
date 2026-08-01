@@ -70,13 +70,19 @@ describeDb('canonical progression integration', () => {
     return { userId, characterId };
   }
 
-  it('keeps choice and respec operations idempotent and auditable', async () => {
+  it('keeps choices and free/paid respecs idempotent, collision-safe and auditable', async () => {
     const character = await createCharacter(10);
     const operationId = `choice:${randomUUID()}`;
     const first = await service.choose(character.userId, character.characterId, operationId, 'ENDURANCE');
     const replay = await service.choose(character.userId, character.characterId, operationId, 'ENDURANCE');
     expect(first.snapshot.choices).toEqual(['ENDURANCE']);
     expect(replay.snapshot.choices).toEqual(['ENDURANCE']);
+    await expect(service.choose(
+      character.userId,
+      character.characterId,
+      operationId,
+      'PRECISION',
+    )).rejects.toMatchObject({ details: { reason: 'PROGRESSION_OPERATION_ID_COLLISION' } });
     const audits = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
       SELECT COUNT(*)::bigint AS "count" FROM "CharacterProgressionAudit"
       WHERE "characterId" = ${character.characterId}::uuid AND "operationId" = ${operationId}
@@ -84,14 +90,44 @@ describeDb('canonical progression integration', () => {
     expect(Number(audits[0]?.count)).toBe(1);
 
     const beforeSilver = replay.silver;
-    const reset = await service.respec(
+    const freeReset = await service.respec(
       character.userId,
       character.characterId,
       `respec:${randomUUID()}`,
     );
-    expect(reset.snapshot.choices).toEqual([]);
-    expect(reset.snapshot.respec.freeRespecs).toBe(0);
-    expect(reset.silver).toBe(beforeSilver);
+    expect(freeReset.snapshot.choices).toEqual([]);
+    expect(freeReset.snapshot.respec.freeRespecs).toBe(0);
+    expect(freeReset.silver).toBe(beforeSilver);
+
+    await service.choose(
+      character.userId,
+      character.characterId,
+      `choice:${randomUUID()}`,
+      'PRECISION',
+    );
+    const paidOperationId = `respec:${randomUUID()}`;
+    const paidReset = await service.respec(
+      character.userId,
+      character.characterId,
+      paidOperationId,
+    );
+    const expectedCost = 500 + 10 * 50 + 100;
+    expect(paidReset.snapshot.choices).toEqual([]);
+    expect(paidReset.silver).toBe(beforeSilver - expectedCost);
+    const ledger = await prisma.characterCurrencyLedger.findUnique({
+      where: {
+        characterId_operationId: {
+          characterId: character.characterId,
+          operationId: `progression-respec:${paidOperationId}`,
+        },
+      },
+    });
+    expect(ledger).toMatchObject({
+      direction: 'DEBIT',
+      amount: expectedCost,
+      reason: 'PROGRESSION_RESPEC',
+      balanceAfter: beforeSilver - expectedCost,
+    });
   });
 
   it('recalculates level ups with equipment and reverses only the item impact', async () => {
