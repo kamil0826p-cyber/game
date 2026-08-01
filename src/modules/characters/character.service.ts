@@ -1,26 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '../../auth/auth-context.interface.js';
-import type {
-  CharacterClass,
-  PersistedCharacterState,
-} from '../../common/domain/game.types.js';
+import type { PersistedCharacterState } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { RealmService } from '../realm/realm.service.js';
 import { getDefaultOutfit, isOutfitUnlocked } from './outfit.catalog.js';
-import type {
-  CreateCharacterInput,
-  FirebaseUserRecord,
-  StartingCharacterTemplate,
-} from './character.types.js';
+import { PROGRESSION_RULES_VERSION } from './progression/character-progression.rules.js';
+import { CharacterProgressionService } from './progression/character-progression.service.js';
+import type { CreateCharacterInput, FirebaseUserRecord } from './character.types.js';
 
 export const MAX_CHARACTERS_PER_REALM = 5;
-
-const STARTING_TEMPLATES: Readonly<Record<CharacterClass, StartingCharacterTemplate>> = {
-  MAGE: { hp: 75, maxHp: 75, energy: 120, maxEnergy: 120, strength: 4, agility: 7, intelligence: 14, armor: 2 },
-  WARRIOR: { hp: 130, maxHp: 130, energy: 70, maxEnergy: 70, strength: 14, agility: 7, intelligence: 3, armor: 8 },
-  ARCHER: { hp: 95, maxHp: 95, energy: 95, maxEnergy: 95, strength: 7, agility: 14, intelligence: 5, armor: 4 },
-};
 
 interface CharacterRow {
   id: string;
@@ -56,6 +45,7 @@ export class CharacterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realmService: RealmService,
+    private readonly progression: CharacterProgressionService,
   ) {}
 
   async synchronizeFirebaseUser(auth: AuthContext): Promise<FirebaseUserRecord> {
@@ -80,6 +70,9 @@ export class CharacterService {
       where: { userId, realmId: realm.id },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
+    for (const character of characters) {
+      Object.assign(character, await this.progression.ensureCanonical(character.id));
+    }
     return characters.map((character) => this.toPersistedState(character));
   }
 
@@ -96,12 +89,14 @@ export class CharacterService {
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
-    return character ? this.toPersistedState(character) : undefined;
+    if (!character) return undefined;
+    Object.assign(character, await this.progression.ensureCanonical(character.id));
+    return this.toPersistedState(character);
   }
 
   async createCharacter(userId: string, input: CreateCharacterInput): Promise<PersistedCharacterState> {
     const realm = await this.realmService.getCurrentRealm();
-    const template = STARTING_TEMPLATES[input.characterClass];
+    const stats = this.progression.initialStats(input.characterClass);
     const defaultOutfit = getDefaultOutfit(input.characterClass).key;
     const requestedOutfit = input.outfitKey ?? defaultOutfit;
     const outfitKey = isOutfitUnlocked(input.characterClass, 1, requestedOutfit)
@@ -147,16 +142,20 @@ export class CharacterService {
             y: map.spawnY,
             direction: 'SOUTH',
             combatState: 'IDLE',
-            hp: template.hp,
-            maxHp: template.maxHp,
-            energy: template.energy,
-            maxEnergy: template.maxEnergy,
-            strength: template.strength,
-            agility: template.agility,
-            intelligence: template.intelligence,
-            armor: template.armor,
+            hp: stats.maxHp,
+            maxHp: stats.maxHp,
+            energy: stats.maxEnergy,
+            maxEnergy: stats.maxEnergy,
+            strength: stats.strength,
+            agility: stats.agility,
+            intelligence: stats.intelligence,
+            armor: stats.armor,
             silver: 0,
             gold: 0,
+            progressionVersion: PROGRESSION_RULES_VERSION,
+            progressionData: this.progression.initialProgressionData(),
+            freeRespecAvailable: true,
+            progressionMigratedAt: new Date(),
           },
         });
       });
