@@ -17,7 +17,10 @@ import {
   dryRunEncounter,
   scaleEncounter,
 } from '../src/modules/mobs/encounters/encounter.scaling.js';
-import type { EncounterDefinition } from '../src/modules/mobs/encounters/encounter.types.js';
+import type {
+  EncounterDefinition,
+  EncounterExecution,
+} from '../src/modules/mobs/encounters/encounter.types.js';
 import {
   assertEncounterCatalog,
   validateEncounterDefinition,
@@ -96,6 +99,25 @@ function executionRuntime(partySize = 5): {
   return { engine, runtime, claimed };
 }
 
+function bloodRiteRuntime(): {
+  engine: CombatEngine;
+  runtime: CombatRuntime;
+  execution: EncounterExecution;
+  scribeActorId: string;
+} {
+  const { engine, runtime, claimed } = executionRuntime(5);
+  const execution = createEncounterExecution(runtime, mob.id, claimed, 12345);
+  const scribe = runtime.actors.find((actor) =>
+    actor.actorId.endsWith(':blood-scribe'),
+  );
+  if (!scribe) throw new Error('Test encounter is missing the blood scribe.');
+  runtime.phase = 'DECISION';
+  runtime.activeActorId = scribe.actorId;
+  execution.state.phaseIndex = 1;
+  execution.state.phaseKey = 'blood_rite';
+  return { engine, runtime, execution, scribeActorId: scribe.actorId };
+}
+
 const cloneEncounter = (definition: EncounterDefinition): EncounterDefinition =>
   JSON.parse(JSON.stringify(definition)) as EncounterDefinition;
 
@@ -112,10 +134,12 @@ describe('PvE encounter framework', () => {
     const definition = ENCOUNTER_CATALOG.find((entry) => entry.key === 'execution-circle')!;
     const report = dryRunEncounter(definition);
     expect(report.map((row) => row.partySize)).toEqual([1, 3, 5, 10]);
-    expect(report.map((row) => row.actorCount)).toEqual([1, 2, 3, 5]);
+    expect(report.map((row) => row.actorCount)).toEqual([1, 2, 3, 7]);
+    expect(report[3]).toMatchObject({ summonCapacity: 3, targetTurns: 14 });
+    expect(report[3]!.actorCount + report[3]!.summonCapacity).toBe(10);
     expect(new Set(report.map((row) => row.telegraphTargetCount)).size).toBeGreaterThan(1);
     expect(report[2]?.mechanics).toContain('METEOR_TELEGRAPH');
-    expect(report[3]?.mechanics).toContain('BACKLINE_HUNT');
+    expect(report[3]?.mechanics).toContain('PARALLEL_SUPPORT');
   });
 
   it('builds front, back, support and leader roles from the mob source of truth', () => {
@@ -136,43 +160,106 @@ describe('PvE encounter framework', () => {
   });
 
   it('uses deterministic AI and returns only commands exposed by CombatEngine.legalActions', () => {
-    const { engine, runtime, claimed } = executionRuntime(5);
-    const execution = createEncounterExecution(runtime, mob.id, claimed, 12345);
-    const scribe = runtime.actors.find((actor) =>
-      actor.actorId.endsWith(':blood-scribe'),
+    const firstRun = bloodRiteRuntime();
+    const firstActor = firstRun.runtime.actors.find(
+      (actor) => actor.actorId === firstRun.scribeActorId,
     )!;
-    runtime.phase = 'DECISION';
-    runtime.activeActorId = scribe.actorId;
-    execution.state.phaseIndex = 1;
-    execution.state.phaseKey = 'blood_rite';
-    const legal = engine.legalActions(runtime, scribe.actorId);
-    const first = planEncounterAction(runtime, scribe, execution.state, legal);
-    const second = planEncounterAction(runtime, scribe, execution.state, legal);
-    expect(first).toEqual(second);
-    expect(first?.command).toMatchObject({ action: 'SKILL', skillKey: 'mage-meteor' });
+    const firstLegal = firstRun.engine.legalActions(firstRun.runtime, firstRun.scribeActorId);
+    const firstPlan = planEncounterAction(
+      firstRun.runtime,
+      firstActor,
+      firstRun.execution.state,
+      firstLegal,
+    );
+
+    const secondRun = bloodRiteRuntime();
+    const secondActor = secondRun.runtime.actors.find(
+      (actor) => actor.actorId === secondRun.scribeActorId,
+    )!;
+    const secondLegal = secondRun.engine.legalActions(secondRun.runtime, secondRun.scribeActorId);
+    const secondPlan = planEncounterAction(
+      secondRun.runtime,
+      secondActor,
+      secondRun.execution.state,
+      secondLegal,
+    );
+
+    expect(firstPlan).toEqual(secondPlan);
+    expect(firstPlan?.command).toMatchObject({ action: 'SKILL', skillKey: 'mage-meteor' });
     expect(
-      legal.some(
+      firstLegal.some(
         (action) =>
-          action.action === first?.command.action &&
-          action.skillKey === first?.command.skillKey &&
-          (!first?.command.targetActorId ||
-            action.targetActorIds.includes(first.command.targetActorId)),
+          action.action === firstPlan?.command.action &&
+          action.skillKey === firstPlan?.command.skillKey &&
+          (!firstPlan?.command.targetActorId ||
+            action.targetActorIds.includes(firstPlan.command.targetActorId)),
       ),
     ).toBe(true);
+
+    firstRun.engine.act(firstRun.runtime, firstRun.scribeActorId, firstPlan!.command, 2_000);
+    secondRun.engine.act(secondRun.runtime, secondRun.scribeActorId, secondPlan!.command, 2_000);
+    expect(firstRun.engine.snapshot(firstRun.runtime)).toEqual(
+      secondRun.engine.snapshot(secondRun.runtime),
+    );
   });
 
-  it('moves through three phases and adds summons without exceeding the shared team limit', () => {
-    const { engine, runtime, claimed } = executionRuntime(5);
+  it('runs a telegraph through declaration, legal interrupt and stagger resolution', () => {
+    const { engine, runtime, execution, scribeActorId } = bloodRiteRuntime();
+    const scribe = runtime.actors.find((actor) => actor.actorId === scribeActorId)!;
+    const plan = planEncounterAction(
+      runtime,
+      scribe,
+      execution.state,
+      engine.legalActions(runtime, scribeActorId),
+    )!;
+    const declaration = engine.act(runtime, scribeActorId, plan.command, 2_000);
+    const reactorId = declaration.telegraph?.reactionActorIds[0];
+    expect(declaration).toMatchObject({
+      phase: 'REACTION',
+      telegraph: {
+        actorId: scribeActorId,
+        skillKey: 'mage-meteor',
+      },
+    });
+    expect(reactorId).toBeDefined();
+    expect(declaration.legalActionsByActorId?.[reactorId!]).toContainEqual(
+      expect.objectContaining({ action: 'INTERRUPT', reactionOnly: true }),
+    );
+
+    const interrupted = engine.act(
+      runtime,
+      reactorId!,
+      {
+        action: 'INTERRUPT',
+        targetActorId: scribeActorId,
+        operationId: 'encounter-interrupt-1',
+        expectedTurnNumber: runtime.turnNumber,
+        contractVersion: 2,
+      },
+      2_100,
+    );
+    expect(interrupted.phase).toBe('DECISION');
+    expect(interrupted.telegraph).toBeUndefined();
+    expect(
+      interrupted.participants
+        .find((actor) => actor.actorId === scribeActorId)
+        ?.statuses.some((status) => status.key === 'STAGGER'),
+    ).toBe(true);
+    expect(interrupted.recentActions.at(-1)?.skillKey).toBe('tactical:interrupt');
+  });
+
+  it('moves through three phases and reaches exactly ten enemies without overflow', () => {
+    const { engine, runtime, claimed } = executionRuntime(10);
     const execution = createEncounterExecution(runtime, mob.id, claimed, 77);
     const initialCount = runtime.actors.filter((actor) => actor.kind === 'MOB').length;
+    expect(initialCount).toBe(7);
     for (const actor of runtime.actors.filter((candidate) => candidate.kind === 'MOB')) {
       actor.hp = Math.floor(actor.maxHp * 0.5);
     }
     let snapshot = synchronizeEncounter(engine, runtime, execution, 2_000);
     expect(snapshot.encounter?.phaseKey).toBe('blood_rite');
-    expect(runtime.actors.filter((actor) => actor.kind === 'MOB')).toHaveLength(initialCount + 2);
+    expect(runtime.actors.filter((actor) => actor.kind === 'MOB')).toHaveLength(9);
     expect(runtime.events.at(-1)?.skillKey).toBe('encounter:summon');
-    expect(runtime.actors.filter((actor) => actor.kind === 'MOB').length).toBeLessThanOrEqual(10);
 
     const root = runtime.actors.find((actor) => actor.actorId === claimed.rootActorId)!;
     root.hp = Math.floor(root.maxHp * 0.2);
@@ -180,7 +267,7 @@ describe('PvE encounter framework', () => {
     snapshot = synchronizeEncounter(engine, runtime, execution, 3_000);
     expect(snapshot.encounter?.phaseKey).toBe('execution');
     expect(snapshot.encounter?.phaseIndex).toBe(2);
-    expect(runtime.actors.filter((actor) => actor.kind === 'MOB').length).toBeLessThanOrEqual(10);
+    expect(runtime.actors.filter((actor) => actor.kind === 'MOB')).toHaveLength(10);
   });
 
   it('counts support contribution while excluding AFK and late participants', () => {
@@ -191,6 +278,7 @@ describe('PvE encounter framework', () => {
     support.healing = 40;
     support.protection = 30;
     support.cleanses = 1;
+    support.mechanics = 1;
     expect(evaluateEncounterEligibility(runtime, execution.state, 'player-1')).toMatchObject({
       eligible: true,
       reason: 'ELIGIBLE',
@@ -212,7 +300,7 @@ describe('PvE encounter framework', () => {
     expect(engine.snapshot(runtime).status).toBe('ACTIVE');
   });
 
-  it('rejects missing skills, unreachable phases and unsafe strong actions', () => {
+  it('rejects missing skills, unreachable phases and unsafe or illegal compositions', () => {
     const source = ENCOUNTER_CATALOG[1]!;
     const missingSkill = cloneEncounter(source);
     missingSkill.actors[0]!.skillKeys.push('missing-skill');
@@ -225,5 +313,9 @@ describe('PvE encounter framework', () => {
     const unsafe = cloneEncounter(source);
     unsafe.actors[0]!.skillKeys.push('archer-perfect-hunt');
     expect(validateEncounterDefinition(unsafe).errors.join('\n')).toContain('requires a telegraph');
+
+    const illegal = cloneEncounter(source);
+    illegal.scaling[0]!.actorKeys = ['chain-guard'];
+    expect(validateEncounterDefinition(illegal).errors.join('\n')).toContain('root actor');
   });
 });
