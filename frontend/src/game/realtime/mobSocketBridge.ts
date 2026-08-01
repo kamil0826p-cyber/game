@@ -6,13 +6,14 @@ import type {
   ServerToClientEvents,
   SocketAck,
 } from '../../contracts/socket';
+import type { TacticalCombatAction } from '../../contracts/tacticalCombat';
 import { createRequestId } from '../../utils/requestId';
 import { gameStore } from '../state/gameStore';
 import { mobStore } from '../state/mobStore';
 import type { GameSocketClient } from './GameSocketClient';
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-type CombatAction = 'BASIC_ATTACK' | 'SKILL';
+type CombatAction = 'BASIC_ATTACK' | 'SKILL' | TacticalCombatAction;
 interface BridgeClient {
   socket?: GameSocket;
   connect(): void;
@@ -25,9 +26,11 @@ interface RawCombatSocket {
     payload: {
       requestId: string;
       combatId: string;
+      expectedTurn?: number;
       action: CombatAction;
       skillKey?: string;
       targetActorId?: string;
+      telegraphId?: string;
     },
     acknowledgement: (response: SocketAck<CombatSnapshot>) => void,
   ): void;
@@ -41,6 +44,15 @@ declare module './GameSocketClient' {
       action: CombatAction,
       targetActorId?: string,
       skillKey?: string,
+      expectedTurn?: number,
+      telegraphId?: string,
+    ): Promise<CombatSnapshot>;
+    performTacticalCombatAction(
+      combatId: string,
+      action: TacticalCombatAction,
+      targetActorId: string | undefined,
+      expectedTurn: number,
+      telegraphId?: string,
     ): Promise<CombatSnapshot>;
   }
 }
@@ -86,7 +98,9 @@ export function installMobSocketBridge(client: GameSocketClient): void {
   };
 
   const applyReward = (reward: MobRewardPayload): void => {
-    const internal = gameStore as unknown as { patch(patch: { self: MobRewardPayload['self'] }): void };
+    const internal = gameStore as unknown as {
+      patch(patch: { self: MobRewardPayload['self'] }): void;
+    };
     internal.patch({ self: reward.self });
     window.dispatchEvent(new CustomEvent<MobRewardPayload>(MOB_REWARD_EVENT, { detail: reward }));
     void client.getSkills().catch(() => undefined);
@@ -153,10 +167,12 @@ export function installMobSocketBridge(client: GameSocketClient): void {
 
   client.performCombatAction = async (
     combatId: string,
-    action: CombatAction,
+    action: 'BASIC_ATTACK' | 'SKILL',
     skillKey?: string,
   ): Promise<CombatSnapshot> => {
-    if (!pveCombatIds.has(combatId)) return originalPerformCombatAction(combatId, action, skillKey);
+    if (!pveCombatIds.has(combatId)) {
+      return originalPerformCombatAction(combatId, action, skillKey);
+    }
     return client.performTeamCombatAction(combatId, action, undefined, skillKey);
   };
 
@@ -165,19 +181,24 @@ export function installMobSocketBridge(client: GameSocketClient): void {
     action: CombatAction,
     targetActorId?: string,
     skillKey?: string,
+    expectedTurn?: number,
+    telegraphId?: string,
   ): Promise<CombatSnapshot> => {
     const socket = bridge.socket as unknown as RawCombatSocket | undefined;
     if (!socket?.connected) throw new Error('The game socket is not connected.');
     const event = pveCombatIds.has(combatId) ? 'pve:act' : 'combat:act';
+    const suffix = action === 'SKILL' ? 'skill' : action.toLowerCase();
     const combat = await withAck<CombatSnapshot>((ack) =>
       socket.emit(
         event,
         {
-          requestId: createRequestId(action === 'SKILL' ? `${event}-skill` : `${event}-attack`),
+          requestId: createRequestId(`${event}-${suffix}`),
           combatId,
           action,
+          ...(expectedTurn !== undefined ? { expectedTurn } : {}),
           ...(skillKey ? { skillKey } : {}),
           ...(targetActorId ? { targetActorId } : {}),
+          ...(telegraphId ? { telegraphId } : {}),
         },
         ack,
       ),
@@ -185,6 +206,22 @@ export function installMobSocketBridge(client: GameSocketClient): void {
     gameStore.updateCombatState(combat);
     return combat;
   };
+
+  client.performTacticalCombatAction = (
+    combatId,
+    action,
+    targetActorId,
+    expectedTurn,
+    telegraphId,
+  ) =>
+    client.performTeamCombatAction(
+      combatId,
+      action,
+      targetActorId,
+      undefined,
+      expectedTurn,
+      telegraphId,
+    );
 
   client.leaveCombat = async (combatId: string): Promise<CombatSnapshot> => {
     if (!pveCombatIds.has(combatId)) return originalLeaveCombat(combatId);
