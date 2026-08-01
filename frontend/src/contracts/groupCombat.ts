@@ -1,4 +1,5 @@
 import './tacticalCombat';
+import './encounterCombat';
 import type { CombatParticipantPayload } from './socket';
 
 export interface CombatTeamPayload {
