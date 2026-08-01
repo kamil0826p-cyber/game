@@ -5,7 +5,6 @@ import { dirname, resolve } from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 import {
-  compileCurrentContent,
   diffContent,
   stableStringify,
 } from '../src/content/content-package.compiler.js';
@@ -14,6 +13,7 @@ import {
   readActiveContentRelease,
   rollbackContent,
 } from '../src/content/content-deployment.service.js';
+import { compileCurrentTacticalContent } from '../src/content/tactical-content.compiler.js';
 
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -25,7 +25,7 @@ function flag(name: string): boolean {
 }
 
 function compileCurrentPackage() {
-  return compileCurrentContent({
+  return compileCurrentTacticalContent({
     realmSlug: process.env.GAME_REALM_SLUG ?? 'world-1',
     realmName: process.env.GAME_REALM_NAME ?? 'World 1',
   });
@@ -41,7 +41,9 @@ async function main(): Promise<void> {
       console.log(`Content ${content.manifest.version} is valid (${content.sourceHash}).`);
       return;
     }
-    const output = resolve(argument('output') ?? `artifacts/content/${content.manifest.version}.json`);
+    const output = resolve(
+      argument('output') ?? `artifacts/content/${content.manifest.version}.json`,
+    );
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, `${stableStringify(content)}\n`, 'utf8');
     console.log(`Compiled content ${content.manifest.version} to ${output}.`);
@@ -58,9 +60,21 @@ async function main(): Promise<void> {
 
     if (command === 'rollback') {
       const version = process.argv[3];
-      if (!version || version.startsWith('--')) throw new Error('Rollback requires a content version.');
-      const result = await rollbackContent(prisma, version, { operationId, author, allowRisky });
-      console.log(JSON.stringify({ version: result.release.version, idempotent: result.idempotent, diff: result.diff }, null, 2));
+      if (!version || version.startsWith('--')) {
+        throw new Error('Rollback requires a content version.');
+      }
+      const result = await rollbackContent(prisma, version, {
+        operationId,
+        author,
+        allowRisky,
+      });
+      console.log(
+        JSON.stringify(
+          { version: result.release.version, idempotent: result.idempotent, diff: result.diff },
+          null,
+          2,
+        ),
+      );
       return;
     }
 
@@ -71,8 +85,23 @@ async function main(): Promise<void> {
       return;
     }
     if (command === 'deploy') {
-      const result = await deployCompiledContent(prisma, content, { operationId, author, allowRisky });
-      console.log(JSON.stringify({ version: result.release.version, hash: result.release.sourceHash, idempotent: result.idempotent, diff: result.diff }, null, 2));
+      const result = await deployCompiledContent(prisma, content, {
+        operationId,
+        author,
+        allowRisky,
+      });
+      console.log(
+        JSON.stringify(
+          {
+            version: result.release.version,
+            hash: result.release.sourceHash,
+            idempotent: result.idempotent,
+            diff: result.diff,
+          },
+          null,
+          2,
+        ),
+      );
       return;
     }
     throw new Error(`Unknown content command ${command}.`);
