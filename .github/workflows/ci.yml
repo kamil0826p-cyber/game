@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Static validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+
+      - name: Check formatting
+        run: |
+          npm run format:check
+          npm --prefix frontend run format:check
+
+      - name: Validate and generate Prisma client
+        run: |
+          npm run prisma:validate
+          npm run prisma:generate
+
+      - name: Validate content package
+        run: npm run content:validate
+
+      - name: Backend typecheck, unit tests and build
+        run: |
+          npm run typecheck
+          npm run test:unit
+          npm run build
+
+      - name: Frontend typecheck, tests and build
+        run: |
+          npm run frontend:typecheck
+          npm run frontend:test
+          npm run frontend:build
+
+      - name: Production dependency audit
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm --prefix frontend audit --omit=dev --audit-level=high
+
+  postgres:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: game
+          POSTGRES_PASSWORD: game
+          POSTGRES_DB: grid_mmorpg
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U game -d grid_mmorpg"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      DIRECT_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      GAME_REALM_SLUG: world-1
+      OUTBOX_WORKER_ENABLED: "false"
+      ANALYTICS_PROVIDER: disabled
+      RUN_POSTGRES_TESTS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Deploy migrations twice
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          npm run prisma:migrate:deploy 2>&1 | tee artifacts/migrate-first.log
+          npm run prisma:migrate:deploy 2>&1 | tee artifacts/migrate-second.log
+
+      - name: Seed versioned content twice
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run prisma:seed 2>&1 | tee artifacts/seed-first.log
+          npm run prisma:seed 2>&1 | tee artifacts/seed-second.log
+
+      - name: Run PostgreSQL integration tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:integration 2>&1 | tee artifacts/integration-tests.log
+
+      - name: Generate diagnostic report
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run report:diagnostics 2>&1 | tee artifacts/diagnostics.json
+
+      - name: Upload PostgreSQL diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-ci-diagnostics
+          path: artifacts
+          if-no-files-found: ignore
+          retention-days: 14
