@@ -8,6 +8,7 @@ export const TACTICAL_COMBAT_CONTRACT_VERSION = 1;
 
 export type CombatFormationLine = 'FRONT' | 'BACK';
 export type CombatFallbackPolicy = 'GUARD' | 'BASIC_ATTACK' | 'SKIP';
+export type TacticalCombatPhase = 'REQUEST' | 'TURN' | 'REACTION' | 'FINISHED';
 export type TacticalCombatAction =
   | 'GUARD'
   | 'INTERCEPT'
@@ -57,7 +58,7 @@ export interface CombatLegalActionPayload {
 export type TacticalCombatSnapshot = Omit<CombatSnapshot, 'participants'> & {
   participants: CombatParticipantPayload[];
   contractVersion: number;
-  phase: 'REQUEST' | 'TURN' | 'REACTION' | 'FINISHED';
+  phase: TacticalCombatPhase;
   turnOrder: string[];
   lastSequence: number;
   turnPolicy: CombatTurnPolicyPayload;
@@ -101,7 +102,7 @@ declare module './socket.events.js' {
 
   interface CombatSnapshot {
     contractVersion?: number;
-    phase?: TacticalCombatSnapshot['phase'];
+    phase?: TacticalCombatPhase;
     turnOrder?: string[];
     lastSequence?: number;
     turnPolicy?: CombatTurnPolicyPayload;
