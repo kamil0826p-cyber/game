@@ -34,21 +34,46 @@ export class ItemizedTradeService extends TradeService {
         include: { itemDefinition: true },
       });
       if (!item || item.equippedSlot || item.quantity < quantity) this.itemInvalid();
-      const metadata = parseItemDefinitionMetadata(item.itemDefinition.metadata);
-      const snapshot = readItemInstanceSnapshot({
-        instanceData: item.instanceData,
-        definitionKey: item.itemDefinition.key,
-        metadata,
-        legacyOperationId: `trade-read:${item.id}`,
-      });
-      if (snapshot.tradePolicy !== 'TRADEABLE' || snapshot.boundCharacterId) {
-        this.itemInvalid({
-          reason: 'ITEM_NOT_TRADEABLE',
-          tradePolicy: snapshot.tradePolicy,
-        });
-      }
+      this.assertTradeable(item);
     }
     return super.setItem(userId, characterId, tradeId, itemId, quantity);
+  }
+
+  override async accept(userId: string, characterId: string, tradeId: string) {
+    const trade = await this.database.tradeSession.findUnique({
+      where: { id: tradeId },
+      include: {
+        offers: {
+          include: {
+            inventoryItem: { include: { itemDefinition: true } },
+          },
+        },
+      },
+    });
+    if (trade) {
+      for (const offer of trade.offers) this.assertTradeable(offer.inventoryItem);
+    }
+    return super.accept(userId, characterId, tradeId);
+  }
+
+  private assertTradeable(item: {
+    id: string;
+    instanceData: unknown;
+    itemDefinition: { key: string; metadata: unknown };
+  }): void {
+    const metadata = parseItemDefinitionMetadata(item.itemDefinition.metadata as never);
+    const snapshot = readItemInstanceSnapshot({
+      instanceData: item.instanceData as never,
+      definitionKey: item.itemDefinition.key,
+      metadata,
+      legacyOperationId: `trade-read:${item.id}`,
+    });
+    if (snapshot.tradePolicy !== 'TRADEABLE' || snapshot.boundCharacterId) {
+      this.itemInvalid({
+        reason: 'ITEM_NOT_TRADEABLE',
+        tradePolicy: snapshot.tradePolicy,
+      });
+    }
   }
 
   private itemInvalid(details?: Record<string, unknown>): never {
