@@ -24,12 +24,12 @@ import type { ItemInstanceSnapshot } from './itemization.types.js';
 @Injectable()
 export class ItemizedItemService extends CanonicalItemService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly itemizationDatabase: PrismaService,
     private readonly characterProgression: CharacterProgressionService,
     private readonly catalog: ItemizationCatalogService,
     private readonly inventoryOperations: ItemInventoryService,
   ) {
-    super(prisma, characterProgression);
+    super(itemizationDatabase, characterProgression);
   }
 
   override async getInventory(userId: string, characterId: string): Promise<InventorySnapshot> {
@@ -114,7 +114,7 @@ export class ItemizedItemService extends CanonicalItemService {
     itemId: string,
     confirmationHash?: string,
   ): Promise<InventorySnapshot> {
-    await this.prisma.$transaction(async (transaction) => {
+    await this.itemizationDatabase.$transaction(async (transaction) => {
       await this.catalog.ensure(transaction);
       const item = await transaction.inventoryItem.findFirst({
         where: {
@@ -231,7 +231,7 @@ export class ItemizedItemService extends CanonicalItemService {
     characterId: string,
     snapshot: InventorySnapshot,
   ): Promise<InventorySnapshot> {
-    const rows = await this.prisma.inventoryItem.findMany({
+    const rows = await this.itemizationDatabase.inventoryItem.findMany({
       where: { characterId, character: { userId } },
       include: { itemDefinition: true },
     });
@@ -263,7 +263,7 @@ export class ItemizedItemService extends CanonicalItemService {
             generatedAt: row.createdAt.toISOString(),
           },
         });
-        await this.prisma.inventoryItem.update({
+        await this.itemizationDatabase.inventoryItem.update({
           where: { id: row.id },
           data: { instanceData: writeItemInstanceData(row.instanceData, itemSnapshot) },
         });
