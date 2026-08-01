@@ -34,4 +34,10 @@ describe('backend startup scripts', () => {
 
     expect(prismaConfig).toContain("seed: 'tsx prisma/content.cli.ts deploy --author=prisma-seed'");
   });
+
+  it('keeps Prisma and tsx available when NODE_ENV is production', () => {
+    const npmConfig = readFileSync(resolve(process.cwd(), '.npmrc'), 'utf8');
+
+    expect(npmConfig.split(/\r?\n/u)).toContain('include=dev');
+  });
 });
