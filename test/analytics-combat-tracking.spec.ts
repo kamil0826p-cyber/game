@@ -53,21 +53,53 @@ function snapshot(status: CombatSnapshot['status'] = 'ACTIVE'): CombatSnapshot {
     mapId: '00000000-0000-0000-0000-000000000020',
     createdAt: 1_000,
     startedAt: 2_000,
-    ...(status === 'FINISHED' ? { finishedAt: 8_000, finishReason: 'DEFEATED' as const } : {}),
+    ...(status === 'FINISHED'
+      ? { finishedAt: 8_000, finishReason: 'DEFEATED' as const }
+      : {}),
     turnNumber: status === 'FINISHED' ? 4 : 1,
     activeActorId: 'character-a',
     initiatorActorId: 'character-a',
     recipientActorId: 'character-b',
+    contractVersion: 1,
+    phase: status === 'FINISHED' ? 'FINISHED' : 'TURN',
+    lastSequence: 0,
+    turnPolicy: { decisionMs: 10_000, reactionMs: 4_000, tutorialDecisionMs: 15_000 },
     participants: [
       {
-        actorId: 'character-a', kind: 'PLAYER', characterId: 'character-a', name: 'A',
-        characterClass: 'WARRIOR', level: 5, outfitKey: 'warrior', hp: 100, maxHp: 100,
-        energy: 50, maxEnergy: 50, shield: 0, statuses: [], skills: [],
+        actorId: 'character-a',
+        kind: 'PLAYER',
+        characterId: 'character-a',
+        name: 'A',
+        characterClass: 'WARRIOR',
+        level: 5,
+        outfitKey: 'warrior',
+        hp: 100,
+        maxHp: 100,
+        energy: 50,
+        maxEnergy: 50,
+        shield: 0,
+        statuses: [],
+        skills: [],
+        formationSlot: 0,
+        formationLine: 'FRONT',
       },
       {
-        actorId: 'character-b', kind: 'PLAYER', characterId: 'character-b', name: 'B',
-        characterClass: 'MAGE', level: 5, outfitKey: 'mage', hp: 80, maxHp: 80,
-        energy: 70, maxEnergy: 70, shield: 0, statuses: [], skills: [],
+        actorId: 'character-b',
+        kind: 'PLAYER',
+        characterId: 'character-b',
+        name: 'B',
+        characterClass: 'MAGE',
+        level: 5,
+        outfitKey: 'mage',
+        hp: 80,
+        maxHp: 80,
+        energy: 70,
+        maxEnergy: 70,
+        shield: 0,
+        statuses: [],
+        skills: [],
+        formationSlot: 0,
+        formationLine: 'FRONT',
       },
     ],
     recentActions: [],
@@ -83,7 +115,7 @@ describe('authoritative combat analytics', () => {
       combatResolved: vi.fn().mockResolvedValue(undefined),
     };
     const world = {
-      getBySocketId: vi.fn((socketId: string) => socketId === 'socket-a' ? first : second),
+      getBySocketId: vi.fn((socketId: string) => (socketId === 'socket-a' ? first : second)),
     };
     const emit = vi.fn();
     const publisher = new WorldEventsPublisher(world as never, analytics as never);
@@ -96,7 +128,10 @@ describe('authoritative combat analytics', () => {
 
     expect(analytics.combatStarted).toHaveBeenCalledTimes(2);
     expect(analytics.combatResolved).toHaveBeenCalledTimes(1);
-    expect(analytics.combatResolved).toHaveBeenCalledWith(first, expect.objectContaining({ status: 'FINISHED' }));
+    expect(analytics.combatResolved).toHaveBeenCalledWith(
+      first,
+      expect.objectContaining({ status: 'FINISHED' }),
+    );
   });
 
   it('selects the matching action instead of a later status tick', async () => {
@@ -114,11 +149,21 @@ describe('authoritative combat analytics', () => {
         label: 'Power strike',
         animationKey: 'power-strike',
         visual: { castEffectKey: 'cast', impactEffectKey: 'impact', accentColor: '#fff' },
-        results: [{
-          targetActorId: 'character-b', hpDelta: -20, energyDelta: 0, shieldDelta: 0,
-          shieldAbsorbed: 0, dodged: false, statusesApplied: [], statusesRemoved: [],
-        }],
+        results: [
+          {
+            targetActorId: 'character-b',
+            hpDelta: -20,
+            energyDelta: 0,
+            shieldDelta: 0,
+            shieldAbsorbed: 0,
+            dodged: false,
+            statusesApplied: [],
+            statusesRemoved: [],
+          },
+        ],
         occurredAt: 5_000,
+        decisionTimeMs: 1_250,
+        timedOut: false,
       },
       {
         sequence: 8,
@@ -139,14 +184,66 @@ describe('authoritative combat analytics', () => {
       targetActorId: 'character-b',
     });
 
-    expect(events.appendInTransaction).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'combat-action:combat-1:7',
-      occurredAt: new Date(5_000),
-      payload: expect.objectContaining({
-        action: 'SKILL',
-        skillKey: 'warrior-power-strike',
-        results: [expect.objectContaining({ hpDelta: -20 })],
+    expect(events.appendInTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'combat-action:combat-1:7',
+        occurredAt: new Date(5_000),
+        payload: expect.objectContaining({
+          action: 'SKILL',
+          skillKey: 'warrior-power-strike',
+          decisionTimeMs: 1_250,
+          timedOut: false,
+          results: [expect.objectContaining({ hpDelta: -20 })],
+        }),
       }),
-    }));
+    );
+  });
+
+  it('records tactical fallback actions and timeout decisions', async () => {
+    const events = { appendInTransaction: vi.fn().mockResolvedValue(undefined) };
+    const tracking = new AnalyticsTrackingService(events as never);
+    const current = snapshot('ACTIVE');
+    current.recentActions = [
+      {
+        sequence: 1,
+        actorId: 'character-a',
+        targetActorId: 'character-a',
+        action: 'SKILL',
+        tacticalAction: 'GUARD',
+        skillKey: 'tactical:guard',
+        label: 'Guard',
+        animationKey: 'tactical-guard',
+        visual: { castEffectKey: 'cast', impactEffectKey: 'impact', accentColor: '#fff' },
+        results: [
+          {
+            targetActorId: 'character-a',
+            hpDelta: 0,
+            energyDelta: 0,
+            shieldDelta: 0,
+            shieldAbsorbed: 0,
+            dodged: false,
+            statusesApplied: [],
+            statusesRemoved: [],
+          },
+        ],
+        occurredAt: 12_000,
+        decisionTimeMs: 10_000,
+        timedOut: true,
+      },
+    ];
+
+    await tracking.combatActionAccepted(session('character-a', 'socket-a'), current, {
+      action: 'GUARD',
+    });
+
+    expect(events.appendInTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          action: 'GUARD',
+          decisionTimeMs: 10_000,
+          timedOut: true,
+        }),
+      }),
+    );
   });
 });
