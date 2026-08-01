@@ -181,20 +181,37 @@ describe('tactical CombatEngine', () => {
     expect(engine.legalTargetIds(runtime, 'caster', 'BACK_ROW')).toEqual([]);
   });
 
-  it('guard is a defensive decision and the default player timeout fallback', () => {
+  it('guard reduces incoming damage and is the default player timeout fallback', () => {
     const guarded = create(
-      [actor('defender', { agility: 60 }), actor('attacker', { agility: 50 })],
-      [actor('enemy', { agility: 1 })],
+      [actor('attacker', { agility: 50 })],
+      [actor('defender', { agility: 60 })],
     );
     guarded.engine.act(guarded.runtime, 'defender', { action: 'GUARD' }, 2_000);
-    const before = guarded.runtime.actors.find((entry) => entry.actorId === 'enemy')!.hp;
-    const defended = guarded.engine.act(
+    const guardedResult = guarded.engine.act(
       guarded.runtime,
       'attacker',
-      { action: 'BASIC_ATTACK', targetActorId: 'enemy' },
+      { action: 'BASIC_ATTACK', targetActorId: 'defender' },
       3_000,
     );
-    expect(defended.participants.find((entry) => entry.actorId === 'enemy')!.hp).toBeLessThan(before);
+    const guardedDamage = 400 - guardedResult.participants.find(
+      (entry) => entry.actorId === 'defender',
+    )!.hp;
+
+    const unguarded = create(
+      [actor('attacker', { agility: 50 })],
+      [actor('defender', { agility: 60 })],
+    );
+    unguarded.engine.act(unguarded.runtime, 'defender', { action: 'SKIP' }, 2_000);
+    const unguardedResult = unguarded.engine.act(
+      unguarded.runtime,
+      'attacker',
+      { action: 'BASIC_ATTACK', targetActorId: 'defender' },
+      3_000,
+    );
+    const unguardedDamage = 400 - unguardedResult.participants.find(
+      (entry) => entry.actorId === 'defender',
+    )!.hp;
+    expect(guardedDamage).toBeLessThan(unguardedDamage);
 
     const timeout = create(
       [actor('slow-player', { agility: 60 })],
@@ -295,7 +312,7 @@ describe('tactical CombatEngine', () => {
     });
   });
 
-  it('cleanse removes harmful statuses without removing beneficial effects', () => {
+  it('cleanse removes harmful statuses', () => {
     const { engine, runtime } = create(
       [actor('caster', { agility: 60, skills: learned(burnSkill) })],
       [actor('target', { agility: 10 })],
@@ -336,18 +353,20 @@ describe('tactical CombatEngine', () => {
         { action: 'SKILL', skillKey: stunSkill.key, targetActorId: 'target' },
         2_000 + index * 2_000,
       );
-      const status = control.participants
-        .find((entry) => entry.actorId === 'target')
-        ?.statuses.find((entry) => entry.key === 'STUNNED');
-      durations.push(status?.turnsRemaining);
-      resisted = control.recentActions.at(-1)?.results[0]?.statusResisted;
+      durations.push(
+        control.participants
+          .find((entry) => entry.actorId === 'target')
+          ?.statuses.find((entry) => entry.key === 'STUNNED')
+          ?.turnsRemaining,
+      );
+      resisted = control.recentActions.findLast(
+        (entry) => entry.actorId === 'controller',
+      )?.results[0]?.statusResisted;
       if (runtime.status === 'ACTIVE' && runtime.activeActorId === 'target') {
         engine.act(runtime, 'target', { action: 'SKIP' }, 3_000 + index * 2_000);
       }
     }
-    expect(durations[0]).toBe(4);
-    expect(durations[1]).toBeLessThanOrEqual(2);
-    expect(durations[2]).toBeLessThanOrEqual(1);
+    expect(durations).toEqual([3, 2, 1, undefined]);
     expect(resisted).toBe('STUNNED');
   });
 
@@ -367,22 +386,13 @@ describe('tactical CombatEngine', () => {
     expect(replay.lastSequence).toBe(first.lastSequence);
     expect(replay.participants).toEqual(first.participants);
     expect(() =>
-      engine.act(
-        runtime,
-        'first',
-        { ...command, action: 'GUARD' },
-        2_200,
-      ),
+      engine.act(runtime, 'first', { ...command, action: 'GUARD' }, 2_200),
     ).toThrow('COMBAT_OPERATION_ID_COLLISION');
     expect(() =>
       engine.act(
         runtime,
         'second',
-        {
-          requestId: 'stale-turn',
-          expectedTurn: 1,
-          action: 'GUARD',
-        },
+        { requestId: 'stale-turn', expectedTurn: 1, action: 'GUARD' },
         3_000,
       ),
     ).toThrow('COMBAT_STALE_TURN');
@@ -391,11 +401,24 @@ describe('tactical CombatEngine', () => {
   it('supports uneven full-size battles without special-case engine paths', () => {
     const { engine, runtime } = create(
       [actor('solo', { agility: 100 })],
-      Array.from({ length: 10 }, (_, index) => actor(`enemy-${index}`, { agility: 50 - index })),
+      Array.from({ length: 10 }, (_, index) =>
+        actor(`enemy-${index}`, { agility: 50 - index }),
+      ),
     );
     const snapshot = engine.snapshot(runtime);
-    expect(snapshot.participants.filter((entry) => entry.teamId === snapshot.teams?.[0].teamId)).toHaveLength(1);
-    expect(snapshot.participants.filter((entry) => entry.teamId === snapshot.teams?.[1].teamId)).toHaveLength(10);
-    expect(snapshot.legalActions?.[0]?.actions.find((entry) => entry.action === 'BASIC_ATTACK')?.targetActorIds.length).toBeGreaterThan(0);
+    expect(
+      snapshot.participants.filter(
+        (entry) => entry.teamId === snapshot.teams?.[0].teamId,
+      ),
+    ).toHaveLength(1);
+    expect(
+      snapshot.participants.filter(
+        (entry) => entry.teamId === snapshot.teams?.[1].teamId,
+      ),
+    ).toHaveLength(10);
+    expect(
+      snapshot.legalActions?.[0]?.actions.find((entry) => entry.action === 'BASIC_ATTACK')
+        ?.targetActorIds.length,
+    ).toBeGreaterThan(0);
   });
 });
