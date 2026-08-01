@@ -3,7 +3,11 @@ import type {
   CharacterProgressionSnapshot,
   MilestoneKey,
 } from '../../contracts/progression';
-import type { SocketAck } from '../../contracts/socket';
+import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+  SocketAck,
+} from '../../contracts/socket';
 import { createRequestId } from '../../utils/requestId';
 import { gameStore } from '../state/gameStore';
 import type { GameSocketClient } from './GameSocketClient';
@@ -27,7 +31,10 @@ interface ProgressionClientEvents {
   ) => void;
 }
 
-type ProgressionSocket = Socket<Record<string, never>, ProgressionClientEvents>;
+type ProgressionSocket = Socket<
+  ServerToClientEvents,
+  ClientToServerEvents & ProgressionClientEvents
+>;
 interface BridgeClient {
   socket?: ProgressionSocket;
 }
