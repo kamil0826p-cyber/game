@@ -152,6 +152,13 @@ export function filterRedundantEncounterActions(
     if (action.action === 'COUNTER') {
       return hasActiveStatus(actor, 'COUNTER_READY') ? [] : [action];
     }
+    if (action.action === 'MARK') {
+      const exposedTargetExists = action.targetActorIds.some((actorId) => {
+        const target = runtime.actors.find((candidate) => candidate.actorId === actorId);
+        return Boolean(target && hasActiveStatus(target, 'EXPOSED'));
+      });
+      if (exposedTargetExists) return [];
+    }
     if (!['MARK', 'TAUNT', 'INTERCEPT'].includes(action.action)) return [action];
 
     const blockingStatus =
