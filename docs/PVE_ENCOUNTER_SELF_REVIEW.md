@@ -61,14 +61,15 @@ Health, power and rewards also scale, but independently from actor count, telegr
 ### Contributions and rewards
 
 - Damage, healing, shields/protection, cleanses, interrupts and mechanic actions contribute to eligibility.
+- Timeout-generated fallback actions are explicitly excluded from contribution and activity counts.
 - Withdrawn, late, inactive and zero-contribution participants can be excluded with a reason.
 - Support contribution is not reduced to damage dealt.
 - The encounter reward multiplier is applied before party XP splitting.
 - Personal loot remains independently rolled per eligible character.
-- Reward settlement uses the existing transactional `CharacterCurrencyLedger` with a unique `operationId` and stores the complete settlement in metadata.
+- Reward settlement is stored transactionally in a dedicated `EncounterRewardLedger` with unique character/operation and character/combat constraints.
 - A replay reads and returns the stored settlement; it does not reroll loot, add experience, insert inventory items or progress the kill quest again.
 
-The ledger entry has amount `0` because it is an idempotency/audit record, not a currency mutation. The operation namespace is `encounter:<combatId>`, so it cannot collide with trade or merchant operations.
+The dedicated table was added during self-review after verifying that `CharacterCurrencyLedger` enforces `amount > 0` and therefore must not be misused for zero-value idempotency records. The operation namespace remains `encounter:<combatId>`.
 
 ### World lifecycle
 
@@ -91,7 +92,9 @@ The ledger entry has amount `0` because it is an idempotency/audit record, not a
 6. support contribution, AFK and late-participation eligibility;
 7. rejection of missing skills, unreachable phases and strong actions without telegraphs.
 
-The PR workflow runs the repository-wide backend typecheck/tests plus frontend typecheck/tests/build.
+`test/encounter-reward-idempotency.spec.ts` verifies that a stored settlement is returned without recomputing progression or recording the quest kill again.
+
+The PR contains a workflow for the repository-wide backend typecheck/tests plus frontend typecheck/tests/build. Its first GitHub Actions job failed during startup before any command step ran, so that startup failure is not treated as a test result.
 
 ## Risks found during self-review
 
@@ -110,6 +113,10 @@ Arena modifiers are currently authoritative phase metadata and UI labels. They d
 ### 4. Contribution thresholds
 
 Initial thresholds are conservative and intended to prevent obvious AFK/replay abuse. Production tuning needs telemetry from deferred issue #204. The score remains explainable and the eligibility reason is emitted to the affected player.
+
+### 5. Reward delivery recovery
+
+The settlement itself is atomic and replay-safe. Automatic retry/outbox delivery after a process failure between database commit and client notification remains part of the deferred reliability work in issue #204.
 
 ## Manual regression checklist
 
