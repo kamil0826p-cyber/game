@@ -25,10 +25,10 @@ describe('MobRewardService', () => {
   const character = { id: 'char-1', userId: 'user-1', level: 1, experience: 0 };
   const canonical = {
     snapshot: {
-      effective: { maxHp: 100, maxEnergy: 100, strength: 10, agility: 10, intelligence: 10, armor: 10 },
+      effective: { maxHp: 111, maxEnergy: 72, strength: 15, agility: 7, intelligence: 3, armor: 8 },
     },
-    hp: 100,
-    energy: 100,
+    hp: 111,
+    energy: 72,
     silver: 0,
     stateVersion: 1,
     statRevision: 1,
@@ -61,15 +61,18 @@ describe('MobRewardService', () => {
     const reward = await service.award(player, mob());
     expect(prisma.$transaction).toHaveBeenCalledOnce();
     expect(tx.character.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { level: 1, experience: 150 },
+      data: { level: 2, experience: 15 },
     }));
     expect(progression.recalculateInTransaction).toHaveBeenCalledWith(tx, 'char-1', 'ADD_MAX_DELTA');
     expect(tx.inventoryItem.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ characterId: 'char-1', quantity: 2, instanceData: expect.any(Object) }) }));
     expect(domainEvents.append).toHaveBeenCalledWith(tx, expect.objectContaining({ type: 'MobDefeated' }));
     expect(domainEvents.append).toHaveBeenCalledWith(tx, expect.objectContaining({ type: 'ItemAcquired' }));
     expect(reward.experienceGained).toBe(150);
+    expect(reward.levelsGained).toBe(1);
     expect(reward.loot[0]).toMatchObject({ itemKey: 'rabbit-fur', quantity: 2 });
-    expect(player.experience).toBe(150);
+    expect(player.level).toBe(2);
+    expect(player.experience).toBe(15);
+    expect(player.maxHp).toBe(111);
     expect(player.stateRevision).toBe(1);
     expect(player.persistedRevision).toBe(1);
     expect(quests.recordMobKill).toHaveBeenCalledWith('char-1', 'spawn-rabbit-1');
