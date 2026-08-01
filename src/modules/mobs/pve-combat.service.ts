@@ -28,6 +28,16 @@ import { SkillService } from '../skills/skill.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
+import { planEncounterAction } from './encounters/encounter.ai.js';
+import './encounters/encounter.contracts.js';
+import {
+  appendEncounterAiTrace,
+  createEncounterExecution,
+  decorateEncounterSnapshot,
+  recordEncounterTimeout,
+  synchronizeEncounter,
+} from './encounters/encounter.runtime.js';
+import type { EncounterExecution } from './encounters/encounter.types.js';
 import { MobCoordinatorService } from './mob-coordinator.service.js';
 
 const MOB_AUTO_ATTACK_DELAY_MS = 900;
@@ -42,6 +52,7 @@ export class PveCombatService implements OnModuleDestroy {
   private readonly logger = new Logger(PveCombatService.name);
   private readonly engine = new CombatEngine();
   private readonly combats = new Map<string, CombatRuntime>();
+  private readonly encounters = new Map<string, EncounterExecution>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly completedRewards = new Set<string>();
   private shuttingDown = false;
@@ -70,7 +81,8 @@ export class PveCombatService implements OnModuleDestroy {
     return this.withCombatLock(combatId, async () => {
       const runtime = this.combats.get(combatId);
       if (!runtime) return null;
-      const snapshot = this.engine.reconnect(runtime, characterId, Date.now());
+      this.engine.reconnect(runtime, characterId, Date.now());
+      const snapshot = this.syncEncounter(runtime);
       this.scheduleTurn(runtime);
       return snapshot;
     });
@@ -94,7 +106,7 @@ export class PveCombatService implements OnModuleDestroy {
         this.withMovementQuiesced(initialParty.sessions, async () => {
           const activeInitiator = this.requireOnline(characterId, userId);
           const party = await this.revalidateFrozenParty(activeInitiator, initialParty);
-          const claimed = this.mobs.claim(mobId, activeInitiator);
+          const claimed = this.mobs.claim(mobId, activeInitiator, party.sessions.length);
           let runtime: CombatRuntime | undefined;
           const combatId = randomUUID();
           for (const session of party.sessions) {
@@ -123,19 +135,32 @@ export class PveCombatService implements OnModuleDestroy {
                 actors: players,
               },
               {
-                anchorActorId: claimed.actor.actorId,
-                actors: [claimed.actor],
+                anchorActorId: claimed.encounter.rootActorId,
+                actors: claimed.encounter.initialActors,
               },
               now,
               now,
             );
             this.combats.set(runtime.combatId, runtime);
-            const snapshot = this.engine.start(runtime, now);
+            this.encounters.set(
+              runtime.combatId,
+              createEncounterExecution(
+                runtime,
+                mobId,
+                claimed.encounter,
+                this.encounterSeed(runtime.combatId),
+              ),
+            );
+            this.engine.start(runtime, now);
+            const snapshot = this.syncEncounter(runtime, now);
             await this.broadcastAndPersist(runtime, snapshot);
             this.scheduleTurn(runtime);
             return snapshot;
           } catch (error) {
-            if (runtime) this.combats.delete(runtime.combatId);
+            if (runtime) {
+              this.combats.delete(runtime.combatId);
+              this.encounters.delete(runtime.combatId);
+            }
             this.occupancy.releaseMany(
               party.sessions.map((session) => session.characterId),
               combatId,
@@ -167,12 +192,12 @@ export class PveCombatService implements OnModuleDestroy {
     return this.withCombatLock(combatId, async () => {
       const runtime = this.requireRuntime(combatId);
       this.requirePlayer(runtime, characterId, userId);
-      let snapshot: CombatSnapshot;
       try {
-        snapshot = this.engine.act(runtime, characterId, command, Date.now());
+        this.engine.act(runtime, characterId, command, Date.now());
       } catch (error) {
         this.rethrowEngineError(error);
       }
+      const snapshot = this.syncEncounter(runtime);
       await this.afterResolution(runtime, snapshot);
       return snapshot;
     });
@@ -186,8 +211,9 @@ export class PveCombatService implements OnModuleDestroy {
     return this.withCombatLock(combatId, async () => {
       const runtime = this.requireRuntime(combatId);
       this.requirePlayer(runtime, characterId, userId);
-      const snapshot = this.engine.forfeit(runtime, characterId, Date.now());
+      this.engine.forfeit(runtime, characterId, Date.now());
       this.occupancy.release(characterId, runtime.combatId);
+      const snapshot = this.syncEncounter(runtime);
       await this.afterResolution(runtime, snapshot);
       return snapshot;
     });
@@ -199,7 +225,8 @@ export class PveCombatService implements OnModuleDestroy {
     await this.withCombatLock(combatId, async () => {
       const runtime = this.combats.get(combatId);
       if (!runtime || runtime.status !== 'ACTIVE') return;
-      const snapshot = this.engine.disconnect(runtime, characterId, Date.now());
+      this.engine.disconnect(runtime, characterId, Date.now());
+      const snapshot = this.syncEncounter(runtime);
       await this.broadcastAndPersist(runtime, snapshot);
       this.scheduleTurn(runtime);
     });
@@ -211,8 +238,15 @@ export class PveCombatService implements OnModuleDestroy {
     this.timers.clear();
     for (const runtime of this.combats.values()) {
       if (runtime.status !== 'ACTIVE') continue;
-      const snapshot = this.engine.terminate(runtime, 'SERVER_SHUTDOWN', Date.now());
+      this.engine.terminate(runtime, 'SERVER_SHUTDOWN', Date.now());
+      const execution = this.encounters.get(runtime.combatId);
+      if (execution) {
+        this.mobs.releaseClaim(execution.state.rootMobId, runtime.initiatorActorId);
+      }
       this.release(runtime);
+      const snapshot = execution
+        ? decorateEncounterSnapshot(this.engine.snapshot(runtime), runtime, execution.state)
+        : this.engine.snapshot(runtime);
       await this.broadcastAndPersist(runtime, snapshot);
     }
     await this.executor.drain();
@@ -229,7 +263,7 @@ export class PveCombatService implements OnModuleDestroy {
       if (!this.completedRewards.has(runtime.combatId)) {
         this.completedRewards.add(runtime.combatId);
         try {
-          await this.mobs.completeCombat(runtime);
+          await this.mobs.completeCombat(runtime, this.requireEncounter(runtime.combatId).state);
         } catch (error) {
           this.completedRewards.delete(runtime.combatId);
           throw error;
@@ -248,7 +282,7 @@ export class PveCombatService implements OnModuleDestroy {
       group?.members.map((member) => member.characterId) ?? [anchor.characterId];
     const sessions = memberIds
       .slice(0, COMBAT_TEAM_LIMIT)
-      .map((characterId) => this.world.getByCharacterId(characterId))
+      .map((memberId) => this.world.getByCharacterId(memberId))
       .filter(
         (session): session is PlayerSession =>
           Boolean(
@@ -404,9 +438,21 @@ export class PveCombatService implements OnModuleDestroy {
     const expectedTurn = runtime.turnNumber;
     const expectedPhase = runtime.phase;
     const active = runtime.actors.find((actor) => actor.actorId === expectedActorId);
+    const reactingMob =
+      runtime.phase === 'REACTION'
+        ? runtime.actors.find(
+            (actor) =>
+              actor.kind === 'MOB' &&
+              this.engine
+                .legalActions(runtime, actor.actorId)
+                .some((action) => action.reactionOnly),
+          )
+        : undefined;
     const delay =
       runtime.phase === 'REACTION'
-        ? Math.max(1, runtime.turnEndsAt - Date.now())
+        ? reactingMob
+          ? MOB_AUTO_ATTACK_DELAY_MS
+          : Math.max(1, runtime.turnEndsAt - Date.now())
         : active?.kind === 'MOB'
           ? MOB_AUTO_ATTACK_DELAY_MS
           : Math.max(1, runtime.turnEndsAt - Date.now());
@@ -423,10 +469,31 @@ export class PveCombatService implements OnModuleDestroy {
           return;
         }
         const now = Date.now();
-        let snapshot: CombatSnapshot;
+        const execution = this.requireEncounter(current.combatId);
         try {
           if (current.phase === 'REACTION') {
-            snapshot = this.engine.resolveTelegraph(current, now);
+            const reactor = current.actors.find(
+              (actor) =>
+                actor.kind === 'MOB' &&
+                this.engine
+                  .legalActions(current, actor.actorId)
+                  .some((action) => action.reactionOnly),
+            );
+            if (reactor) {
+              const legalActions = this.engine.legalActions(current, reactor.actorId);
+              const plan = planEncounterAction(current, reactor, execution.state, legalActions);
+              if (plan) {
+                appendEncounterAiTrace(
+                  execution.state,
+                  `${current.turnNumber}:${reactor.actorId}:${plan.reason}`,
+                );
+                this.engine.act(current, reactor.actorId, plan.command, now);
+              } else {
+                this.engine.resolveTelegraph(current, now);
+              }
+            } else {
+              this.engine.resolveTelegraph(current, now);
+            }
           } else {
             const acting = current.actors.find(
               (actor) => actor.actorId === expectedActorId,
@@ -436,7 +503,7 @@ export class PveCombatService implements OnModuleDestroy {
               acting.kind === 'PLAYER' &&
               this.engine.isDisconnectGraceExpired(current, expectedActorId, now)
             ) {
-              snapshot = this.engine.forfeit(
+              this.engine.forfeit(
                 current,
                 expectedActorId,
                 now,
@@ -445,40 +512,25 @@ export class PveCombatService implements OnModuleDestroy {
               this.occupancy.release(expectedActorId, current.combatId);
             } else if (acting.kind === 'MOB') {
               const legalActions = this.engine.legalActions(current, expectedActorId);
-              const selectedAction =
-                legalActions.find((action) => action.action === 'SKILL') ??
-                legalActions.find((action) => action.action === 'BASIC_ATTACK');
-              const candidates = current.actors
-                .filter((candidate) =>
-                  selectedAction?.targetActorIds.includes(candidate.actorId),
-                )
-                .sort(
-                  (left, right) =>
-                    left.hp / Math.max(1, left.maxHp) -
-                    right.hp / Math.max(1, right.maxHp),
+              const plan = planEncounterAction(current, acting, execution.state, legalActions);
+              if (plan) {
+                appendEncounterAiTrace(
+                  execution.state,
+                  `${current.turnNumber}:${acting.actorId}:${plan.reason}`,
                 );
-              snapshot = selectedAction && candidates[0]
-                ? this.engine.act(
-                    current,
-                    expectedActorId,
-                    {
-                      action: selectedAction.action,
-                      skillKey: selectedAction.skillKey,
-                      targetActorId: candidates[0].actorId,
-                      operationId: `mob-ai:${current.turnNumber}:${expectedActorId}`,
-                      expectedTurnNumber: current.turnNumber,
-                      contractVersion: 2,
-                    },
-                    now,
-                  )
-                : this.engine.timeout(current, expectedActorId, now);
+                this.engine.act(current, expectedActorId, plan.command, now);
+              } else {
+                this.engine.timeout(current, expectedActorId, now);
+              }
             } else {
-              snapshot = this.engine.timeout(current, expectedActorId, now);
+              recordEncounterTimeout(execution.state, expectedActorId, current.turnNumber);
+              this.engine.timeout(current, expectedActorId, now);
             }
           }
         } catch (error) {
           this.rethrowEngineError(error);
         }
+        const snapshot = this.syncEncounter(current, now);
         await this.afterResolution(current, snapshot);
       });
     });
@@ -487,6 +539,7 @@ export class PveCombatService implements OnModuleDestroy {
   private scheduleCleanup(runtime: CombatRuntime): void {
     this.setTimer(runtime.combatId, COMBAT_RESULT_RETENTION_MS, () => {
       this.combats.delete(runtime.combatId);
+      this.encounters.delete(runtime.combatId);
       this.timers.delete(runtime.combatId);
       this.completedRewards.delete(runtime.combatId);
     });
@@ -511,6 +564,25 @@ export class PveCombatService implements OnModuleDestroy {
         .map((actor) => actor.actorId),
       runtime.combatId,
     );
+  }
+
+  private syncEncounter(runtime: CombatRuntime, now = Date.now()): CombatSnapshot {
+    return synchronizeEncounter(
+      this.engine,
+      runtime,
+      this.requireEncounter(runtime.combatId),
+      now,
+    );
+  }
+
+  private requireEncounter(combatId: string): EncounterExecution {
+    const encounter = this.encounters.get(combatId);
+    if (!encounter) throw new Error('ENCOUNTER_RUNTIME_NOT_FOUND');
+    return encounter;
+  }
+
+  private encounterSeed(combatId: string): number {
+    return Number.parseInt(combatId.replaceAll('-', '').slice(0, 8), 16) || 1;
   }
 
   private requireRuntime(combatId: string): CombatRuntime {
