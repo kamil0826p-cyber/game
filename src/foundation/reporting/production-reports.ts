@@ -210,7 +210,12 @@ export async function combatReport(prisma: PrismaClient): Promise<{
         COUNT(*)::int AS "uses",
         SUM(COALESCE(("payload"->>'damage')::bigint, 0))::bigint AS "damage",
         SUM(COALESCE(("payload"->>'healing')::bigint, 0))::bigint AS "healing",
-        AVG(COALESCE(("payload"->>'success')::boolean, TRUE)::int)::float8 AS "successRate"
+        AVG(
+          CASE
+            WHEN COALESCE(("payload"->>'success')::boolean, TRUE) THEN 1
+            ELSE 0
+          END
+        )::float8 AS "successRate"
       FROM "DomainEvent"
       WHERE "eventType" = 'combat.action.accepted'
       GROUP BY COALESCE("payload"->>'skillKey', 'basic-attack')
@@ -279,16 +284,19 @@ export async function diagnosticsReport(prisma: PrismaClient): Promise<{
   return { content, deadLetters, auditDrift };
 }
 
-export async function buildFoundationReports(prisma: PrismaClient): Promise<FoundationReports> {
-  const [funnel, retention, sessions, economy, itemFlow, combat, diagnostics] = await Promise.all([
-    accountFunnelReport(prisma),
-    retentionReport(prisma),
-    sessionDurationReport(prisma),
-    economyReport(prisma),
-    itemFlowReport(prisma),
-    combatReport(prisma),
-    diagnosticsReport(prisma),
-  ]);
+export async function buildFoundationReports(
+  prisma: PrismaClient,
+): Promise<FoundationReports> {
+  const [funnel, retention, sessions, economy, itemFlow, combat, diagnostics] =
+    await Promise.all([
+      accountFunnelReport(prisma),
+      retentionReport(prisma),
+      sessionDurationReport(prisma),
+      economyReport(prisma),
+      itemFlowReport(prisma),
+      combatReport(prisma),
+      diagnosticsReport(prisma),
+    ]);
   return {
     generatedAt: new Date().toISOString(),
     funnel,
