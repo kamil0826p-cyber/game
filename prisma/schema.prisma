@@ -49,8 +49,14 @@ enum CombatState {
 
 enum SkillTargeting {
   SELF
+  ALLY
   ENEMY
   AREA
+  ALL_ALLIES
+  ALL_ENEMIES
+  FRONT_ROW
+  BACK_ROW
+  ADJACENT
 }
 
 enum EquipmentSlot {
@@ -471,8 +477,8 @@ model GuildInvite {
   targetCharacterId  String            @db.Uuid
   status             GuildInviteStatus @default(PENDING)
   expiresAt          DateTime
-  createdAt          DateTime          @default(now())
-  respondedAt        DateTime?
+  createdAt           DateTime          @default(now())
+  respondedAt         DateTime?
 
   guild   Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
   inviter Character @relation("GuildInviteSender", fields: [inviterCharacterId], references: [id], onDelete: Cascade)
