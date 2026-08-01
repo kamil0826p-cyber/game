@@ -14,6 +14,7 @@ import './combat.css';
 import './combat-support-effects.css';
 import './combat-group-stage.css';
 import './combat-party-arena-v2.css';
+import './combat-tactical-controls.css';
 import './group-panel-actions.css';
 
 const root = document.getElementById('root');

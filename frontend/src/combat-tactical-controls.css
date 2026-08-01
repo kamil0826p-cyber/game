@@ -1,0 +1,244 @@
+/* Tactical actions are universal combat maneuvers, not a second skill bar. */
+.hud-tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.combat-stage-field {
+  bottom: 8rem;
+}
+
+.combat-controls {
+  right: auto;
+  bottom: 0.75rem;
+  left: 50%;
+  z-index: 35;
+  display: grid;
+  width: min(61rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  grid-template-columns: 4.8rem minmax(0, 1fr) 7.4rem;
+  grid-template-areas:
+    'tactical tactical tactical'
+    'basic skills forfeit';
+  align-items: center;
+  justify-content: stretch;
+  gap: 0.38rem 0.55rem;
+  border: 1px solid rgba(226, 186, 97, 0.34);
+  border-radius: 0.35rem;
+  padding: 0.45rem 0.55rem 0.55rem;
+  background:
+    radial-gradient(circle at 50% 0, rgba(226, 186, 97, 0.08), transparent 48%),
+    linear-gradient(180deg, rgba(16, 13, 10, 0.94), rgba(3, 5, 8, 0.97));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 239, 189, 0.035),
+    0 18px 42px rgba(0, 0, 0, 0.68);
+  transform: translateX(-50%);
+}
+
+.combat-controls > .combat-basic-attack {
+  grid-area: basic;
+  width: 4.8rem;
+  height: 4.15rem;
+  justify-self: end;
+}
+
+.combat-controls > .hud-panel {
+  position: relative;
+  z-index: 4;
+  grid-area: skills;
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  justify-self: center;
+  overflow: visible;
+  padding: 0.4rem;
+}
+
+.combat-controls > .combat-forfeit-button {
+  position: static;
+  grid-area: forfeit;
+  width: 7.4rem;
+  max-width: 7.4rem;
+  min-height: 4.15rem;
+  align-self: stretch;
+  justify-self: start;
+  padding: 0.45rem 0.55rem;
+  white-space: normal;
+}
+
+.combat-controls > div.flex {
+  position: relative;
+  grid-area: tactical;
+  display: flex;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  overflow-x: auto;
+  padding: 0.05rem 0.1rem 0.08rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(226, 186, 97, 0.42) transparent;
+}
+
+.combat-controls > div.flex::before {
+  flex: 0 0 auto;
+  margin-right: 0.18rem;
+  color: #917a4f;
+  content: 'TAKTYKA';
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.combat-controls > div.flex > button {
+  min-height: 1.7rem;
+  flex: 0 0 auto;
+  border-color: rgba(195, 159, 84, 0.34);
+  border-radius: 0.25rem;
+  padding: 0.26rem 0.52rem;
+  background: linear-gradient(180deg, rgba(45, 34, 20, 0.88), rgba(9, 9, 9, 0.92));
+  color: #d8c18b;
+  box-shadow: inset 0 0 0 1px rgba(255, 236, 178, 0.025);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.combat-controls > div.flex > button:hover:not(:disabled) {
+  border-color: rgba(238, 204, 117, 0.74);
+  color: #f4dda6;
+  filter: brightness(1.08);
+}
+
+.combat-arena-root > ol[aria-live='polite'] {
+  right: auto !important;
+  bottom: 8.5rem !important;
+  left: 50% !important;
+  width: min(34rem, calc(100vw - 2rem)) !important;
+  max-height: 3.7rem;
+  transform: translateX(-50%) !important;
+}
+
+.combat-controls .hud-tooltip-bubble {
+  z-index: 220;
+  display: flex;
+  width: max-content;
+  min-width: 13rem;
+  max-width: min(18rem, calc(100vw - 1rem));
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.18rem;
+  white-space: normal;
+}
+
+.combat-controls .hud-tooltip-bubble > span {
+  color: #ffe7ae;
+}
+
+.combat-controls .hud-tooltip-bubble > small {
+  color: #c9b88f;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.combat-controls .hud-tooltip-bubble kbd {
+  position: absolute;
+  top: 0.42rem;
+  right: 0.42rem;
+}
+
+.combat-controls .hud-tooltip-anchor:nth-child(1) .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(2) .hud-tooltip-bubble-top {
+  right: auto;
+  left: 0;
+  transform: translate(0, 5px);
+}
+
+.combat-controls .hud-tooltip-anchor:nth-child(1):hover .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(1):focus-visible .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(2):hover .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(2):focus-visible .hud-tooltip-bubble-top {
+  transform: translate(0, 0);
+}
+
+.combat-controls .hud-tooltip-anchor:nth-child(7) .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(8) .hud-tooltip-bubble-top {
+  right: 0;
+  left: auto;
+  transform: translate(0, 5px);
+}
+
+.combat-controls .hud-tooltip-anchor:nth-child(7):hover .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(7):focus-visible .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(8):hover .hud-tooltip-bubble-top,
+.combat-controls .hud-tooltip-anchor:nth-child(8):focus-visible .hud-tooltip-bubble-top {
+  transform: translate(0, 0);
+}
+
+@media (max-width: 980px) {
+  .combat-controls {
+    width: calc(100vw - 1rem);
+    grid-template-columns: 4.25rem minmax(0, 1fr) 5.7rem;
+    gap: 0.3rem;
+    padding: 0.35rem;
+  }
+
+  .combat-controls > .combat-basic-attack {
+    width: 4.25rem;
+    height: 3.75rem;
+  }
+
+  .combat-controls > .combat-forfeit-button {
+    width: 5.7rem;
+    max-width: 5.7rem;
+    min-height: 3.75rem;
+    padding: 0.32rem;
+    font-size: 0.5rem;
+  }
+
+  .combat-controls > .hud-panel {
+    transform: scale(0.88);
+    transform-origin: center;
+  }
+}
+
+@media (max-height: 650px) {
+  .combat-stage-field {
+    bottom: 6.9rem;
+  }
+
+  .combat-controls {
+    bottom: 0.25rem;
+    width: min(58rem, calc(100vw - 1rem));
+    gap: 0.22rem 0.45rem;
+    padding: 0.25rem 0.4rem 0.35rem;
+    transform: translateX(-50%) scale(0.88);
+    transform-origin: bottom center;
+  }
+
+  .combat-controls > div.flex > button {
+    min-height: 1.45rem;
+    padding: 0.18rem 0.4rem;
+    font-size: 0.56rem;
+  }
+
+  .combat-controls > div.flex::before {
+    font-size: 0.44rem;
+  }
+
+  .combat-arena-root > ol[aria-live='polite'] {
+    bottom: 6.95rem !important;
+    max-height: 2.8rem;
+  }
+
+  .combat-arena-root > ol[aria-live='polite'] li:nth-last-child(n + 3) {
+    display: none;
+  }
+}
