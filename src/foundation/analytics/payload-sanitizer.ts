@@ -1,4 +1,5 @@
-const SENSITIVE_KEY = /(^|[_-])(chat|message|content|email|authorization|cookie|token|firebase|secret|password|credential|session[_-]?cookie)s?($|[_-])/i;
+const SENSITIVE_KEY =
+  /(chat|message|content|email|authorization|cookie|token|firebase|secret|password|credential)/i;
 const EMAIL_VALUE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BEARER_VALUE = /^bearer\s+[a-z0-9._~+/=-]+$/i;
 const JWT_VALUE = /^[a-z0-9_-]+\.[a-z0-9_-]+\.[a-z0-9_-]+$/i;
@@ -13,7 +14,10 @@ function sanitizeString(value: string): string {
   return value;
 }
 
-export function sanitizeAnalyticsPayload(value: unknown, seen = new WeakSet<object>()): unknown {
+export function sanitizeAnalyticsPayload(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): unknown {
   if (typeof value === 'string') return sanitizeString(value);
   if (value === null || typeof value !== 'object') return value;
   if (seen.has(value)) return '[CIRCULAR]';
