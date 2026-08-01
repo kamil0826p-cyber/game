@@ -1,31 +1,52 @@
-# Mob and PVE system
+# Mob and PvE encounter system
 
-## Ranks
+## Ranks and world instances
 
-The shared runtime types define five ordered ranks: **Pomiot**, **Kat**, **Arcykat**, **Żniwiarz** and **Przedwieczny**. Rank multipliers live in one typed table so combat and future balancing code can use the same rules.
+The shared runtime types define five ordered ranks: **Pomiot**, **Kat**, **Arcykat**, **Żniwiarz** and **Przedwieczny**. Rank multipliers live in one typed table so combat and balancing code use the same rules.
 
 The initial content is inserted by `prisma/seed.ts`: seven level-2 Królik Pomiot rows in Greenfields and seven level-7 Skorpion Kat rows in Crystal Cave. The seed validates collision, portals, the player spawn and the merchant tile, then moves an invalid requested mob position to the nearest unique walkable tile.
 
-`MobDefinition` rows are the only runtime source of truth. `MobCoordinatorService` never creates or updates definitions; on startup it only reads the database, validates the stored records and creates in-memory runtime state for combat and respawn.
+`MobDefinition` rows remain the runtime source of truth for persistent world instances, stats, loot, claim state and respawn. Clicking one world mob claims only that row. Additional enemies created by its encounter exist only inside combat and do not create independent world respawns.
 
-## Combat
+## Versioned encounter definitions
 
-Clicking an adjacent mob starts an immediate server-authoritative PVE combat through the existing `CombatEngine`. Players retain their learned skills, cooldowns and energy. Mobs currently use only the basic attack and resolve their turn after a short AI delay. The same actor lock used for combat prevents two players from claiming one mob.
+A claimed mob rank selects a typed encounter definition identified by stable `key + version`. Definitions contain:
 
-## Rewards and progression
+- allowed and recommended party size;
+- actor templates, roles, front/back formation and skills;
+- deterministic AI policies and target priorities;
+- scaling tiers for 1, 3, 5 and 10 players;
+- three readable phases, summons and arena modifiers;
+- telegraphs and declared counters;
+- victory/defeat and contribution-based reward rules.
 
-A defeated mob grants its configured experience and independently rolls every loot-table entry stored in the database. Experience overflow can advance multiple levels. Every gained level adds max HP, max energy and base combat stats.
+The catalog is validated at startup and in unit tests. Invalid skill/actor references, unreachable phases, unsafe strong actions, incomplete scaling tiers and any possible roster above ten enemies fail validation.
 
-Loot is stacked first and then placed in free inventory slots. When the inventory cannot hold the entire drop, the granted and skipped quantities are reported separately instead of silently deleting existing items.
+Scaling changes mechanics in addition to HP and power. Larger parties introduce guards, support actors, back-line pressure, wider telegraphs, more break capacity and bounded summon waves.
+
+## Shared authoritative combat
+
+PvP and PvE still use one `CombatEngine`. Encounter AI reads `CombatEngine.legalActions()` and submits the selected command through `CombatEngine.act()`, so target restrictions, formation, energy, cooldowns, reactions, statuses and idempotent operation checks cannot be bypassed.
+
+AI RNG is deterministic for a fixed encounter/combat/turn/actor/phase seed. A bounded server trace stores the selected role, policy and reason. High-impact skills such as Meteor use the existing telegraph and reaction window; players and AI can respond with normal tactical actions.
+
+Phase summons are inserted as normal actors into the existing combat team and turn queue. Runtime checks preserve unique actor IDs, free formation slots and the ten-actor team limit.
+
+## Contributions and rewards
+
+Reward eligibility measures damage, healing, shields/protection, cleanses, interrupts and mechanic actions. Withdrawn, late, inactive and zero-contribution characters can be excluded with a clear reason; support is not evaluated only by damage.
+
+Encounter XP is scaled and then split among eligible players. Loot stays personal. The complete settlement is recorded transactionally in the existing currency ledger under a unique `encounter:<combatId>` operation. Replaying completion returns that stored settlement instead of granting XP, inventory items or quest progress again.
 
 ## Respawn lifecycle
 
 Every database mob row is a separate runtime instance with the states `ALIVE`, `IN_COMBAT` and `RESPAWNING`.
 
-1. A claimed mob cannot be attacked by another player.
-2. On defeat it is removed from the map and receives its own `respawnsAt` timestamp.
-3. A per-instance timer restores it after the row's `respawnMs` value.
-4. If a player stands on its spawn tile, the timer retries one second later.
-5. Spawn and despawn events are broadcast only to players on that map.
+1. A claimed world mob cannot be attacked by another player.
+2. Player defeat, cancellation or server shutdown releases the claim without rewards.
+3. On victory the root mob is removed from the map and receives its own `respawnsAt` timestamp.
+4. A per-instance timer restores it after the row's `respawnMs` value.
+5. If a player stands on its spawn tile, the timer retries one second later.
+6. Spawn and despawn events are broadcast only to players on that map.
 
-A server restart rebuilds runtime instances from the existing `MobDefinition` rows. Running `npm run prisma:seed` intentionally synchronizes the initial development data, just as it does for maps, NPCs and skills.
+A server restart rebuilds runtime instances from the existing `MobDefinition` rows. Durable recovery of a half-finished in-memory combat, product telemetry and the production balance simulator remain part of deferred issue #204 rather than this encounter implementation.
