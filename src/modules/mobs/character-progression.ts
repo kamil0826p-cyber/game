@@ -12,6 +12,15 @@ export interface ExperienceProgression {
   nextLevelExperience: number | null;
 }
 
+export interface CharacterStatGrowth {
+  maxHp: number;
+  maxEnergy: number;
+  strength: number;
+  agility: number;
+  intelligence: number;
+  armor: number;
+}
+
 export function applyExperience(
   currentLevel: number,
   currentExperience: number,
@@ -32,5 +41,22 @@ export function applyExperience(
     experience,
     levelsGained: level - initialLevel,
     nextLevelExperience: level >= MAX_CHARACTER_LEVEL ? null : experienceRequiredForLevel(level),
+  };
+}
+
+/**
+ * Compatibility helper for the quest reward path. New level-up paths should
+ * prefer ProgressionService.recalculateInTransaction so class-specific,
+ * milestone and equipment sources remain canonical.
+ */
+export function statGrowthForLevels(levelsGained: number): CharacterStatGrowth {
+  const levels = Math.max(0, Math.trunc(levelsGained));
+  return {
+    maxHp: levels * 12,
+    maxEnergy: levels * 4,
+    strength: levels * 2,
+    agility: levels * 2,
+    intelligence: levels * 2,
+    armor: levels,
   };
 }
