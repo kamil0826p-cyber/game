@@ -8,6 +8,7 @@ import {
   calculateCharacterStats,
   nodeRanks,
   normalizeStatVector,
+  parseProgressionChoices,
   progressionPointsForLevel,
   statVectorsEqual,
 } from './character-stats.js';
@@ -33,6 +34,11 @@ interface UpdatedStatRow {
   silver: number;
   stateVersion: number;
   statRevision: number;
+}
+
+interface AuditReplayRow {
+  action: string;
+  afterState: Prisma.JsonValue;
 }
 
 @Injectable()
@@ -73,7 +79,15 @@ export class ProgressionService {
     return this.prisma.$transaction(async (tx) => {
       await this.lock(tx, characterId);
       const replay = await this.auditReplay(tx, characterId, operationId);
-      if (replay) return this.currentResult(tx, userId, characterId);
+      if (replay) {
+        const replayChoices = parseProgressionChoices(
+          replay.afterState && typeof replay.afterState === 'object' && !Array.isArray(replay.afterState)
+            ? (replay.afterState as Record<string, unknown>).choices
+            : undefined,
+        );
+        if (replay.action !== 'CHOICE' || replayChoices.at(-1) !== nodeKey) this.idempotencyCollision();
+        return this.currentResult(tx, userId, characterId);
+      }
       const record = await this.loadRecord(tx, characterId, userId);
       this.assertIdle(record);
       const equipment = await this.equipmentBonuses(tx, characterId);
@@ -109,7 +123,10 @@ export class ProgressionService {
     return this.prisma.$transaction(async (tx) => {
       await this.lock(tx, characterId);
       const replay = await this.auditReplay(tx, characterId, operationId);
-      if (replay) return this.currentResult(tx, userId, characterId);
+      if (replay) {
+        if (replay.action !== 'RESPEC') this.idempotencyCollision();
+        return this.currentResult(tx, userId, characterId);
+      }
       const record = await this.loadRecord(tx, characterId, userId);
       this.assertIdle(record);
       const equipment = await this.equipmentBonuses(tx, characterId);
@@ -236,14 +253,19 @@ export class ProgressionService {
     const row = updated[0];
     if (!row) throw new Error(`Character ${record.id} could not be recalculated.`);
     return {
-      snapshot: { ...snapshot, choices, points: {
-        ...snapshot.points,
-        spent: choices.length,
-        available: Math.max(0, progressionPointsForLevel(record.level) - choices.length),
-      }, respec: {
-        ...snapshot.respec,
-        freeRespecs: changes.freeProgressionRespecs ?? record.freeProgressionRespecs,
-      } },
+      snapshot: {
+        ...snapshot,
+        choices,
+        points: {
+          ...snapshot.points,
+          spent: choices.length,
+          available: Math.max(0, progressionPointsForLevel(record.level) - choices.length),
+        },
+        respec: {
+          ...snapshot.respec,
+          freeRespecs: changes.freeProgressionRespecs ?? record.freeProgressionRespecs,
+        },
+      },
       hp: row.hp,
       energy: row.energy,
       silver: row.silver,
@@ -257,6 +279,7 @@ export class ProgressionService {
     characterId: string,
     userId?: string,
   ): Promise<ProgressionCharacterRecord> {
+    const userFilter = userId ? Prisma.sql`AND "userId" = ${userId}::uuid` : Prisma.sql``;
     const rows = await client.$queryRaw<ProgressionCharacterRecord[]>(Prisma.sql`
       SELECT
         "id", "userId", "class" AS "characterClass", "level", "hp", "maxHp", "energy", "maxEnergy",
@@ -265,7 +288,7 @@ export class ProgressionService {
         "freeProgressionRespecs", "statRevision"
       FROM "Character"
       WHERE "id" = ${characterId}::uuid
-        ${userId ? Prisma.sql`AND "userId" = ${userId}::uuid` : Prisma.empty}
+        ${userFilter}
       LIMIT 1
     `);
     const record = rows[0];
@@ -326,6 +349,12 @@ export class ProgressionService {
     }
   }
 
+  private idempotencyCollision(): never {
+    throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', {
+      reason: 'PROGRESSION_OPERATION_ID_COLLISION',
+    });
+  }
+
   private lock(tx: Prisma.TransactionClient, characterId: string): Promise<unknown> {
     return tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${'progression:' + characterId}))`);
   }
@@ -334,14 +363,14 @@ export class ProgressionService {
     tx: Prisma.TransactionClient,
     characterId: string,
     operationId: string,
-  ): Promise<boolean> {
-    const rows = await tx.$queryRaw<Array<{ exists: boolean }>>(Prisma.sql`
-      SELECT EXISTS(
-        SELECT 1 FROM "CharacterProgressionAudit"
-        WHERE "characterId" = ${characterId}::uuid AND "operationId" = ${operationId}
-      ) AS "exists"
+  ): Promise<AuditReplayRow | undefined> {
+    const rows = await tx.$queryRaw<AuditReplayRow[]>(Prisma.sql`
+      SELECT "action", "afterState"
+      FROM "CharacterProgressionAudit"
+      WHERE "characterId" = ${characterId}::uuid AND "operationId" = ${operationId}
+      LIMIT 1
     `);
-    return rows[0]?.exists ?? false;
+    return rows[0];
   }
 
   private async audit(
