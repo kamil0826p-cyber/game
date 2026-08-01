@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import type { EquipmentSlot } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { InventorySnapshot, MerchantSnapshot } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -116,10 +117,15 @@ export class ItemizedItemService extends CanonicalItemService {
     await this.prisma.$transaction(async (transaction) => {
       await this.catalog.ensure(transaction);
       const item = await transaction.inventoryItem.findFirst({
-        where: { id: itemId, characterId, character: { userId } },
+        where: {
+          id: itemId,
+          characterId,
+          character: { userId },
+          tradeOfferItems: { none: {} },
+        },
         include: { itemDefinition: true, character: true },
       });
-      if (!item) this.invalidItem();
+      if (!item) this.invalidItem({ reason: 'ITEM_UNAVAILABLE_OR_OFFERED' });
       const metadata = parseItemDefinitionMetadata(item.itemDefinition.metadata);
       if (metadata.category !== 'EQUIPMENT' || !metadata.equipmentSlot) this.invalidItem();
       if (metadata.requiredClass && metadata.requiredClass !== item.character.class) this.invalidItem();
@@ -149,7 +155,13 @@ export class ItemizedItemService extends CanonicalItemService {
 
       const newlyBound = snapshot.bindPolicy === 'ON_EQUIP' && !snapshot.boundCharacterId;
       if (newlyBound) snapshot = this.bindSnapshot(snapshot, characterId, itemId);
-      await this.assertRelicLimit(transaction, characterId, itemId, metadata.equipmentSlot, snapshot);
+      await this.assertRelicLimit(
+        transaction,
+        characterId,
+        itemId,
+        metadata.equipmentSlot,
+        snapshot,
+      );
 
       await this.characterProgression.recomputeInTransaction(transaction, characterId);
       await transaction.inventoryItem.updateMany({
@@ -223,7 +235,13 @@ export class ItemizedItemService extends CanonicalItemService {
       where: { characterId, character: { userId } },
       include: { itemDefinition: true },
     });
-    const byId = new Map<string, { snapshot: ItemInstanceSnapshot; metadata: ReturnType<typeof parseItemDefinitionMetadata> }>();
+    const byId = new Map<
+      string,
+      {
+        snapshot: ItemInstanceSnapshot;
+        metadata: ReturnType<typeof parseItemDefinitionMetadata>;
+      }
+    >();
     for (const row of rows) {
       const metadata = parseItemDefinitionMetadata(row.itemDefinition.metadata);
       let itemSnapshot = readItemInstanceSnapshot({
@@ -292,14 +310,15 @@ export class ItemizedItemService extends CanonicalItemService {
     transaction: Prisma.TransactionClient,
     characterId: string,
     itemId: string,
-    replacingSlot: string,
+    replacingSlot: EquipmentSlot,
     candidate: ItemInstanceSnapshot,
   ): Promise<void> {
     const equipped = await transaction.inventoryItem.findMany({
       where: {
         characterId,
         equippedSlot: { not: null },
-        NOT: [{ id: itemId }, { equippedSlot: replacingSlot as never }],
+        id: { not: itemId },
+        NOT: { equippedSlot: replacingSlot },
       },
       include: { itemDefinition: true },
     });
@@ -344,9 +363,9 @@ export class ItemizedItemService extends CanonicalItemService {
   private hasSnapshot(value: Prisma.JsonValue): boolean {
     return Boolean(
       value &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      'itemization' in value,
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        'itemization' in value,
     );
   }
 
