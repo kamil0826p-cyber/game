@@ -15,6 +15,7 @@ import { MovementCoordinatorService } from '../movement/movement-coordinator.ser
 import { MovementService } from '../movement/movement.service.js';
 import { NpcService } from '../npcs/npc.service.js';
 import { PlayerPersistenceService } from '../persistence/player-persistence.service.js';
+import { ProgressionService } from '../progression/progression.service.js';
 import { RealmService } from '../realm/realm.service.js';
 import { SkillService } from '../skills/skill.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
@@ -53,6 +54,7 @@ export class SessionLifecycleService {
   constructor(
     private readonly config: GameConfigService,
     private readonly characters: CharacterService,
+    private readonly progression: ProgressionService,
     private readonly realms: RealmService,
     private readonly maps: MapService,
     private readonly npcs: NpcService,
@@ -198,6 +200,7 @@ export class SessionLifecycleService {
     if (existing) await this.replaceExistingSession(existing);
 
     await this.persistence.flushDetachedCharacter(initialCharacter.id);
+    await this.progression.repairCharacter(initialCharacter.userId, initialCharacter.id);
     const character = await this.characters.findCharacterForCurrentRealm(initialCharacter.userId, initialCharacter.id);
     if (!character) throw new GameError(GAME_ERROR_CODES.CHARACTER_REQUIRED, 'errors.character.required');
 

@@ -7,6 +7,7 @@ import { MapModule } from '../maps/map.module.js';
 import { MovementModule } from '../movement/movement.module.js';
 import { NpcModule } from '../npcs/npc.module.js';
 import { PersistenceModule } from '../persistence/persistence.module.js';
+import { ProgressionModule } from '../progression/progression.module.js';
 import { RealmModule } from '../realm/realm.module.js';
 import { SkillModule } from '../skills/skill.module.js';
 import { WorldModule } from '../world/world.module.js';
@@ -26,6 +27,7 @@ import { SessionLifecycleService } from './session-lifecycle.service.js';
     NpcModule,
     WorldModule,
     PersistenceModule,
+    ProgressionModule,
     MovementModule,
     SkillModule,
   ],

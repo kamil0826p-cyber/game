@@ -8,10 +8,11 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { DomainEventService } from '../../domain-events/domain-event.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { INVENTORY_CAPACITY } from '../items/item.service.js';
+import { ProgressionService } from '../progression/progression.service.js';
 import { QuestService } from '../quests/quest.service.js';
 import { skillPointsGainedBetweenLevels } from '../skills/skill.rules.js';
 import type { PlayerSession } from '../world/player-session.types.js';
-import { applyExperience, statGrowthForLevels } from './character-progression.js';
+import { applyExperience } from './character-progression.js';
 import { canReceiveMobExperience } from './mob-reward.rules.js';
 import { rollMobLoot, type AwardedLoot } from './mob-rewards.js';
 import type { RuntimeMob } from './mob.types.js';
@@ -53,6 +54,7 @@ export class MobRewardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly domainEvents: DomainEventService,
+    private readonly progressionService: ProgressionService,
     @Optional() private readonly quests?: QuestService,
   ) {}
 
@@ -61,20 +63,7 @@ export class MobRewardService {
     const result = await this.prisma.$transaction(async (transaction) => {
       const character = await transaction.character.findUnique({
         where: { id: session.characterId },
-        select: {
-          id: true,
-          userId: true,
-          level: true,
-          experience: true,
-          hp: true,
-          maxHp: true,
-          energy: true,
-          maxEnergy: true,
-          strength: true,
-          agility: true,
-          intelligence: true,
-          armor: true,
-        },
+        select: { id: true, userId: true, level: true, experience: true },
       });
       if (!character || character.userId !== session.userId) {
         throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
@@ -82,39 +71,28 @@ export class MobRewardService {
       const experienceAward = canReceiveMobExperience(character.level, mob.level) ? mob.experience : 0;
       const progression = applyExperience(character.level, character.experience, experienceAward);
       const skillPointsGained = skillPointsGainedBetweenLevels(character.level, progression.level);
-      const growth = statGrowthForLevels(progression.levelsGained);
-      const maxHp = character.maxHp + growth.maxHp;
-      const maxEnergy = character.maxEnergy + growth.maxEnergy;
-      const updated = await transaction.character.update({
+      await transaction.character.update({
         where: { id: character.id },
-        data: {
-          level: progression.level,
-          experience: progression.experience,
-          hp: Math.min(maxHp, character.hp + growth.maxHp),
-          maxHp,
-          energy: Math.min(maxEnergy, character.energy + growth.maxEnergy),
-          maxEnergy,
-          strength: character.strength + growth.strength,
-          agility: character.agility + growth.agility,
-          intelligence: character.intelligence + growth.intelligence,
-          armor: character.armor + growth.armor,
-          stateVersion: { increment: 1 },
-          lastSavedAt: new Date(),
-        },
-        select: {
-          level: true,
-          experience: true,
-          hp: true,
-          maxHp: true,
-          energy: true,
-          maxEnergy: true,
-          strength: true,
-          agility: true,
-          intelligence: true,
-          armor: true,
-          stateVersion: true,
-        },
+        data: { level: progression.level, experience: progression.experience },
       });
+      const canonical = await this.progressionService.recalculateInTransaction(
+        transaction,
+        character.id,
+        'ADD_MAX_DELTA',
+      );
+      const updated = {
+        level: progression.level,
+        experience: progression.experience,
+        hp: canonical.hp,
+        maxHp: canonical.snapshot.effective.maxHp,
+        energy: canonical.energy,
+        maxEnergy: canonical.snapshot.effective.maxEnergy,
+        strength: canonical.snapshot.effective.strength,
+        agility: canonical.snapshot.effective.agility,
+        intelligence: canonical.snapshot.effective.intelligence,
+        armor: canonical.snapshot.effective.armor,
+        stateVersion: canonical.stateVersion,
+      };
       const loot = await this.grantLoot(transaction, character.id, rolled);
       const operationId = `mob-defeat:${mob.id}:${character.id}:${updated.stateVersion}`;
       await this.domainEvents.append(transaction, {
