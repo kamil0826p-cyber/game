@@ -1,21 +1,30 @@
 # Content releases and domain events
 
-## Runtime versus deployment
+## Startup preparation
 
-The game process never runs Prisma migrations, seeds, or content upserts. Prepare a database explicitly:
+Every backend startup intentionally prepares Prisma before the application process starts:
 
 ```bash
-npm run db:prepare
+npm run prisma:prepare
 ```
 
-This generates the Prisma client, applies migrations, validates the current content package and activates it transactionally. Normal backend and frontend development then use:
+The preparation chain is fixed and regression-tested:
+
+1. `prisma generate`;
+2. `prisma migrate deploy`;
+3. `prisma db seed`.
+
+Prisma seed delegates to the versioned content deployment CLI. The deployment is transactionally locked and idempotent, so restarting the backend with an unchanged package does not create another release or reset player-owned data.
+
+The following scripts all execute the preparation chain:
 
 ```bash
+npm run start
 npm run start:dev
-npm run frontend:dev
+npm run start:debug
 ```
 
-Runtime startup performs a read-only check that the active `ContentRelease` matches `GAME_CONTENT_VERSION` and the supported content schema. Set `CONTENT_READINESS_CHECK=false` only for isolated tests or emergency diagnostics.
+`npm run db:prepare` remains an explicit alias for the same operation. Runtime startup additionally performs a read-only check that the active `ContentRelease` matches `GAME_CONTENT_VERSION` and the supported content schema. Set `CONTENT_READINESS_CHECK=false` only for isolated tests or emergency diagnostics.
 
 ## Content commands
 
@@ -40,3 +49,9 @@ Replay selected events without repeating completed consumer effects:
 ```bash
 npm run events:replay -- --type=CombatFinished --from=2026-07-31T00:00:00Z
 ```
+
+## CI verification
+
+The static CI job validates formatting, Prisma, the content package, backend and frontend typechecks, unit tests, builds, and production dependency audits.
+
+The PostgreSQL 17 job applies migrations twice, runs Prisma seed twice, verifies that the following content dry-run is empty, and then executes the integration suite. Failed jobs upload generated content, npm logs, and database diagnostics as workflow artifacts.
