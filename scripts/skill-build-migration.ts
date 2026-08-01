@@ -1,7 +1,12 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
-import { createInitialBuildData } from '../src/modules/skills/skill.buildcraft.rules.js';
+import {
+  createInitialBuildData,
+  rankMapFromLearned,
+  revalidateLoadouts,
+  validateCompleteBuild,
+} from '../src/modules/skills/skill.buildcraft.rules.js';
 
 const connectionString =
   process.env.DATABASE_URL ?? 'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public';
@@ -41,6 +46,8 @@ const migrate = async (): Promise<void> => {
         },
         select: {
           id: true,
+          class: true,
+          level: true,
           skills: {
             select: {
               rank: true,
@@ -63,7 +70,47 @@ const migrate = async (): Promise<void> => {
             cooldownTurnsRemaining: entry.cooldownTurnsRemaining,
           }));
         const data = createInitialBuildData(learned, new Date().toISOString());
-        return { characterId: character.id, learned, data };
+        const ranks = rankMapFromLearned(learned, data.nodeRanks);
+        const validation = validateCompleteBuild({
+          characterClass: character.class,
+          characterLevel: character.level,
+          selectedSpecializationKey: data.selectedSpecializationKey,
+          ranks,
+        });
+        data.loadouts = revalidateLoadouts({
+          characterClass: character.class,
+          selectedSpecializationKey: data.selectedSpecializationKey,
+          ranks,
+          loadouts: data.loadouts,
+        });
+        const repairNodeKeys = [
+          ...new Set(
+            validation.reasons.flatMap((reason) => {
+              const [kind, ...parts] = reason.split(':');
+              if (kind === 'CHOICE_CONFLICT') return parts.slice(0, 2);
+              if (
+                [
+                  'UNKNOWN_NODE',
+                  'INVALID_RANK',
+                  'LEVEL_REQUIRED',
+                  'SPECIALIZATION_REQUIRED',
+                  'PREREQUISITE',
+                  'PREREQUISITE_ANY',
+                ].includes(kind ?? '')
+              ) {
+                return parts[0] ? [parts[0]] : [];
+              }
+              return [];
+            }),
+          ),
+        ];
+        return {
+          characterId: character.id,
+          learned,
+          data,
+          buildValidationReasons: validation.reasons,
+          repairNodeKeys,
+        };
       });
       if (!dryRun) {
         for (const plan of plans) {
@@ -87,7 +134,8 @@ const migrate = async (): Promise<void> => {
           invalidReasons: loadout.invalidReasons,
         })),
         requiredRepairs: {
-          nodeKeys: [],
+          nodeKeys: plan.repairNodeKeys,
+          reasons: plan.buildValidationReasons,
           loadoutIds: plan.data.loadouts
             .filter((loadout) => !loadout.isValid)
             .map((loadout) => loadout.id),
