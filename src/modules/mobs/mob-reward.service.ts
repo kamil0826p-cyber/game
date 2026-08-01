@@ -70,26 +70,32 @@ export class MobRewardService {
     const result = await this.prisma.$transaction(async (transaction) => {
       const owner = await transaction.character.findUnique({
         where: { id: session.characterId },
-        select: { id: true, userId: true, silver: true },
+        select: { id: true, userId: true },
       });
       if (!owner || owner.userId !== session.userId) {
         throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
       }
 
       if (context) {
-        const existing = await transaction.characterCurrencyLedger.findUnique({
+        const existing = await transaction.encounterRewardLedger.findUnique({
           where: {
             characterId_operationId: {
               characterId: owner.id,
               operationId: context.operationId,
             },
           },
-          select: { metadata: true },
+          select: { combatId: true, encounterKey: true, settlement: true },
         });
         if (existing) {
+          if (
+            existing.combatId !== context.combatId ||
+            existing.encounterKey !== context.encounterKey
+          ) {
+            throw new GameError(GAME_ERROR_CODES.INTERNAL_ERROR, 'errors.internal');
+          }
           return {
             duplicate: true as const,
-            settlement: this.readEncounterSettlement(existing.metadata, context),
+            settlement: this.readEncounterSettlement(existing.settlement),
           };
         }
       }
@@ -134,25 +140,16 @@ export class MobRewardService {
       };
 
       if (context) {
-        const metadata = JSON.parse(
-          JSON.stringify({
-            kind: 'ENCOUNTER_REWARD',
-            combatId: context.combatId,
-            encounterKey: context.encounterKey,
-            mobDefinitionKey: mob.definitionKey,
-            settlement,
-          }),
+        const storedSettlement = JSON.parse(
+          JSON.stringify(settlement),
         ) as Prisma.InputJsonValue;
-        await transaction.characterCurrencyLedger.create({
+        await transaction.encounterRewardLedger.create({
           data: {
             characterId: owner.id,
             operationId: context.operationId,
-            currency: 'SILVER',
-            direction: 'CREDIT',
-            amount: 0,
-            reason: 'ENCOUNTER_REWARD',
-            balanceAfter: owner.silver,
-            metadata,
+            combatId: context.combatId,
+            encounterKey: context.encounterKey,
+            settlement: storedSettlement,
           },
         });
       }
@@ -173,30 +170,19 @@ export class MobRewardService {
     return result.settlement;
   }
 
-  private readEncounterSettlement(
-    metadata: Prisma.JsonValue,
-    context: EncounterRewardContext,
-  ): MobRewardSettlement {
-    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+  private readEncounterSettlement(value: Prisma.JsonValue): MobRewardSettlement {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new GameError(GAME_ERROR_CODES.INTERNAL_ERROR, 'errors.internal');
     }
-    const value = metadata as Record<string, unknown>;
-    const settlement = value.settlement;
-    if (
-      value.kind !== 'ENCOUNTER_REWARD' ||
-      value.combatId !== context.combatId ||
-      value.encounterKey !== context.encounterKey ||
-      !settlement ||
-      typeof settlement !== 'object' ||
-      Array.isArray(settlement)
-    ) {
-      throw new GameError(GAME_ERROR_CODES.INTERNAL_ERROR, 'errors.internal');
-    }
-    const parsed = settlement as Partial<MobRewardSettlement>;
+    const parsed = value as Partial<MobRewardSettlement>;
     if (
       !Number.isInteger(parsed.experienceGained) ||
       !Number.isInteger(parsed.levelsGained) ||
       !Number.isInteger(parsed.skillPointsGained) ||
+      !(
+        parsed.nextLevelExperience === null ||
+        Number.isInteger(parsed.nextLevelExperience)
+      ) ||
       !Array.isArray(parsed.loot) ||
       !Array.isArray(parsed.skippedLoot)
     ) {
