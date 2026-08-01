@@ -241,9 +241,9 @@ export class ItemInventoryService {
     if (!item || item.equippedSlot || item.quantity < input.quantity) {
       throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
     }
-    const instanceData = item.instanceData === null
+    const instanceData: Prisma.JsonValue & Prisma.InputJsonValue = item.instanceData === null
       ? {}
-      : (item.instanceData as Prisma.InputJsonValue);
+      : (item.instanceData as Prisma.JsonValue & Prisma.InputJsonValue);
     if (input.quantity === item.quantity) {
       await transaction.inventoryItem.delete({ where: { id: item.id } });
     } else {
