@@ -53,6 +53,29 @@ const statLabel = (key: ProgressionStatKey, polish: boolean): string => {
   return labels[key];
 };
 
+const milestoneBlockedReasonLabel = (
+  reason: string | undefined,
+  minimumAllocatedBeforeFirstRank: number,
+  polish: boolean,
+): string => {
+  switch (reason) {
+    case 'MILESTONE_POINT_LIMIT':
+      return polish ? 'Brak dostępnych punktów.' : 'No milestone points available.';
+    case 'MILESTONE_RANK_LIMIT':
+      return polish ? 'Osiągnięto maksymalną rangę.' : 'Maximum rank reached.';
+    case 'MILESTONE_PREREQUISITE':
+      return polish
+        ? `Najpierw wydaj ${minimumAllocatedBeforeFirstRank} punktów w innych kamieniach milowych.`
+        : `Allocate ${minimumAllocatedBeforeFirstRank} points in other milestones first.`;
+    default:
+      return reason
+        ? polish
+          ? 'Nie można teraz dodać punktu.'
+          : 'A point cannot be allocated right now.'
+        : '—';
+  }
+};
+
 const nonZeroEntries = (
   vector: ProgressionStatVector,
 ): Array<[ProgressionStatKey, number]> => {
@@ -194,15 +217,15 @@ export function CharacterModal({
                 </h4>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                <div className="stat-tile min-w-20">
+                <div className="stat-tile min-w-24 gap-2">
                   <span>{polish ? 'Zdobyte' : 'Earned'}</span>
                   <strong>{progression.points.earned}</strong>
                 </div>
-                <div className="stat-tile min-w-20">
+                <div className="stat-tile min-w-24 gap-2">
                   <span>{polish ? 'Wydane' : 'Spent'}</span>
                   <strong>{progression.points.spent}</strong>
                 </div>
-                <div className="stat-tile min-w-20">
+                <div className="stat-tile min-w-24 gap-2">
                   <span>{polish ? 'Dostępne' : 'Available'}</span>
                   <strong>{progression.points.available}</strong>
                 </div>
@@ -343,7 +366,11 @@ export function CharacterModal({
                               ([key, value]) => `${statLabel(key, polish)} +${value}`,
                             )
                             .join(' · ')
-                        : milestone.blockedReason ?? '—'}
+                        : milestoneBlockedReasonLabel(
+                            milestone.blockedReason,
+                            milestone.minimumAllocatedBeforeFirstRank,
+                            polish,
+                          )}
                     </p>
                     <Button
                       className="mt-3 w-full"
