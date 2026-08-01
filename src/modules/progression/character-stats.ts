@@ -153,6 +153,14 @@ function diminished(value: number, softCap: number, hardCap: number, numerator: 
   return Math.min(hardCap, softCap + Math.floor((value - softCap) * numerator / denominator));
 }
 
+export function applyPrimaryDiminishingReturns(value: number): number {
+  return diminished(value, 80, 140, 1, 2);
+}
+
+export function applyArmorDiminishingReturns(value: number): number {
+  return diminished(value, 60, 100, 2, 5);
+}
+
 export function respecSilverCost(level: number, choices: readonly ProgressionNodeKey[], freeRespecs: number): number {
   if (freeRespecs > 0 || choices.length === 0) return 0;
   return 500 + Math.max(1, Math.floor(level)) * 50 + choices.length * 100;
@@ -190,10 +198,10 @@ export function calculateCharacterStats(input: {
   effective.agility = Math.max(0, effective.agility);
   effective.intelligence = Math.max(0, effective.intelligence);
   effective.armor = Math.max(0, effective.armor);
-  const physicalPower = diminished(effective.strength, 80, 140, 1, 2);
-  const rangedPower = diminished(effective.agility, 80, 140, 1, 2);
-  const spellPower = diminished(effective.intelligence, 80, 140, 1, 2);
-  const armorForMitigation = diminished(effective.armor, 60, 100, 2, 5);
+  const physicalPower = applyPrimaryDiminishingReturns(effective.strength);
+  const rangedPower = applyPrimaryDiminishingReturns(effective.agility);
+  const spellPower = applyPrimaryDiminishingReturns(effective.intelligence);
+  const armorForMitigation = applyArmorDiminishingReturns(effective.armor);
   const damageReductionBasisPoints = Math.min(7500, Math.round(armorForMitigation / (armorForMitigation + 100) * 10_000));
   const freeRespecs = Math.max(0, Math.floor(input.freeRespecs ?? 0));
   return {
