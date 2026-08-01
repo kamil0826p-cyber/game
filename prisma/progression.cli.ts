@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '../src/generated/prisma/client.js';
 
@@ -146,7 +145,7 @@ async function rollback(prisma: PrismaClient, dryRun: boolean): Promise<void> {
         "id", "characterId", "operationId", "action", "progressionVersion",
         "beforeState", "afterState", "silverCost", "createdAt"
       )
-      SELECT ${randomUUID()}::uuid, character."id", ${operationId}, 'ROLLBACK', 2,
+      SELECT gen_random_uuid(), character."id", ${operationId}, 'ROLLBACK', 2,
         jsonb_build_object(
           'progressionVersion', character."progressionVersion",
           'progressionChoices', character."progressionChoices",
@@ -154,7 +153,7 @@ async function rollback(prisma: PrismaClient, dryRun: boolean): Promise<void> {
         ), to_jsonb(backup), 0, NOW()
       FROM "Character" character
       JOIN "CharacterProgressionMigrationBackup" backup ON backup."characterId" = character."id"
-      LIMIT 1
+      WHERE character."progressionVersion" = 2
       ON CONFLICT ("characterId", "operationId") DO NOTHING
     `);
     await tx.$executeRaw(Prisma.sql`
@@ -171,6 +170,7 @@ async function rollback(prisma: PrismaClient, dryRun: boolean): Promise<void> {
         "progressionVersion" = 1,
         "progressionChoices" = '[]'::jsonb,
         "legacyStatAdjustment" = '{}'::jsonb,
+        "freeProgressionRespecs" = 1,
         "statRevision" = "statRevision" + 1,
         "stateVersion" = GREATEST(character."stateVersion", backup."stateVersion") + 1,
         "updatedAt" = NOW()
