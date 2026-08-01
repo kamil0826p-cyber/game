@@ -31,9 +31,15 @@ export class CanonicalItemService extends ItemService {
     await this.database.$transaction(async (transaction) => {
       const item = await this.requireEquipment(transaction, userId, characterId, itemId);
       const metadata = this.equipmentMetadata(item.itemDefinition.metadata);
-      if (metadata.category !== 'EQUIPMENT' || !metadata.equipmentSlot) this.invalidItem();
-      if (metadata.requiredClass && metadata.requiredClass !== item.character.class) this.invalidItem();
-      if ((metadata.minimumLevel ?? 1) > item.character.level) this.invalidItem();
+      if (metadata.category !== 'EQUIPMENT' || !metadata.equipmentSlot) {
+        this.rejectInvalidItem();
+      }
+      if (metadata.requiredClass && metadata.requiredClass !== item.character.class) {
+        this.rejectInvalidItem();
+      }
+      if ((metadata.minimumLevel ?? 1) > item.character.level) {
+        this.rejectInvalidItem();
+      }
 
       await this.progression.recomputeInTransaction(transaction, characterId);
       await transaction.inventoryItem.updateMany({
@@ -80,7 +86,7 @@ export class CanonicalItemService extends ItemService {
       where: { id: itemId, characterId, character: { userId } },
       include: { itemDefinition: true, character: true },
     });
-    if (!item) this.invalidItem();
+    if (!item) this.rejectInvalidItem();
     return item;
   }
 
@@ -90,7 +96,7 @@ export class CanonicalItemService extends ItemService {
       : {};
   }
 
-  private invalidItem(): never {
+  private rejectInvalidItem(): never {
     throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
   }
 }
