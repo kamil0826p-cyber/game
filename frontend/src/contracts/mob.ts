@@ -46,6 +46,7 @@ export interface MobRewardPayload {
   nextLevelExperience: number | null;
   loot: MobLootRewardPayload[];
   skippedLoot: MobLootRewardPayload[];
+  claimQueuedLoot: MobLootRewardPayload[];
   self: SelfCharacterState;
 }
 

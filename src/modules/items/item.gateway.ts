@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
-import { ZodError, type ZodType } from 'zod';
+import { z, ZodError, type ZodType } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, InventorySnapshot, MerchantSnapshot, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
 import {
@@ -25,6 +25,19 @@ import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { ItemService } from './item.service.js';
 
+const inventoryEquipSchema = inventoryItemSchema
+  .extend({ confirmationHash: z.string().length(64).optional() })
+  .strict();
+
+type ConfirmingItemService = ItemService & {
+  equip(
+    userId: string,
+    characterId: string,
+    itemId: string,
+    confirmationHash?: string,
+  ): Promise<InventorySnapshot>;
+};
+
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class ItemGateway {
   private readonly logger = new Logger(ItemGateway.name);
@@ -48,7 +61,17 @@ export class ItemGateway {
 
   @SubscribeMessage('inventory:equip')
   equip(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryItemSchema, raw, async (session, payload) => this.syncSession(session, await this.items.equip(session.userId, session.characterId, payload.itemId)));
+    return this.handle(client, inventoryEquipSchema, raw, async (session, payload) =>
+      this.syncSession(
+        session,
+        await (this.items as ConfirmingItemService).equip(
+          session.userId,
+          session.characterId,
+          payload.itemId,
+          payload.confirmationHash,
+        ),
+      ),
+    );
   }
 
   @SubscribeMessage('inventory:unequip')

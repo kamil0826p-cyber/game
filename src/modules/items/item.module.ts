@@ -2,16 +2,30 @@ import { Module } from '@nestjs/common';
 import { CharacterModule } from '../characters/character.module.js';
 import { MovementModule } from '../movement/movement.module.js';
 import { WorldModule } from '../world/world.module.js';
-import { CanonicalItemService } from './canonical-item.service.js';
+import { ItemEconomyGateway } from './item-economy.gateway.js';
+import { ItemEconomyService } from './item-economy.service.js';
 import { ItemGateway } from './item.gateway.js';
+import { ItemInventoryService } from './item-inventory.service.js';
+import { ItemizedItemService } from './itemized-item.service.js';
+import { ItemizationCatalogService } from './itemization-catalog.service.js';
 import { ItemService } from './item.service.js';
 
 @Module({
   imports: [WorldModule, MovementModule, CharacterModule],
   providers: [
-    { provide: ItemService, useClass: CanonicalItemService },
+    ItemizationCatalogService,
+    ItemInventoryService,
+    ItemEconomyService,
+    ItemizedItemService,
+    { provide: ItemService, useExisting: ItemizedItemService },
     ItemGateway,
+    ItemEconomyGateway,
   ],
-  exports: [ItemService],
+  exports: [
+    ItemService,
+    ItemInventoryService,
+    ItemEconomyService,
+    ItemizationCatalogService,
+  ],
 })
 export class ItemModule {}

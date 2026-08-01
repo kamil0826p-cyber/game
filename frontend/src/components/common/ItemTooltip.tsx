@@ -8,6 +8,10 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type { CharacterClass } from '../../contracts/game';
+import type {
+  InventoryItemizationPayload,
+  ItemCurseCost,
+} from '../../contracts/itemization';
 import type { ItemRarity, ItemStatBonuses } from '../../contracts/socket';
 import { useI18n } from '../../i18n/I18nProvider';
 
@@ -24,6 +28,7 @@ export interface TooltipItem {
   stackLimit?: number;
   buyPriceSilver?: number;
   sellPriceSilver?: number;
+  itemization?: InventoryItemizationPayload;
 }
 
 interface HoverableProps {
@@ -87,6 +92,36 @@ function placeTooltip(
   };
 }
 
+const policyLabel = (value: string): string => value
+  .toLowerCase()
+  .split('_')
+  .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+  .join(' ');
+
+const curseCostText = (
+  cost: ItemCurseCost,
+  locale: 'pl' | 'en',
+): string => {
+  switch (cost.type) {
+    case 'STAT_PENALTY':
+      return (Object.entries(cost.statBonuses) as Array<[keyof ItemStatBonuses, number]>)
+        .map(([stat, value]) => `${statLabels[stat][locale]} ${value > 0 ? '+' : ''}${value}`)
+        .join(', ');
+    case 'HEALING_RECEIVED_MULTIPLIER':
+      return locale === 'pl'
+        ? `Otrzymywane leczenie ×${cost.multiplier}`
+        : `Healing received ×${cost.multiplier}`;
+    case 'CONSUMABLE_LOCK':
+      return locale === 'pl'
+        ? 'Leczące przedmioty użytkowe zablokowane'
+        : 'Healing consumables disabled';
+    case 'CORRUPTION_ON_TRIGGER':
+      return locale === 'pl'
+        ? `+${cost.amount} skażenia: ${policyLabel(cost.trigger)}`
+        : `+${cost.amount} corruption: ${policyLabel(cost.trigger)}`;
+  }
+};
+
 export function ItemTooltip({
   item,
   currentLevel,
@@ -104,6 +139,7 @@ export function ItemTooltip({
     .filter(([, value]) => value !== 0);
   const style = rarityStyle[item.rarity];
   const levelTooLow = currentLevel !== undefined && currentLevel < item.minimumLevel;
+  const itemization = item.itemization;
 
   useLayoutEffect(() => {
     const tooltip = tooltipRef.current;
@@ -141,7 +177,7 @@ export function ItemTooltip({
         <div
           ref={tooltipRef}
           role="tooltip"
-          className={`pointer-events-none z-[100] w-72 rounded-md border ${style.border} bg-slate-950/[0.98] p-3 text-left shadow-2xl backdrop-blur-sm`}
+          className={`pointer-events-none z-[100] w-80 rounded-md border ${style.border} bg-slate-950/[0.98] p-3 text-left shadow-2xl backdrop-blur-sm`}
           style={{
             position: 'fixed',
             left: position?.x ?? cursor.x + TOOLTIP_GAP,
@@ -171,7 +207,9 @@ export function ItemTooltip({
               </p>
             ) : null}
             {bonuses.map(([stat, value]) => (
-              <p key={stat} className="text-emerald-300">{statLabels[stat][locale]}: +{value}</p>
+              <p key={stat} className={value >= 0 ? 'text-emerald-300' : 'text-red-300'}>
+                {statLabels[stat][locale]}: {value > 0 ? '+' : ''}{value}
+              </p>
             ))}
             {item.effect?.hp ? (
               <p className="text-rose-300">
@@ -183,6 +221,71 @@ export function ItemTooltip({
                 {locale === 'pl' ? 'Przywraca energię' : 'Restores energy'}: {item.effect.energy}
               </p>
             ) : null}
+          </div>
+
+          {itemization ? (
+            <div className="mt-3 space-y-2 border-t border-white/10 pt-2 text-xs text-slate-300">
+              <p className="text-amber-100">
+                {locale === 'pl' ? 'Moc' : 'Power'}: {itemization.powerSpent}/{itemization.powerBudget}
+                {' · '}{locale === 'pl' ? 'poziom' : 'level'} {itemization.powerLevel}
+                {itemization.craftQuality > 0 ? ` · ${locale === 'pl' ? 'jakość' : 'quality'} ${itemization.craftQuality}/100` : ''}
+              </p>
+              {itemization.affixes.map((affix) => (
+                <div key={affix.key} className="rounded border border-white/10 bg-black/20 p-2">
+                  <p className="text-violet-200">
+                    {affix.kind === 'PREFIX'
+                      ? locale === 'pl' ? 'Prefiks' : 'Prefix'
+                      : locale === 'pl' ? 'Sufiks' : 'Suffix'} T{affix.tier}: {affix.name}
+                  </p>
+                  <p className="text-slate-400">
+                    {locale === 'pl' ? 'Rzut' : 'Roll'} {affix.roll} ({affix.minimumRoll}–{affix.maximumRoll})
+                  </p>
+                </div>
+              ))}
+              {itemization.relic ? (
+                <div className="rounded border border-amber-500/30 bg-amber-950/20 p-2">
+                  <p className="font-semibold text-amber-200">
+                    {locale === 'pl' ? 'Relikt' : 'Relic'}: {itemization.relic.name}
+                  </p>
+                  <p>{itemization.relic.description}</p>
+                  <p className="text-slate-400">
+                    {locale === 'pl' ? 'Aktywny po założeniu · umiejętność' : 'Active while equipped · skill'}: {itemization.relic.skillKey}
+                  </p>
+                </div>
+              ) : null}
+              {itemization.curse ? (
+                <div className="rounded border border-red-500/40 bg-red-950/25 p-2">
+                  <p className="font-semibold text-red-300">
+                    {locale === 'pl' ? 'Klątwa' : 'Curse'}: {itemization.curse.name}
+                  </p>
+                  <p>{itemization.curse.description}</p>
+                  <p className="mt-1 font-semibold text-red-200">{itemization.curse.preview}</p>
+                  <p className="text-red-300">{curseCostText(itemization.curse.cost, locale)}</p>
+                </div>
+              ) : null}
+              <div className="text-slate-400">
+                <p>{locale === 'pl' ? 'Wiązanie' : 'Bind'}: {policyLabel(itemization.bindPolicy)}</p>
+                <p>{locale === 'pl' ? 'Handel' : 'Trade'}: {policyLabel(itemization.tradePolicy)}</p>
+                <p>Salvage: {policyLabel(itemization.salvagePolicy)}</p>
+              </div>
+              <div className="text-[11px] text-slate-500">
+                <p>
+                  {locale === 'pl' ? 'Pochodzenie' : 'Origin'}: {policyLabel(itemization.origin.source)} · {itemization.origin.sourceKey}
+                </p>
+                {itemization.origin.recipeKey ? (
+                  <p>
+                    {locale === 'pl' ? 'Receptura' : 'Recipe'}: {itemization.origin.recipeKey} v{itemization.origin.recipeVersion ?? 1}
+                  </p>
+                ) : null}
+                {itemization.origin.crafterCharacterId ? (
+                  <p>{locale === 'pl' ? 'Wykonawca' : 'Crafter'}: {itemization.origin.crafterCharacterId}</p>
+                ) : null}
+                <p>Content v{itemization.origin.contentVersion} · snapshot v{itemization.snapshotVersion}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-3 space-y-1 border-t border-white/10 pt-2 text-xs">
             {item.quantity !== undefined && item.stackLimit !== undefined ? (
               <p className="text-slate-400">
                 {locale === 'pl' ? 'Ilość' : 'Quantity'}: {item.quantity}/{item.stackLimit}

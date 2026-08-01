@@ -22,6 +22,7 @@ const settlement = {
     },
   ],
   skippedLoot: [],
+  claimQueuedLoot: [],
 };
 
 const mob = {
@@ -77,6 +78,11 @@ describe('encounter reward idempotency', () => {
         throw new Error('reward replay must not recompute progression');
       }),
     };
+    const inventory = {
+      grant: vi.fn(() => {
+        throw new Error('reward replay must not grant inventory');
+      }),
+    };
     const quests = {
       recordMobKill: vi.fn(() => {
         throw new Error('reward replay must not progress quests');
@@ -85,6 +91,7 @@ describe('encounter reward idempotency', () => {
     const service = new MobRewardService(
       prisma as never,
       progression as never,
+      inventory as never,
       quests as never,
     );
     const session = {
@@ -100,6 +107,7 @@ describe('encounter reward idempotency', () => {
       }),
     ).resolves.toEqual(settlement);
     expect(progression.recomputeInTransaction).not.toHaveBeenCalled();
+    expect(inventory.grant).not.toHaveBeenCalled();
     expect(quests.recordMobKill).not.toHaveBeenCalled();
     expect(transaction.encounterRewardLedger.findUnique).toHaveBeenCalledWith({
       where: {
