@@ -21,6 +21,7 @@
     "prisma:seed": "prisma db seed",
     "prisma:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run prisma:seed",
     "progression": "npm run prisma:generate && tsx prisma/character-progression-cli.ts",
+    "skill-build:migrate": "npm run prisma:generate && tsx scripts/skill-build-migration.ts",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "frontend:install": "npm --prefix frontend install",
