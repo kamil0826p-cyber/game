@@ -45,6 +45,7 @@ export interface ProgressionSnapshot {
   level: number;
   choices: ProgressionNodeKey[];
   nodeRanks: Record<ProgressionNodeKey, number>;
+  nodes: Readonly<Record<ProgressionNodeKey, ProgressionNodeDefinition>>;
   points: {
     earned: number;
     spent: number;
