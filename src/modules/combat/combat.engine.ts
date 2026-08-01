@@ -348,11 +348,8 @@ export class CombatEngine {
     });
     runtime.telegraph = undefined;
 
-    const defeatedTeam = this.defeatedTeam(runtime);
-    if (defeatedTeam) {
-      return this.finish(runtime, caster.teamId, caster.actorId, 'DEFEATED', now);
-    }
-    return this.advance(runtime, now);
+    const finished = this.finishIfTeamDefeated(runtime, now);
+    return finished ?? this.advance(runtime, now);
   }
 
   disconnect(runtime: CombatRuntime, actorId: string, now: number): CombatSnapshot {
@@ -987,12 +984,11 @@ export class CombatEngine {
 
   private afterAction(
     runtime: CombatRuntime,
-    actor: CombatRuntimeActor,
+    _actor: CombatRuntimeActor,
     now: number,
   ): CombatSnapshot {
-    const defeatedTeam = this.defeatedTeam(runtime);
-    if (defeatedTeam) return this.finish(runtime, actor.teamId, actor.actorId, 'DEFEATED', now);
-    return this.advance(runtime, now);
+    const finished = this.finishIfTeamDefeated(runtime, now);
+    return finished ?? this.advance(runtime, now);
   }
 
   private advance(runtime: CombatRuntime, now: number): CombatSnapshot {
@@ -1023,11 +1019,8 @@ export class CombatEngine {
       }
 
       if (!this.canFight(next)) {
-        const winningTeam = this.opposingTeam(runtime, next.teamId);
-        if (this.isTeamDefeated(runtime, next.teamId)) {
-          const winner = this.firstLivingActor(runtime, winningTeam.teamId);
-          return this.finish(runtime, winningTeam.teamId, winner?.actorId, 'DEFEATED', now);
-        }
+        const finished = this.finishIfTeamDefeated(runtime, now);
+        if (finished) return finished;
         continue;
       }
 
@@ -1422,6 +1415,40 @@ export class CombatEngine {
     };
     target.statuses.push(status);
     return status;
+  }
+
+  private finishIfTeamDefeated(
+    runtime: CombatRuntime,
+    now: number,
+  ): CombatSnapshot | undefined {
+    const livingTeams = runtime.teams.filter(
+      (team) => !this.isTeamDefeated(runtime, team.teamId),
+    );
+    if (livingTeams.length === runtime.teams.length) return undefined;
+    if (livingTeams.length === 1) {
+      const winningTeam = livingTeams[0]!;
+      const winner = this.firstLivingActor(runtime, winningTeam.teamId);
+      return this.finish(runtime, winningTeam.teamId, winner?.actorId, 'DEFEATED', now);
+    }
+    return this.finishWithoutWinner(runtime, 'DEFEATED', now);
+  }
+
+  private finishWithoutWinner(
+    runtime: CombatRuntime,
+    reason: CombatFinishReason,
+    now: number,
+  ): CombatSnapshot {
+    runtime.status = 'FINISHED';
+    runtime.phase = 'RESOLVING';
+    runtime.winnerTeamId = undefined;
+    runtime.winnerActorId = undefined;
+    runtime.finishReason = reason;
+    runtime.finishedAt = now;
+    runtime.activeActorId = undefined;
+    runtime.turnStartedAt = undefined;
+    runtime.turnEndsAt = undefined;
+    runtime.telegraph = undefined;
+    return this.snapshot(runtime);
   }
 
   private finish(
