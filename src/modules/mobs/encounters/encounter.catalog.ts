@@ -395,8 +395,17 @@ const executionCircle: EncounterDefinition = {
 
 export const ENCOUNTER_CATALOG = [broodHunt, executionCircle] as const;
 
-export function encounterForRank(rank: EncounterDefinition['ranks'][number]): EncounterDefinition {
-  const encounter = ENCOUNTER_CATALOG.find((candidate) => candidate.ranks.includes(rank as never));
+export function selectLatestEncounterForRank(
+  definitions: readonly EncounterDefinition[],
+  rank: EncounterDefinition['ranks'][number],
+): EncounterDefinition {
+  const encounter = definitions
+    .filter((candidate) => candidate.ranks.includes(rank))
+    .sort((left, right) => right.version - left.version)[0];
   if (!encounter) throw new Error(`Missing encounter definition for mob rank ${rank}.`);
   return encounter;
+}
+
+export function encounterForRank(rank: EncounterDefinition['ranks'][number]): EncounterDefinition {
+  return selectLatestEncounterForRank(ENCOUNTER_CATALOG, rank);
 }
