@@ -10,6 +10,7 @@ import { ENCOUNTER_CATALOG } from '../src/modules/mobs/encounters/encounter.cata
 import {
   createEncounterExecution,
   evaluateEncounterEligibility,
+  recordEncounterInteraction,
   recordEncounterTimeout,
   synchronizeEncounter,
 } from '../src/modules/mobs/encounters/encounter.runtime.js';
@@ -203,8 +204,13 @@ describe('PvE encounter framework', () => {
     );
   });
 
-  it('runs a telegraph through declaration, legal interrupt and stagger resolution', () => {
+  it('runs a telegraph through declaration, legal interrupt, phase trigger and stagger resolution', () => {
     const { engine, runtime, execution, scribeActorId } = bloodRiteRuntime();
+    const custom = cloneEncounter(execution.state.encounter.definition);
+    custom.phases[2]!.conditions = [
+      { type: 'TELEGRAPH_RESOLVED', skillKey: 'mage-meteor', interrupted: true },
+    ];
+    execution.state.encounter = { ...execution.state.encounter, definition: custom };
     const scribe = runtime.actors.find((actor) => actor.actorId === scribeActorId)!;
     const plan = planEncounterAction(
       runtime,
@@ -225,6 +231,7 @@ describe('PvE encounter framework', () => {
     expect(declaration.legalActionsByActorId?.[reactorId!]).toContainEqual(
       expect.objectContaining({ action: 'INTERRUPT', reactionOnly: true }),
     );
+    synchronizeEncounter(engine, runtime, execution, 2_050);
 
     const interrupted = engine.act(
       runtime,
@@ -238,6 +245,7 @@ describe('PvE encounter framework', () => {
       },
       2_100,
     );
+    const encounterSnapshot = synchronizeEncounter(engine, runtime, execution, 2_150);
     expect(interrupted.phase).toBe('DECISION');
     expect(interrupted.telegraph).toBeUndefined();
     expect(
@@ -246,6 +254,68 @@ describe('PvE encounter framework', () => {
         ?.statuses.some((status) => status.key === 'STAGGER'),
     ).toBe(true);
     expect(interrupted.recentActions.at(-1)?.skillKey).toBe('tactical:interrupt');
+    expect(execution.state.resolvedTelegraphs).toContainEqual(
+      expect.objectContaining({ skillKey: 'mage-meteor', interrupted: true }),
+    );
+    expect(encounterSnapshot.encounter?.phaseKey).toBe('execution');
+    expect(encounterSnapshot.recentActions.some((event) => event.skillKey === 'encounter:phase')).toBe(true);
+  });
+
+  it('supports status and explicit interaction phase triggers', () => {
+    const statusRun = executionRuntime(3);
+    const statusExecution = createEncounterExecution(
+      statusRun.runtime,
+      mob.id,
+      statusRun.claimed,
+      22,
+    );
+    const statusDefinition = cloneEncounter(statusExecution.state.encounter.definition);
+    statusDefinition.phases[1]!.conditions = [
+      { type: 'STATUS_ACTIVE', actorKey: 'executioner', statusKey: 'STAGGER' },
+    ];
+    statusExecution.state.encounter = {
+      ...statusExecution.state.encounter,
+      definition: statusDefinition,
+    };
+    statusRun.runtime.actors
+      .find((actor) => actor.actorId === statusExecution.state.rootActorId)!
+      .statuses.push({
+        id: 'test-stagger',
+        key: 'STAGGER',
+        turnsRemaining: 1,
+        sourceActorId: 'player-1',
+        sourcePower: 1,
+        appliedTurn: statusRun.runtime.turnNumber,
+      });
+    expect(
+      synchronizeEncounter(statusRun.engine, statusRun.runtime, statusExecution, 2_000).encounter
+        ?.phaseKey,
+    ).toBe('blood_rite');
+
+    const interactionRun = executionRuntime(3);
+    const interactionExecution = createEncounterExecution(
+      interactionRun.runtime,
+      mob.id,
+      interactionRun.claimed,
+      23,
+    );
+    const interactionDefinition = cloneEncounter(interactionExecution.state.encounter.definition);
+    interactionDefinition.phases[1]!.conditions = [
+      { type: 'INTERACTION_USED', interactionKey: 'break-blood-sigil' },
+    ];
+    interactionExecution.state.encounter = {
+      ...interactionExecution.state.encounter,
+      definition: interactionDefinition,
+    };
+    recordEncounterInteraction(interactionExecution.state, 'break-blood-sigil');
+    expect(
+      synchronizeEncounter(
+        interactionRun.engine,
+        interactionRun.runtime,
+        interactionExecution,
+        2_000,
+      ).encounter?.phaseKey,
+    ).toBe('blood_rite');
   });
 
   it('moves through three phases and reaches exactly ten enemies without overflow', () => {
@@ -268,6 +338,62 @@ describe('PvE encounter framework', () => {
     expect(snapshot.encounter?.phaseKey).toBe('execution');
     expect(snapshot.encounter?.phaseIndex).toBe(2);
     expect(runtime.actors.filter((actor) => actor.kind === 'MOB')).toHaveLength(10);
+  });
+
+  it('enforces data-driven objective victory and turn-limit defeat', () => {
+    const objectiveRun = executionRuntime(3);
+    const objectiveExecution = createEncounterExecution(
+      objectiveRun.runtime,
+      mob.id,
+      objectiveRun.claimed,
+      31,
+    );
+    const objectiveDefinition = cloneEncounter(objectiveExecution.state.encounter.definition);
+    objectiveDefinition.victory = { type: 'DEFEAT_ACTOR', actorKey: 'executioner' };
+    objectiveExecution.state.encounter = {
+      ...objectiveExecution.state.encounter,
+      definition: objectiveDefinition,
+    };
+    objectiveRun.runtime.actors.find(
+      (actor) => actor.actorId === objectiveExecution.state.rootActorId,
+    )!.hp = 0;
+    const objectiveSnapshot = synchronizeEncounter(
+      objectiveRun.engine,
+      objectiveRun.runtime,
+      objectiveExecution,
+      2_000,
+    );
+    expect(objectiveSnapshot).toMatchObject({
+      status: 'FINISHED',
+      winnerTeamId: objectiveExecution.state.playerTeamId,
+      finishReason: 'DEFEATED',
+    });
+
+    const limitRun = executionRuntime(3);
+    const limitExecution = createEncounterExecution(
+      limitRun.runtime,
+      mob.id,
+      limitRun.claimed,
+      32,
+    );
+    const limitDefinition = cloneEncounter(limitExecution.state.encounter.definition);
+    limitDefinition.defeat = { type: 'TURN_LIMIT', turnLimit: 3 };
+    limitExecution.state.encounter = {
+      ...limitExecution.state.encounter,
+      definition: limitDefinition,
+    };
+    limitRun.runtime.turnNumber = 3;
+    const limitSnapshot = synchronizeEncounter(
+      limitRun.engine,
+      limitRun.runtime,
+      limitExecution,
+      2_000,
+    );
+    expect(limitSnapshot).toMatchObject({
+      status: 'FINISHED',
+      winnerTeamId: limitExecution.state.enemyTeamId,
+      finishReason: 'FORFEIT',
+    });
   });
 
   it('counts support contribution while excluding AFK and late participants', () => {
@@ -317,5 +443,11 @@ describe('PvE encounter framework', () => {
     const illegal = cloneEncounter(source);
     illegal.scaling[0]!.actorKeys = ['chain-guard'];
     expect(validateEncounterDefinition(illegal).errors.join('\n')).toContain('root actor');
+
+    const badTrigger = cloneEncounter(source);
+    badTrigger.phases[1]!.conditions = [
+      { type: 'TELEGRAPH_RESOLVED', skillKey: 'missing-skill', interrupted: false },
+    ];
+    expect(validateEncounterDefinition(badTrigger).errors.join('\n')).toContain('missing skill');
   });
 });
