@@ -62,6 +62,9 @@ export function createEncounterExecution(
       actorIdByKey,
       actorKeyById,
       contributions,
+      observedTelegraphs: new Map(),
+      resolvedTelegraphs: [],
+      interactions: new Set(),
       aiTrace: [],
       seed,
     },
@@ -74,9 +77,11 @@ export function synchronizeEncounter(
   execution: EncounterExecution,
   now: number,
 ): CombatSnapshot {
-  ingestContributions(runtime, execution.state);
+  observeTelegraph(runtime, execution.state);
+  ingestRuntimeEvents(runtime, execution.state);
+  if (runtime.status === 'ACTIVE') applyEncounterOutcome(engine, runtime, execution.state, now);
   if (runtime.status === 'ACTIVE') transitionPhase(runtime, execution, now);
-  ingestContributions(runtime, execution.state);
+  ingestRuntimeEvents(runtime, execution.state);
   return decorateEncounterSnapshot(engine.snapshot(runtime), runtime, execution.state);
 }
 
@@ -139,6 +144,16 @@ export function recordEncounterTimeout(
   contribution.pendingTimeoutActions += 1;
 }
 
+export function recordEncounterInteraction(
+  state: EncounterRuntimeState,
+  interactionKey: string,
+): void {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(interactionKey)) {
+    throw new Error('ENCOUNTER_INTERACTION_INVALID');
+  }
+  state.interactions.add(interactionKey);
+}
+
 export function evaluateEncounterEligibility(
   runtime: CombatRuntime,
   state: EncounterRuntimeState,
@@ -182,6 +197,48 @@ export function encounterRewardOperationId(combatId: string): string {
   return `encounter:${combatId}`;
 }
 
+function applyEncounterOutcome(
+  engine: CombatEngine,
+  runtime: CombatRuntime,
+  state: EncounterRuntimeState,
+  now: number,
+): void {
+  const defeat = state.encounter.definition.defeat;
+  if (
+    defeat.type === 'TURN_LIMIT' &&
+    defeat.turnLimit !== undefined &&
+    runtime.turnNumber >= defeat.turnLimit
+  ) {
+    forfeitTeam(engine, runtime, state.playerTeamId, now);
+    return;
+  }
+
+  const victory = state.encounter.definition.victory;
+  if (victory.type !== 'DEFEAT_ACTOR' || !victory.actorKey) return;
+  const actorId = state.actorIdByKey.get(victory.actorKey);
+  const target = actorId
+    ? runtime.actors.find((actor) => actor.actorId === actorId)
+    : undefined;
+  if (target && !canFight(target)) {
+    forfeitTeam(engine, runtime, state.enemyTeamId, now);
+  }
+}
+
+function forfeitTeam(
+  engine: CombatEngine,
+  runtime: CombatRuntime,
+  teamId: string,
+  now: number,
+): void {
+  const actorIds = runtime.actors
+    .filter((actor) => actor.teamId === teamId && canFight(actor))
+    .map((actor) => actor.actorId);
+  for (const actorId of actorIds) {
+    if (runtime.status !== 'ACTIVE') break;
+    engine.forfeit(runtime, actorId, now);
+  }
+}
+
 function transitionPhase(
   runtime: CombatRuntime,
   execution: EncounterExecution,
@@ -195,6 +252,7 @@ function transitionPhase(
   execution.state.phaseIndex = nextIndex;
   execution.state.phaseKey = next.key;
   execution.state.arenaModifier = next.arenaModifier;
+  appendPhaseEvent(runtime, execution.state, next.label, now);
 
   const summonAllowance =
     execution.state.encounter.partySize >= 10
@@ -228,6 +286,32 @@ function transitionPhase(
     execution.state.summonedActorKeys.add(candidate.actorKey);
     execution.pendingActors.delete(candidate.actorKey);
   }
+}
+
+function appendPhaseEvent(
+  runtime: CombatRuntime,
+  state: EncounterRuntimeState,
+  label: string,
+  now: number,
+): void {
+  const root = runtime.actors.find((actor) => actor.actorId === state.rootActorId);
+  runtime.events.push({
+    sequence: runtime.nextSequence++,
+    actorId: state.rootActorId,
+    targetActorId: state.rootActorId,
+    action: 'SKILL',
+    skillKey: 'encounter:phase',
+    label: `Faza: ${label}`,
+    animationKey: 'encounter-phase',
+    visual: {
+      castEffectKey: 'encounter-phase:cast',
+      impactEffectKey: 'encounter-phase:impact',
+      accentColor: '#f59e0b',
+    },
+    results: root ? [emptyRuntimeResult(root.actorId)] : [],
+    occurredAt: now,
+  });
+  trimEventHistory(runtime);
 }
 
 function summonIntoSharedCombat(
@@ -296,21 +380,10 @@ function summonIntoSharedCombat(
       impactEffectKey: 'encounter-summon:impact',
       accentColor: '#a78bfa',
     },
-    results: summoned.map((actor) => ({
-      targetActorId: actor.actorId,
-      hpDelta: 0,
-      energyDelta: 0,
-      shieldDelta: 0,
-      shieldAbsorbed: 0,
-      dodged: false,
-      statusesApplied: [],
-      statusesRemoved: [],
-    })),
+    results: summoned.map((actor) => emptyRuntimeResult(actor.actorId)),
     occurredAt: now,
   });
-  if (runtime.events.length > COMBAT_EVENT_HISTORY_LIMIT) {
-    runtime.events.splice(0, runtime.events.length - COMBAT_EVENT_HISTORY_LIMIT);
-  }
+  trimEventHistory(runtime);
 }
 
 function applyFormationPreferences(
@@ -366,25 +439,78 @@ function conditionMatches(
       return current / Math.max(1, maximum) <= condition.ratio;
     }
     case 'ACTOR_HP_AT_MOST': {
-      const actorId = state.actorIdByKey.get(condition.actorKey);
-      const actor = actorId ? runtime.actors.find((candidate) => candidate.actorId === actorId) : undefined;
+      const actor = actorForKey(runtime, state, condition.actorKey);
       return Boolean(actor && actor.hp / Math.max(1, actor.maxHp) <= condition.ratio);
     }
     case 'ACTOR_DEFEATED': {
-      const actorId = state.actorIdByKey.get(condition.actorKey);
-      const actor = actorId ? runtime.actors.find((candidate) => candidate.actorId === actorId) : undefined;
-      return Boolean(actor && (actor.hp <= 0 || actor.withdrawn));
+      const actor = actorForKey(runtime, state, condition.actorKey);
+      return Boolean(actor && !canFight(actor));
+    }
+    case 'TELEGRAPH_RESOLVED':
+      return state.resolvedTelegraphs.some(
+        (resolution) =>
+          resolution.skillKey === condition.skillKey &&
+          resolution.interrupted === condition.interrupted,
+      );
+    case 'STATUS_ACTIVE': {
+      const actor = actorForKey(runtime, state, condition.actorKey);
+      return Boolean(
+        actor?.statuses.some(
+          (status) => status.key === condition.statusKey && status.turnsRemaining > 0,
+        ),
+      );
+    }
+    case 'BREAK_AT_LEAST': {
+      const actor = actorForKey(runtime, state, condition.actorKey);
+      if (!actor) return false;
+      const staggerStacks = actor.statuses.filter(
+        (status) => status.key === 'STAGGER' && status.turnsRemaining > 0,
+      ).length;
+      return Math.max(actor.controlDrStacks, staggerStacks) >= condition.stacks;
     }
     case 'LIVING_PLAYERS_AT_MOST':
       return runtime.actors.filter(
         (actor) => actor.teamId === state.playerTeamId && canFight(actor),
       ).length <= condition.count;
+    case 'INTERACTION_USED':
+      return state.interactions.has(condition.interactionKey);
   }
 }
 
-function ingestContributions(runtime: CombatRuntime, state: EncounterRuntimeState): void {
+function actorForKey(
+  runtime: CombatRuntime,
+  state: EncounterRuntimeState,
+  actorKey: string,
+): CombatRuntimeActor | undefined {
+  const actorId = state.actorIdByKey.get(actorKey);
+  return actorId
+    ? runtime.actors.find((candidate) => candidate.actorId === actorId)
+    : undefined;
+}
+
+function observeTelegraph(runtime: CombatRuntime, state: EncounterRuntimeState): void {
+  if (!runtime.telegraph) return;
+  state.observedTelegraphs.set(runtime.telegraph.actorId, runtime.telegraph.skillKey);
+}
+
+function ingestRuntimeEvents(runtime: CombatRuntime, state: EncounterRuntimeState): void {
   const events = runtime.events.filter((event) => event.sequence > state.processedEventSequence);
+  const telegraphSkills = new Set(
+    state.encounter.definition.telegraphs.map((rule) => rule.skillKey),
+  );
   for (const event of events) {
+    if (event.skillKey === 'tactical:interrupt') {
+      const casterId = event.targetActorId ?? event.results[0]?.targetActorId;
+      const skillKey = casterId ? state.observedTelegraphs.get(casterId) : undefined;
+      if (skillKey) {
+        recordTelegraphResolution(state, skillKey, true, runtime.turnNumber);
+        state.observedTelegraphs.delete(casterId!);
+      }
+    } else if (event.skillKey && telegraphSkills.has(event.skillKey)) {
+      recordTelegraphResolution(state, event.skillKey, false, runtime.turnNumber);
+      state.observedTelegraphs.delete(event.actorId);
+    }
+
     const source = runtime.actors.find((actor) => actor.actorId === event.actorId);
     if (!source || source.kind !== 'PLAYER') {
       state.processedEventSequence = Math.max(state.processedEventSequence, event.sequence);
@@ -408,7 +534,9 @@ function ingestContributions(runtime: CombatRuntime, state: EncounterRuntimeStat
         contribution.healing += result.hpDelta;
       }
       if (result.shieldDelta > 0) contribution.protection += result.shieldDelta;
-      if (result.interceptedByActorId) contribution.protection += Math.abs(Math.min(0, result.hpDelta));
+      if (result.interceptedByActorId) {
+        contribution.protection += Math.abs(Math.min(0, result.hpDelta));
+      }
     }
     if (event.skillKey === 'tactical:interrupt') contribution.interrupts += 1;
     if (event.skillKey === 'tactical:cleanse') contribution.cleanses += 1;
@@ -421,6 +549,24 @@ function ingestContributions(runtime: CombatRuntime, state: EncounterRuntimeStat
       contribution.mechanics += 1;
     }
     state.processedEventSequence = Math.max(state.processedEventSequence, event.sequence);
+  }
+}
+
+function recordTelegraphResolution(
+  state: EncounterRuntimeState,
+  skillKey: string,
+  interrupted: boolean,
+  turn: number,
+): void {
+  const duplicate = state.resolvedTelegraphs.some(
+    (resolution) =>
+      resolution.skillKey === skillKey &&
+      resolution.interrupted === interrupted &&
+      resolution.turn === turn,
+  );
+  if (!duplicate) state.resolvedTelegraphs.push({ skillKey, interrupted, turn });
+  if (state.resolvedTelegraphs.length > 32) {
+    state.resolvedTelegraphs.splice(0, state.resolvedTelegraphs.length - 32);
   }
 }
 
@@ -450,6 +596,25 @@ function emptyContribution(actorId: string, joinedTurn: number): EncounterContri
     cleanses: 0,
     mechanics: 0,
   };
+}
+
+function emptyRuntimeResult(targetActorId: string) {
+  return {
+    targetActorId,
+    hpDelta: 0,
+    energyDelta: 0,
+    shieldDelta: 0,
+    shieldAbsorbed: 0,
+    dodged: false,
+    statusesApplied: [],
+    statusesRemoved: [],
+  };
+}
+
+function trimEventHistory(runtime: CombatRuntime): void {
+  if (runtime.events.length > COMBAT_EVENT_HISTORY_LIMIT) {
+    runtime.events.splice(0, runtime.events.length - COMBAT_EVENT_HISTORY_LIMIT);
+  }
 }
 
 function canFight(actor: CombatRuntimeActor): boolean {
