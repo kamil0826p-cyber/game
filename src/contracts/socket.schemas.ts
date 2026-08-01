@@ -60,13 +60,13 @@ const combatCommandBase = { requestId, combatId, expectedTurn } as const;
 export const combatActionSchema = z.discriminatedUnion('action', [
   z.object({ ...combatCommandBase, action: z.literal('BASIC_ATTACK'), targetActorId: actorId.optional() }).strict(),
   z.object({ ...combatCommandBase, action: z.literal('SKILL'), skillKey, targetActorId: actorId.optional() }).strict(),
-  z.object({ ...combatCommandBase, action: z.literal('GUARD') }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('GUARD'), targetActorId: actorId.optional() }).strict(),
   z.object({ ...combatCommandBase, action: z.literal('INTERCEPT'), targetActorId: actorId }).strict(),
-  z.object({ ...combatCommandBase, action: z.literal('INTERRUPT'), telegraphId }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('INTERRUPT'), telegraphId, targetActorId: actorId.optional() }).strict(),
   z.object({ ...combatCommandBase, action: z.literal('CLEANSE'), targetActorId: actorId.optional() }).strict(),
   z.object({ ...combatCommandBase, action: z.literal('SWAP'), targetActorId: actorId }).strict(),
   z.object({ ...combatCommandBase, action: z.literal('SUPPORT_ENERGY'), targetActorId: actorId }).strict(),
-  z.object({ ...combatCommandBase, action: z.literal('SKIP') }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('SKIP'), targetActorId: actorId.optional() }).strict(),
 ]);
 export const combatLeaveSchema = z.object({ requestId, combatId }).strict();
 export const guildGetSchema = z.object({ requestId }).strict();
