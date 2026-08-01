@@ -185,6 +185,13 @@ export interface NarrativeNodeDefinition {
   terminalOutcomeKey?: string;
 }
 
+
+export interface NarrativeRewardProfile {
+  experience: number;
+  silver: number;
+  gold: 0;
+}
+
 export interface NarrativeOutcomeDefinition {
   key: string;
   terminalState: NarrativeTerminalState;
@@ -199,14 +206,23 @@ export interface NarrativeDialogueRootDefinition {
   conditions: NarrativeCondition[];
 }
 
+export interface NarrativeAbandonmentPolicy {
+  restartMode: 'DISABLED' | 'FROM_START' | 'FROM_CHECKPOINT';
+  questItemPolicy: 'RETURN' | 'KEEP' | 'DESTROY';
+  checkpointNodeKey?: string;
+}
+
 export interface NarrativeDefinition {
   key: string;
   version: number;
   startNodeKey: string;
   repeatability: NarrativeRepeatability;
+  activityCooldownKey?: string;
+  abandonmentPolicy?: NarrativeAbandonmentPolicy;
   mutuallyExclusivePathKeys: string[];
   nodes: NarrativeNodeDefinition[];
   outcomes: NarrativeOutcomeDefinition[];
+  rewardProfiles?: Record<string, NarrativeRewardProfile>;
   factionPolicies?: FactionPolicy[];
   dialogueRoots?: NarrativeDialogueRootDefinition[];
 }
@@ -250,6 +266,7 @@ export interface NarrativeConditionContext {
   partySize: number;
   character: CharacterNarrativeState;
   regionValues: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  regionContributions?: ReadonlyMap<string, number>;
   worldCycles: ReadonlyMap<string, string>;
   encounterResults: ReadonlyMap<
     string,

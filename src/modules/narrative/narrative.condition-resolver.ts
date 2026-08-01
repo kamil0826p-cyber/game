@@ -2,6 +2,7 @@ import type {
   NarrativeComparison,
   NarrativeCondition,
   NarrativeConditionContext,
+  NarrativeDialogueRootDefinition,
 } from './narrative.types.js';
 
 function compare(left: number | string | boolean, comparison: NarrativeComparison, right: number | string | boolean): boolean {
@@ -65,7 +66,8 @@ export function evaluateNarrativeCondition(
     }
     default: {
       const exhaustive: never = condition;
-      return exhaustive;
+      void exhaustive;
+      return false;
     }
   }
 }
@@ -75,4 +77,14 @@ export function evaluateNarrativeConditions(
   context: NarrativeConditionContext,
 ): boolean {
   return !conditions || conditions.every((condition) => evaluateNarrativeCondition(condition, context));
+}
+
+
+export function resolveNarrativeDialogueRoot(
+  roots: readonly NarrativeDialogueRootDefinition[],
+  context: NarrativeConditionContext,
+): NarrativeDialogueRootDefinition | undefined {
+  return roots
+    .filter((root) => evaluateNarrativeConditions(root.conditions, context))
+    .sort((left, right) => right.priority - left.priority || left.key.localeCompare(right.key))[0];
 }

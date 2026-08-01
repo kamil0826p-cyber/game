@@ -4,6 +4,7 @@ import type {
   NarrativeChoiceResult,
   NarrativeConditionContext,
   NarrativeDefinition,
+  NarrativeEffect,
   NarrativeEventResult,
   NarrativeObjectiveDefinition,
   NarrativeTerminalState,
@@ -24,6 +25,26 @@ export interface NarrativeChronicleEntry {
   terminalState?: NarrativeTerminalState;
 }
 
+export interface PublicNarrativeRelation {
+  npcKey: string;
+  trust: number;
+  fear: number;
+  debt: number;
+  grudge: number;
+}
+
+export interface PublicNarrativeReputation {
+  factionKey: string;
+  value: number;
+  tags: string[];
+}
+
+export interface PublicNarrativeRegionState {
+  regionKey: string;
+  values: Record<string, number>;
+  characterContribution: number;
+}
+
 export interface PublicNarrativeView {
   definitionKey: string;
   definitionVersion: number;
@@ -31,6 +52,9 @@ export interface PublicNarrativeView {
   objectives: Array<{ key: string; type: string; current: number; target: number; completed: boolean }>;
   choices: PublicNarrativeChoice[];
   chronicle: NarrativeChronicleEntry[];
+  relations: PublicNarrativeRelation[];
+  reputations: PublicNarrativeReputation[];
+  regions: PublicNarrativeRegionState[];
   outcomeKey?: string;
   terminalState?: NarrativeTerminalState;
 }
@@ -48,6 +72,7 @@ export function createQuestNarrativeProgress(definition: NarrativeDefinition): Q
   };
 }
 
+
 export function compileNarrativeChronicle(progress: QuestNarrativeProgress): NarrativeChronicleEntry[] {
   const entries: NarrativeChronicleEntry[] = Object.values(progress.processedChoices).map((choice) => ({
     type: 'CHOICE',
@@ -64,6 +89,33 @@ export function compileNarrativeChronicle(progress: QuestNarrativeProgress): Nar
   return entries;
 }
 
+function compilePublicState(context: NarrativeConditionContext): Pick<
+  PublicNarrativeView,
+  'relations' | 'reputations' | 'regions'
+> {
+  return {
+    relations: Object.entries(context.character.npcRelations).map(([npcKey, relation]) => ({
+      npcKey,
+      trust: relation.TRUST,
+      fear: relation.FEAR,
+      debt: relation.DEBT,
+      grudge: relation.GRUDGE,
+    })),
+    reputations: Object.entries(context.character.factionReputations).map(
+      ([factionKey, reputation]) => ({
+        factionKey,
+        value: reputation.value,
+        tags: [...reputation.tags],
+      }),
+    ),
+    regions: [...context.regionValues.entries()].map(([regionKey, values]) => ({
+      regionKey,
+      values: Object.fromEntries(values),
+      characterContribution: context.regionContributions?.get(regionKey) ?? 0,
+    })),
+  };
+}
+
 export function compilePublicNarrativeView(
   progress: QuestNarrativeProgress,
   context: NarrativeConditionContext,
@@ -76,6 +128,7 @@ export function compilePublicNarrativeView(
       objectives: [],
       choices: [],
       chronicle: compileNarrativeChronicle(progress),
+      ...compilePublicState(context),
       outcomeKey: progress.outcomeKey,
       terminalState: progress.terminalState,
     };
@@ -92,6 +145,7 @@ export function compilePublicNarrativeView(
       .filter((choice) => evaluateNarrativeConditions(choice.conditions, context))
       .map((choice) => ({ key: choice.key, label: choice.label, knownEffects: choice.knownEffects })),
     chronicle: compileNarrativeChronicle(progress),
+    ...compilePublicState(context),
   };
 }
 
@@ -100,9 +154,9 @@ export function applyNarrativeChoice(
   operationId: string,
   optionKey: string,
   context: NarrativeConditionContext,
-): { progress: QuestNarrativeProgress; result: NarrativeChoiceResult; effects: NarrativeChoiceResult['knownEffects'] } {
+): { progress: QuestNarrativeProgress; result: NarrativeChoiceResult; effects: NarrativeEffect[] } {
   const previous = progress.processedChoices[operationId];
-  if (previous) return { progress, result: previous, effects: previous.knownEffects };
+  if (previous) return { progress, result: previous, effects: [] };
   if (progress.terminalState) throw new Error('NARRATIVE_ALREADY_TERMINAL');
   const node = progress.definitionSnapshot.nodes.find((candidate) => candidate.key === progress.currentNodeKey);
   if (!node) throw new Error('NARRATIVE_NODE_NOT_FOUND');
@@ -122,7 +176,7 @@ export function applyNarrativeChoice(
     outcomeKey: outcome?.key,
     terminalState: outcome?.terminalState,
   };
-  const next: QuestNarrativeProgress = {
+  let next: QuestNarrativeProgress = {
     ...progress,
     choices: { ...progress.choices, [node.key]: optionKey },
     processedChoices: { ...progress.processedChoices, [operationId]: result },
@@ -130,7 +184,18 @@ export function applyNarrativeChoice(
     outcomeKey: outcome?.key ?? progress.outcomeKey,
     terminalState: outcome?.terminalState ?? progress.terminalState,
   };
-  const effects = [...choice.knownEffects, ...(choice.hiddenEffects ?? []), ...(outcome?.effects ?? [])];
+  const effects: NarrativeEffect[] = [
+    ...choice.knownEffects,
+    ...(choice.hiddenEffects ?? []),
+    ...(outcome?.effects ?? []),
+  ];
+  if (!outcome && choice.nextNodeKey) {
+    const entered = enterImmediateTerminal(next, choice.nextNodeKey);
+    next = entered.progress;
+    effects.push(...entered.effects);
+    result.outcomeKey = next.outcomeKey;
+    result.terminalState = next.terminalState;
+  }
   return { progress: next, result, effects };
 }
 
@@ -180,24 +245,57 @@ function nodeCompleted(progress: QuestNarrativeProgress): boolean {
   return Boolean(node && (node.objectives ?? []).length > 0 && (node.objectives ?? []).every((objective) => (progress.objectiveCounters[objective.key] ?? 0) >= objective.quantity));
 }
 
-function resolveCompletedNode(progress: QuestNarrativeProgress): QuestNarrativeProgress {
+function enterImmediateTerminal(
+  progress: QuestNarrativeProgress,
+  nodeKey: string,
+): { progress: QuestNarrativeProgress; effects: NarrativeEffect[] } {
+  const node = progress.definitionSnapshot.nodes.find((candidate) => candidate.key === nodeKey);
+  if (!node) throw new Error('NARRATIVE_NODE_NOT_FOUND');
+  if (!node.terminalOutcomeKey || (node.objectives?.length ?? 0) > 0 || (node.choices?.length ?? 0) > 0) {
+    return { progress: { ...progress, currentNodeKey: nodeKey }, effects: [] };
+  }
+  const outcome = progress.definitionSnapshot.outcomes.find((candidate) => candidate.key === node.terminalOutcomeKey);
+  if (!outcome) throw new Error('NARRATIVE_OUTCOME_NOT_FOUND');
+  return {
+    progress: {
+      ...progress,
+      currentNodeKey: nodeKey,
+      outcomeKey: outcome.key,
+      terminalState: outcome.terminalState,
+    },
+    effects: [...outcome.effects],
+  };
+}
+
+function resolveCompletedNode(
+  progress: QuestNarrativeProgress,
+): { progress: QuestNarrativeProgress; effects: NarrativeEffect[] } {
   const node = progress.definitionSnapshot.nodes.find((candidate) => candidate.key === progress.currentNodeKey);
-  if (!node || !nodeCompleted(progress)) return progress;
+  if (!node || !nodeCompleted(progress)) return { progress, effects: [] };
+  const effects: NarrativeEffect[] = [...(node.onCompleteEffects ?? [])];
   if (node.terminalOutcomeKey) {
     const outcome = progress.definitionSnapshot.outcomes.find((candidate) => candidate.key === node.terminalOutcomeKey);
     if (!outcome) throw new Error('NARRATIVE_OUTCOME_NOT_FOUND');
-    return { ...progress, outcomeKey: outcome.key, terminalState: outcome.terminalState };
+    effects.push(...outcome.effects);
+    return {
+      progress: { ...progress, outcomeKey: outcome.key, terminalState: outcome.terminalState },
+      effects,
+    };
   }
-  if (node.nextNodeKey) return { ...progress, currentNodeKey: node.nextNodeKey };
-  return progress;
+  if (node.nextNodeKey) {
+    const entered = enterImmediateTerminal(progress, node.nextNodeKey);
+    effects.push(...entered.effects);
+    return { progress: entered.progress, effects };
+  }
+  return { progress, effects };
 }
 
 export function applyAuthoritativeNarrativeEvent(
   progress: QuestNarrativeProgress,
   event: NarrativeAuthoritativeEvent,
-): { progress: QuestNarrativeProgress; result: NarrativeEventResult } {
+): { progress: QuestNarrativeProgress; result: NarrativeEventResult; effects: NarrativeEffect[] } {
   const previous = progress.processedEvents[event.operationId];
-  if (previous) return { progress, result: previous };
+  if (previous) return { progress, result: previous, effects: [] };
   if (progress.terminalState) throw new Error('NARRATIVE_ALREADY_TERMINAL');
   const node = progress.definitionSnapshot.nodes.find((candidate) => candidate.key === progress.currentNodeKey);
   if (!node) throw new Error('NARRATIVE_NODE_NOT_FOUND');
@@ -208,7 +306,8 @@ export function applyAuthoritativeNarrativeEvent(
     matchedObjectiveKeys.push(objective.key);
     counters[objective.key] = Math.min(objective.quantity, (counters[objective.key] ?? 0) + eventAmount(event));
   }
-  let next = resolveCompletedNode({ ...progress, objectiveCounters: counters });
+  const transition = resolveCompletedNode({ ...progress, objectiveCounters: counters });
+  let next = transition.progress;
   const completedObjectiveKeys = (node.objectives ?? [])
     .filter((objective) => (next.objectiveCounters[objective.key] ?? 0) >= objective.quantity)
     .map((objective) => objective.key);
@@ -221,34 +320,38 @@ export function applyAuthoritativeNarrativeEvent(
     terminalState: next.terminalState,
   };
   next = { ...next, processedEvents: { ...next.processedEvents, [event.operationId]: result } };
-  return { progress: next, result };
+  return { progress: next, result, effects: transition.effects };
 }
 
 export function applyFailForward(
   progress: QuestNarrativeProgress,
   operationId: string,
-): { progress: QuestNarrativeProgress; result: NarrativeEventResult } {
+): { progress: QuestNarrativeProgress; result: NarrativeEventResult; effects: NarrativeEffect[] } {
   const previous = progress.processedEvents[operationId];
-  if (previous) return { progress, result: previous };
+  if (previous) return { progress, result: previous, effects: [] };
   if (progress.terminalState) throw new Error('NARRATIVE_ALREADY_TERMINAL');
   const node = progress.definitionSnapshot.nodes.find((candidate) => candidate.key === progress.currentNodeKey);
   if (!node) throw new Error('NARRATIVE_NODE_NOT_FOUND');
   if (!node.failForwardNodeKey) throw new Error('NARRATIVE_FAIL_FORWARD_NOT_AVAILABLE');
+  const entered = enterImmediateTerminal(progress, node.failForwardNodeKey);
   const result: NarrativeEventResult = {
     operationId,
     matchedObjectiveKeys: [],
     completedObjectiveKeys: [],
     nextNodeKey: node.failForwardNodeKey,
+    outcomeKey: entered.progress.outcomeKey,
+    terminalState: entered.progress.terminalState,
   };
   return {
     progress: {
-      ...progress,
-      currentNodeKey: node.failForwardNodeKey,
-      processedEvents: { ...progress.processedEvents, [operationId]: result },
+      ...entered.progress,
+      processedEvents: { ...entered.progress.processedEvents, [operationId]: result },
     },
     result,
+    effects: entered.effects,
   };
 }
+
 
 export function parseQuestNarrativeProgress(value: unknown): QuestNarrativeProgress | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;

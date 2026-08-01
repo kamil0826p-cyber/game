@@ -122,6 +122,18 @@ export function parseQuestRewards(value: unknown): QuestRewards | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+export function resolveQuestRewards(
+  fallback: QuestRewards,
+  progress: QuestProgressState,
+): QuestRewards | undefined {
+  const snapshot = progress.narrative?.definitionSnapshot;
+  const outcome = snapshot?.outcomes.find(
+    (candidate) => candidate.key === progress.narrative?.outcomeKey,
+  );
+  if (!outcome?.rewardProfileKey) return fallback;
+  return snapshot?.rewardProfiles?.[outcome.rewardProfileKey];
+}
+
 export function parseQuestProgress(value: unknown): QuestProgressState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return emptyQuestProgress();
   const source = value as { counters?: unknown; stage?: unknown; narrative?: unknown };

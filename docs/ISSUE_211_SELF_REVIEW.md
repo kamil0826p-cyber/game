@@ -2,56 +2,71 @@
 
 ## Scope implemented
 
-- Versioned reactive narrative definitions with an immutable definition snapshot stored on each active quest.
+- Versioned reactive narrative definitions with immutable definition and reward-profile snapshots on each active quest.
 - Typed conditions, objectives, effects, choices and terminal outcomes; content cannot execute code or SQL.
-- One shared condition evaluator for character, inventory, quest, consequence, guild, party, region, cycle and encounter state.
+- A shared condition evaluator plus deterministic priority-based dialogue-root resolution.
 - Server-authoritative objective events with stable operation IDs and replay-safe results.
-- Atomic, row-locked quest choices with idempotency records and a safe public projection.
+- Atomic, row-locked quest choices with database idempotency records and a safe public projection.
 - Fail-forward branches that preserve the story snapshot and prior choices.
 - Character flags, NPC relations, faction reputation, hostile-faction constraints and diminishing repeatable gains.
-- Region state with revisioning, anti-AFK/qualification checks, minimum contribution and character/group/guild caps.
-- Audit records with an operation key, event type and reason.
-- Journal/chronicle projection containing only decisions already made and their final outcome.
-- Authoring validation, path simulation and definition-version diff helpers.
-- Compatibility layer for the existing quest objective format plus a reactive `{ version, objectives, narrative }` format.
+- Region state with revisioning, qualification/anti-AFK checks, minimum contribution and character/group/guild caps.
+- Audit records with operation key, event type and reason, plus terminal-outcome analytics without dialogue text.
+- Journal/chronicle projection containing only decisions already made, current objectives, relation/reputation summaries and current-region contribution state.
+- Authoring validation, path simulation, canonical definition diff and active-snapshot migration dry-run.
+- Compatibility with the existing quest objective array and the reactive `{ version, objectives, narrative }` format.
+- Outcome-specific quest rewards resolved from the immutable active snapshot, with legacy rewards as the fallback.
 
 ## Persistence and concurrency review
 
-- Personal narrative state is namespaced under `Character.progressionData.narrative`; unrelated progression and consequence data are preserved.
+- Personal narrative state is namespaced under `Character.progressionData.narrative`; unrelated progression data is preserved.
 - Active quest snapshots and replay caches are namespaced under `CharacterQuest.progress.narrative`.
-- Choices lock the `CharacterQuest` row with `FOR UPDATE` before reading or mutating narrative progress.
-- `NarrativeOperation(scopeKey, operationId)` is the database idempotency boundary for choices, authoritative events and audits.
-- Region updates lock a single `NarrativeRegionState` row and increment its revision in the same transaction.
-- Character state uses `progressionVersion` optimistic concurrency and increments `stateVersion`; the live session is synchronized after commit.
-- Narrative tables are declared in `prisma/narrative.prisma`; Prisma configuration now loads the schema folder, preventing migration/schema drift.
+- Mutations lock the `CharacterQuest` row and then the `Character` row before evaluating state and applying effects.
+- `NarrativeOperation(scopeKey, operationId)` is the database idempotency boundary for choices, events, audits and analytics.
+- Effect audits use a request-specific scope, preventing collisions with the primary operation record and allowing repeatable stories.
+- Currency and region effect IDs are deterministic SHA-256-derived keys, preventing retries from applying an effect twice without exceeding database key lengths.
+- Region updates lock one `NarrativeRegionState` row and increment its revision in the same transaction.
+- Character state uses `progressionVersion` optimistic concurrency and increments `stateVersion`; live sessions are synchronized after commit and remain marked dirty for normal persistence.
+- Narrative tables are declared in `prisma/narrative.prisma`; Prisma configuration loads the schema folder, keeping migration and schema definitions aligned.
 
 ## Security and information-boundary review
 
-- Client-facing views include only the current node, current objectives, currently eligible choices, disclosed effects and past chronicle entries.
-- Definition snapshots and future nodes are never returned by the gateway.
-- Hidden effects are rejected by validation when they change reputation, relations, resources, access, consequences, quest state, region state or terminal outcome.
+- Client views include only the current node, current objectives, eligible choices, disclosed effects, past chronicle entries and player-visible state summaries.
+- Definition snapshots, future nodes, source-count anti-abuse data and hidden effects are not returned by the gateway.
+- Unknown runtime conditions fail closed.
+- Hidden effects are rejected when they modify relations, reputation, resources, access, consequences, quest state, region state or terminal outcome.
+- Objective definitions must use the authoritative server event assigned to their objective type.
 - Socket payloads use strict schemas and require an active in-world session.
 - All SQL statements are static tagged Prisma queries; narrative content is only bound as data.
 
 ## Self-review fixes made
 
-1. Fixed retry handling so an already completed choice returns the stored result instead of falling through an incompatible transaction result shape.
-2. Synchronized session silver and persistence revisions after committed narrative resource effects.
-3. Made quest progress comparison include the narrative snapshot, so snapshot repair is persisted even when legacy counters do not change.
-4. Prevented quest turn-in until a reactive narrative has reached a terminal outcome.
-5. Added an explicit chronicle projection so reconnects show past decisions without exposing future branches.
-6. Moved new Prisma models into a multi-file schema rather than leaving migration-only tables.
-7. Removed database foreign keys from audit/aggregate tables because the new domain file intentionally does not modify relation fields in core models; IDs remain indexed and cleanup can be handled by domain retention policy.
+1. Replays now return stored results with an empty effect list, preventing choice/event/fail-forward effects from being applied twice.
+2. Objective-completion effects and terminal-outcome effects are now returned and committed for authoritative events and fail-forward transitions.
+3. Immediate terminal nodes are resolved on entry instead of requiring an extra event.
+4. Quest and character rows are both locked before evaluating choice conditions and applying effects.
+5. Effect audit scopes no longer collide with the request operation; ledger and region keys are deterministic and bounded.
+6. Live session synchronization no longer clears unrelated dirty state.
+7. Quest progress comparison includes the narrative snapshot, so snapshot repair is persisted even when legacy counters do not change.
+8. Reactive quest turn-in and READY state require both legacy objectives and a terminal narrative outcome.
+9. Outcome-specific rewards are read from the immutable definition snapshot, so a content rollback cannot change an active quest reward.
+10. Public chronicle/state projection supports reconnects without exposing future branches.
+11. Nested definition changes and reward-profile changes are detected by canonical authoring diffs.
+12. Added dry-run validation for migrating an active snapshot to a newer definition.
+13. Unknown condition/effect/objective types, mismatched authoritative event types, invalid reward profiles and missing abandonment policies are rejected.
+14. New Prisma models live in the multi-file schema rather than existing only in a migration.
 
-## Verification performed before publication
+## Verification performed
 
-- Strict TypeScript compilation of all pure narrative modules.
-- Syntax compilation of Nest/Prisma integration, quest integration and unit test files.
-- Executed Node smoke tests for definition validation, choice/outcome transition, chronicle projection, region caps and idempotent replay.
-- Added Vitest unit suites for validator failures, immutable version snapshots, authoritative progress, idempotent choices/events, fail-forward, safe projections, faction/relationship rules, region anti-abuse, shared conditions and quest-content compatibility.
+- Strict TypeScript compilation passed for all pure narrative modules.
+- Syntax compilation passed for Nest/Prisma integration, quest integration and both Vitest files.
+- Executed Node smoke tests covering definition validation, nested diff, migration dry-run, authoritative effects, idempotent retries, choices/outcomes, fail-forward, safe public projection, region caps and region replay.
+- Added Vitest suites for validator failures, immutable version/reward snapshots, authoritative progress, idempotent choices/events, fail-forward, hidden-effect boundaries, public state projection, faction/relationship rules, region anti-abuse, shared conditions, dialogue priority, authoring diff/migration and quest-content compatibility.
 
-## Remaining review gates
+## Unavailable verification and remaining gates
 
-- Full repository `npm run typecheck`, `npm test` and `prisma validate` must run in repository CI because this execution environment does not have the project dependencies installed.
-- The current `main` still contains the merged #210 source payload under `.upload`; this implementation deliberately uses the shared typed consequence contract and namespaced state rather than copying code from another pull request. The PR should remain draft until the repository materialization/CI path confirms the complete combined tree.
-- Runtime adapters for every future merchant, portal and encounter definition should call the exported shared evaluator; this PR establishes the single evaluator and narrative gateway/service, while existing legacy definitions remain unchanged.
+- Full `npm run typecheck`, `npm test`, `npm run prisma:validate` and frontend checks could not run locally because project dependencies are unavailable and outbound DNS is disabled.
+- GitHub Actions runs `30707541588` and `30707541601`, including their failed-job reruns, ended before `checkout`: the jobs report no steps and no usable logs. They did not produce a code/test failure that can be debugged from this branch.
+- The current `main` still contains the merged #210 source payload under `.upload`. The direct consequence-service adapter must be verified after that source is materialized; this branch deliberately does not copy code from the earlier pull request.
+- Existing merchant, portal, encounter, party and world-cycle modules still need thin adapters that populate the shared resolver context.
+- The safe backend gateway projection is present, but the frontend journal/choice UI is not included in this backend-focused change set.
+- Region contribution is deterministic and idempotent, but a scheduled end-of-phase settlement/reward job remains a separate integration step.

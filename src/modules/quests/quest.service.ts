@@ -21,6 +21,7 @@ import {
   parseQuestRewards,
   parseQuestSteps,
   reconcileQuestProgress,
+  resolveQuestRewards,
   type EvaluatedQuestStep,
   type QuestProgressState,
   type QuestRewards,
@@ -86,6 +87,9 @@ export class QuestService {
       const steps = this.requireSteps(record.questDefinition);
       const parsed = withNarrativeSnapshot(record.questDefinition.steps, parseQuestProgress(record.progress));
       const progress = await this.normalizeProgress(this.prisma, record.id, steps, parsed, inventoryCounts);
+      if (!parseQuestProgress(record.progress).narrative && progress.narrative) {
+        await this.prisma.characterQuest.update({ where: { id: record.id }, data: { progress: questProgressJson(progress) } });
+      }
       return this.toLogEntry(record, progress, inventoryCounts, locale);
     }));
     const npcBindings = npcRecords.flatMap((npc): QuestNpcBindingPayload[] => {
@@ -107,15 +111,10 @@ export class QuestService {
     if (characterQuest.status === 'REWARDED') return { state: 'REWARDED' };
     const steps = this.requireSteps(quest);
     const inventoryCounts = await this.getInventoryCounts(this.prisma, characterId);
-    const progress = await this.normalizeProgress(
-      this.prisma,
-      characterQuest.id,
-      steps,
-      withNarrativeSnapshot(quest.steps, parseQuestProgress(characterQuest.progress)),
-      inventoryCounts,
-    );
+    const progress = await this.normalizeProgress(this.prisma, characterQuest.id, steps, withNarrativeSnapshot(quest.steps, parseQuestProgress(characterQuest.progress)), inventoryCounts);
     const evaluated = evaluateQuestSteps(steps, progress, inventoryCounts, 'pl');
-    if (characterQuest.status === 'COMPLETED' || (areQuestStepsComplete(evaluated) && (!progress.narrative || progress.narrative.terminalState))) return { state: 'READY' };
+    const narrativeReady = !progress.narrative || Boolean(progress.narrative.terminalState);
+    if ((characterQuest.status === 'COMPLETED' || areQuestStepsComplete(evaluated)) && narrativeReady) return { state: 'READY' };
     return { state: 'ACTIVE', activeStage: getActiveQuestStage(steps, progress) };
   }
 
@@ -157,7 +156,7 @@ export class QuestService {
       if (!characterQuest) throw new GameError(GAME_ERROR_CODES.QUEST_NOT_ACTIVE, 'errors.quests.notActive');
       if (characterQuest.status === 'REWARDED') throw new GameError(GAME_ERROR_CODES.QUEST_ALREADY_COMPLETED, 'errors.quests.alreadyCompleted');
       if (characterQuest.status !== 'ACTIVE' && characterQuest.status !== 'COMPLETED') throw new GameError(GAME_ERROR_CODES.QUEST_NOT_ACTIVE, 'errors.quests.notActive');
-      const { steps, rewards } = this.requireDefinition(characterQuest.questDefinition);
+      const { steps } = this.requireDefinition(characterQuest.questDefinition);
       const items = await transaction.inventoryItem.findMany({ where: { characterId: session.characterId }, include: { itemDefinition: { select: { key: true } } }, orderBy: { slotIndex: 'asc' } });
       const inventoryCounts = new Map<string, number>();
       for (const item of items) inventoryCounts.set(item.itemDefinition.key, (inventoryCounts.get(item.itemDefinition.key) ?? 0) + item.quantity);
@@ -165,9 +164,12 @@ export class QuestService {
       const progress = reconcileQuestProgress(steps, previousProgress, inventoryCounts);
       const narrativeReady = !progress.narrative || Boolean(progress.narrative.terminalState);
       if (!narrativeReady || !areQuestStepsComplete(evaluateQuestSteps(steps, progress, inventoryCounts, locale)) || !this.hasConsumableRequirements(inventoryCounts, consumableRequirements(steps))) {
-        if (progressChanged(previousProgress, progress)) await transaction.characterQuest.update({ where: { id: characterQuest.id }, data: { progress: questProgressJson(progress) } });
+        if (progressChanged(previousProgress, progress)) {
+          await transaction.characterQuest.update({ where: { id: characterQuest.id }, data: { progress: questProgressJson(progress) } });
+        }
         return { completed: false as const, state: 'ACTIVE' as const };
       }
+      const rewards = this.resolveRewards(characterQuest.questDefinition, progress);
       const character = await transaction.character.findUnique({ where: { id: session.characterId } });
       if (!character || character.userId !== session.userId) throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
       const claimed = await transaction.characterQuest.updateMany({
@@ -199,7 +201,7 @@ export class QuestService {
     Object.assign(session, { level: updated.level, experience: updated.experience, hp: updated.hp, maxHp: updated.maxHp, energy: updated.energy, maxEnergy: updated.maxEnergy, strength: updated.strength, agility: updated.agility, intelligence: updated.intelligence, armor: updated.armor, gold: updated.gold, silver: updated.silver });
     session.stateRevision = Math.max(session.stateRevision + 1, updated.stateVersion);
     session.persistedRevision = Math.max(session.persistedRevision, updated.stateVersion);
-    session.dirty = false;
+    session.dirty = true;
     return { questKey, state: 'REWARDED', completed: true, reward: result.reward, character: { level: updated.level, experience: updated.experience, gold: updated.gold, silver: updated.silver } };
   }
 
@@ -230,16 +232,19 @@ export class QuestService {
     inventoryCounts: ReadonlyMap<string, number>,
   ): Promise<QuestProgressState> {
     const reconciled = reconcileQuestProgress(steps, progress, inventoryCounts);
-    if (progressChanged(progress, reconciled)) await database.characterQuest.update({ where: { id: characterQuestId }, data: { progress: questProgressJson(reconciled) } });
+    if (progressChanged(progress, reconciled)) {
+      await database.characterQuest.update({ where: { id: characterQuestId }, data: { progress: questProgressJson(reconciled) } });
+    }
     return reconciled;
   }
 
   private toLogEntry(quest: CharacterQuestRecord, progress: QuestProgressState, inventoryCounts: ReadonlyMap<string, number>, locale: SupportedLocale): QuestLogEntryPayload {
-    const { steps, rewards } = this.requireDefinition(quest.questDefinition);
+    const { steps } = this.requireDefinition(quest.questDefinition);
+    const rewards = this.resolveRewards(quest.questDefinition, progress);
     const objectives = evaluateQuestSteps(steps, progress, inventoryCounts, locale);
     const legacyReady = areQuestStepsComplete(objectives);
     const narrativeReady = !progress.narrative || Boolean(progress.narrative.terminalState);
-    const status: QuestLogStatus = quest.status === 'REWARDED' ? 'REWARDED' : quest.status === 'COMPLETED' || (legacyReady && narrativeReady) ? 'READY' : 'ACTIVE';
+    const status: QuestLogStatus = quest.status === 'REWARDED' ? 'REWARDED' : (quest.status === 'COMPLETED' || legacyReady) && narrativeReady ? 'READY' : 'ACTIVE';
     const narrative = progress.narrative ? {
       definitionKey: progress.narrative.definitionKey,
       definitionVersion: progress.narrative.definitionVersion,
@@ -248,6 +253,21 @@ export class QuestService {
       terminalState: progress.narrative.terminalState,
     } : undefined;
     return { key: quest.questDefinition.key, name: quest.questDefinition.name, description: quest.questDefinition.description, status, activeStage: status === 'ACTIVE' ? getActiveQuestStage(steps, progress) : undefined, objectives, rewards, startedAt: quest.startedAt?.getTime(), completedAt: quest.completedAt?.getTime(), ...(narrative ? { narrative } : {}) };
+  }
+
+  private resolveRewards(
+    definition: { steps: Prisma.JsonValue; rewards: Prisma.JsonValue },
+    progress: QuestProgressState,
+  ): QuestRewards {
+    const fallback = parseQuestRewards(definition.rewards);
+    if (!fallback) {
+      throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
+    }
+    const selected = resolveQuestRewards(fallback, progress);
+    if (!selected) {
+      throw new GameError(GAME_ERROR_CODES.QUEST_DEFINITION_INVALID, 'errors.quests.definitionInvalid');
+    }
+    return selected;
   }
 
   private requireDefinition(definition: { steps: Prisma.JsonValue; rewards: Prisma.JsonValue }): { steps: QuestStepDefinition[]; rewards: QuestRewards } {

@@ -1,8 +1,8 @@
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import type { PlayerSession } from '../world/player-session.types.js';
 import { parseQuestNarrativeProgress } from './narrative.engine.js';
 import {
   applyRegionContribution,
@@ -23,7 +23,13 @@ import type {
 export type NarrativeDatabase = PrismaService | Prisma.TransactionClient;
 export interface QuestProgressEnvelope { counters: Record<string, number>; stage: number; narrative?: QuestNarrativeProgress; }
 export interface ProgressionEnvelope extends Record<string, unknown> { narrative?: CharacterNarrativeState; }
+export interface NarrativeActor { characterId: string; realmId: string; }
 interface StoredOperation { status?: unknown; result?: unknown; }
+
+function effectOperationId(scopeKey: string, effectKey: string): string {
+  const digest = createHash('sha256').update(`${scopeKey}:${effectKey}`).digest('hex').slice(0, 48);
+  return `narrative:${digest}`;
+}
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,6 +66,15 @@ export class NarrativePersistence {
     return initial.id;
   }
 
+  async lockCharacter(transaction: Prisma.TransactionClient, characterId: string): Promise<void> {
+    const rows = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "Character" WHERE "id" = ${characterId}::uuid FOR UPDATE
+    `);
+    if (rows.length !== 1) {
+      throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+    }
+  }
+
   async buildContext(
     database: NarrativeDatabase,
     characterId: string,
@@ -94,6 +109,7 @@ export class NarrativePersistence {
       partySize: 1,
       character: state,
       regionValues: new Map([[regionKey, new Map(Object.entries(region.values))]]),
+      regionContributions: new Map([[regionKey, region.characterContributions[characterId] ?? 0]]),
       worldCycles: new Map(),
       encounterResults: new Map(),
     };
@@ -101,7 +117,7 @@ export class NarrativePersistence {
 
   async applyDelegatedEffects(
     transaction: Prisma.TransactionClient,
-    session: PlayerSession,
+    actor: NarrativeActor,
     initialState: CharacterNarrativeState,
     effects: readonly NarrativeEffect[],
     scopeKey: string,
@@ -127,15 +143,15 @@ export class NarrativePersistence {
         case 'TAKE_RESOURCE': {
           if (effect.resourceKey !== 'SILVER') break;
           const delta = effect.type === 'GRANT_RESOURCE' ? effect.amount : -effect.amount;
-          const current = await transaction.character.findUnique({ where: { id: session.characterId }, select: { silver: true } });
+          const current = await transaction.character.findUnique({ where: { id: actor.characterId }, select: { silver: true } });
           if (!current || current.silver + delta < 0) throw new GameError(GAME_ERROR_CODES.INSUFFICIENT_SILVER, 'errors.items.insufficientSilver');
           const updated = await transaction.character.update({
-            where: { id: session.characterId }, data: { silver: { increment: delta } }, select: { silver: true },
+            where: { id: actor.characterId }, data: { silver: { increment: delta } }, select: { silver: true },
           });
           await transaction.characterCurrencyLedger.create({
             data: {
-              characterId: session.characterId,
-              operationId: `${scopeKey}:${effect.operationKey}`,
+              characterId: actor.characterId,
+              operationId: effectOperationId(scopeKey, effect.operationKey),
               currency: 'SILVER',
               direction: delta >= 0 ? 'CREDIT' : 'DEBIT',
               amount: Math.abs(delta),
@@ -149,11 +165,11 @@ export class NarrativePersistence {
         case 'CONTRIBUTE_REGION':
           await this.applyRegion(
             transaction,
-            session.realmId,
+            actor.realmId,
             effect.regionKey,
             {
-              operationId: `${scopeKey}:${effect.operationKey}`,
-              characterId: session.characterId,
+              operationId: effectOperationId(scopeKey, effect.operationKey),
+              characterId: actor.characterId,
               valueKey: effect.valueKey,
               amount: effect.amount,
               qualified: true,
@@ -163,6 +179,14 @@ export class NarrativePersistence {
             { minimumMeaningfulAmount: 1, perCharacterCap: 100, perGroupCap: 500, perGuildCap: 2_000 },
           );
           break;
+        case 'SET_QUEST_STATE':
+        case 'ACTIVATE_ENCOUNTER':
+        case 'SELECT_OUTCOME':
+          throw new GameError(
+            GAME_ERROR_CODES.QUEST_DEFINITION_INVALID,
+            'errors.quests.definitionInvalid',
+            { reason: `UNSUPPORTED_NARRATIVE_EFFECT:${effect.type}` },
+          );
         default:
           break;
       }

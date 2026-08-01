@@ -5,6 +5,7 @@ import {
   incrementObjectiveProgress,
   parseQuestNarrativeContent,
   parseQuestProgress,
+  resolveQuestRewards,
 } from '../src/modules/quests/quest.rules.js';
 
 const narrative: NarrativeDefinition = {
@@ -13,6 +14,11 @@ const narrative: NarrativeDefinition = {
   startNodeKey: 'hunt',
   repeatability: 'ONCE',
   mutuallyExclusivePathKeys: ['save', 'harvest', 'leave'],
+  abandonmentPolicy: { restartMode: 'FROM_START', questItemPolicy: 'RETURN' },
+  rewardProfiles: {
+    'saved-rabbits': { experience: 100, silver: 20, gold: 0 },
+    'harvested-rabbits': { experience: 80, silver: 40, gold: 0 },
+  },
   nodes: [
     {
       key: 'hunt',
@@ -39,8 +45,8 @@ const narrative: NarrativeDefinition = {
     },
   ],
   outcomes: [
-    { key: 'saved', terminalState: 'SUCCESS', effects: [] },
-    { key: 'harvested', terminalState: 'PARTIAL_SUCCESS', effects: [] },
+    { key: 'saved', terminalState: 'SUCCESS', rewardProfileKey: 'saved-rabbits', effects: [] },
+    { key: 'harvested', terminalState: 'PARTIAL_SUCCESS', rewardProfileKey: 'harvested-rabbits', effects: [] },
     { key: 'left', terminalState: 'ABANDONED', effects: [] },
   ],
 };
@@ -77,4 +83,19 @@ describe('reactive quest content compatibility', () => {
     expect(next.counters['rabbit-kills']).toBe(1);
     expect(next.narrative).toEqual(snapshot);
   });
+
+
+  it('uses the immutable outcome reward profile from the active snapshot', () => {
+    const source = structuredClone(narrative);
+    const snapshot = createQuestNarrativeProgress(source);
+    snapshot.outcomeKey = 'saved';
+    snapshot.terminalState = 'SUCCESS';
+    source.rewardProfiles!['saved-rabbits']!.silver = 999;
+
+    expect(resolveQuestRewards(
+      { experience: 1, silver: 1, gold: 0 },
+      { counters: {}, stage: 0, narrative: snapshot },
+    )).toEqual({ experience: 100, silver: 20, gold: 0 });
+  });
+
 });
