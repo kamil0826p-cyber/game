@@ -1,33 +1,25 @@
 import { ConnectedSocket, MessageBody, type OnGatewayDisconnect, SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
 import { z, ZodError } from 'zod';
+import { AnalyticsTrackingService } from '../../analytics/analytics-tracking.service.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { MobStatePayload } from '../../contracts/mob.events.js';
-import type { CombatSnapshot, GameSocket, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
+import type {
+  CombatSnapshot,
+  GameSocket,
+  SocketAck,
+  SocketErrorPayload,
+} from '../../contracts/socket.events.js';
+import { combatActionSchema } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import { mapTacticalCombatError } from '../combat/combat-error.mapper.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { MobCoordinatorService } from './mob-coordinator.service.js';
 import { PveCombatService } from './pve-combat.service.js';
 
 const requestId = z.string().min(1).max(64);
-const actorId = z.string().trim().min(1).max(128);
 const listSchema = z.object({ requestId }).strict();
 const requestSchema = z.object({ requestId, mobId: z.string().uuid() }).strict();
 const combatSchema = z.object({ requestId, combatId: z.string().uuid() }).strict();
-const actionSchema = z.discriminatedUnion('action', [
-  z.object({
-    requestId,
-    combatId: z.string().uuid(),
-    action: z.literal('BASIC_ATTACK'),
-    targetActorId: actorId.optional(),
-  }).strict(),
-  z.object({
-    requestId,
-    combatId: z.string().uuid(),
-    action: z.literal('SKILL'),
-    skillKey: z.string().trim().min(1).max(96).regex(/^[a-z0-9-]+$/),
-    targetActorId: actorId.optional(),
-  }).strict(),
-]);
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class MobGateway implements OnGatewayDisconnect {
@@ -36,6 +28,7 @@ export class MobGateway implements OnGatewayDisconnect {
     private readonly combat: PveCombatService,
     private readonly world: WorldStateService,
     private readonly localization: LocalizationService,
+    private readonly analytics: AnalyticsTrackingService,
   ) {}
 
   async handleDisconnect(client: GameSocket): Promise<void> {
@@ -51,14 +44,20 @@ export class MobGateway implements OnGatewayDisconnect {
     try {
       listSchema.parse(raw);
       const session = this.requireSession(client);
-      return { ok: true, data: { mapId: session.mapId, mobs: this.mobs.getMapMobs(session.mapId) } };
+      return {
+        ok: true,
+        data: { mapId: session.mapId, mobs: this.mobs.getMapMobs(session.mapId) },
+      };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
   }
 
   @SubscribeMessage('pve:getActive')
-  getActive(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): SocketAck<CombatSnapshot | null> {
+  getActive(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): SocketAck<CombatSnapshot | null> {
     try {
       listSchema.parse(raw);
       const session = this.requireSession(client);
@@ -76,7 +75,10 @@ export class MobGateway implements OnGatewayDisconnect {
     try {
       const payload = requestSchema.parse(raw);
       const session = this.requireSession(client);
-      return { ok: true, data: await this.combat.request(session.userId, session.characterId, payload.mobId) };
+      return {
+        ok: true,
+        data: await this.combat.request(session.userId, session.characterId, payload.mobId),
+      };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
@@ -88,9 +90,16 @@ export class MobGateway implements OnGatewayDisconnect {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
     try {
-      const payload = actionSchema.parse(raw);
+      const payload = combatActionSchema.parse(raw);
       const session = this.requireSession(client);
-      return { ok: true, data: await this.combat.act(session.userId, session.characterId, payload.combatId, payload) };
+      const snapshot = await this.combat.act(
+        session.userId,
+        session.characterId,
+        payload.combatId,
+        payload,
+      );
+      void this.analytics.combatActionAccepted(session, snapshot, payload);
+      return { ok: true, data: snapshot };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
@@ -104,7 +113,10 @@ export class MobGateway implements OnGatewayDisconnect {
     try {
       const payload = combatSchema.parse(raw);
       const session = this.requireSession(client);
-      return { ok: true, data: await this.combat.leave(session.userId, session.characterId, payload.combatId) };
+      return {
+        ok: true,
+        data: await this.combat.leave(session.userId, session.characterId, payload.combatId),
+      };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
@@ -120,12 +132,24 @@ export class MobGateway implements OnGatewayDisconnect {
 
   private toSocketError(error: unknown, client: GameSocket): SocketErrorPayload {
     const locale = client.data.locale ?? 'en';
-    if (error instanceof GameError) {
-      return { code: error.code, message: this.localization.translate(error.messageKey, locale), details: error.details };
+    const normalized = error instanceof GameError ? error : mapTacticalCombatError(error);
+    if (normalized) {
+      return {
+        code: normalized.code,
+        message: this.localization.translate(normalized.messageKey, locale),
+        details: normalized.details,
+      };
     }
     if (error instanceof ZodError) {
-      return { code: GAME_ERROR_CODES.INVALID_PAYLOAD, message: this.localization.translate('errors.payload.invalid', locale), details: { issues: error.issues } };
+      return {
+        code: GAME_ERROR_CODES.INVALID_PAYLOAD,
+        message: this.localization.translate('errors.payload.invalid', locale),
+        details: { issues: error.issues },
+      };
     }
-    return { code: GAME_ERROR_CODES.INTERNAL_ERROR, message: this.localization.translate('errors.internal', locale) };
+    return {
+      code: GAME_ERROR_CODES.INTERNAL_ERROR,
+      message: this.localization.translate('errors.internal', locale),
+    };
   }
 }
