@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { physicalDamageMultiplier } from '../src/modules/combat/combat.rules.js';
 import {
+  PROGRESSION_NODES,
   addStatVectors,
   applyArmorDiminishingReturns,
   applyPrimaryDiminishingReturns,
@@ -12,6 +13,22 @@ import {
 const equipment = { maxHp: 40, maxEnergy: 12, strength: 3, agility: 2, intelligence: 1, armor: 4 };
 
 describe('canonical character stats', () => {
+  it('preserves distinct class identities at every required curve checkpoint', () => {
+    for (const level of [1, 10, 25, 50, 75, 100]) {
+      const warrior = calculateCharacterStats({ characterClass: 'WARRIOR', level });
+      const mage = calculateCharacterStats({ characterClass: 'MAGE', level });
+      const archer = calculateCharacterStats({ characterClass: 'ARCHER', level });
+
+      expect(warrior.effective.maxHp, `warrior HP at level ${level}`).toBeGreaterThan(archer.effective.maxHp);
+      expect(archer.effective.maxHp, `archer HP at level ${level}`).toBeGreaterThan(mage.effective.maxHp);
+      expect(mage.effective.maxEnergy, `mage energy at level ${level}`).toBeGreaterThan(archer.effective.maxEnergy);
+      expect(archer.effective.maxEnergy, `archer energy at level ${level}`).toBeGreaterThan(warrior.effective.maxEnergy);
+      expect(warrior.effective.strength, `warrior strength at level ${level}`).toBeGreaterThan(archer.effective.strength);
+      expect(mage.effective.intelligence, `mage intelligence at level ${level}`).toBeGreaterThan(archer.effective.intelligence);
+      expect(archer.effective.agility, `archer agility at level ${level}`).toBeGreaterThan(warrior.effective.agility);
+    }
+  });
+
   it('uses class-specific automatic growth instead of uniform +2 gains', () => {
     const warrior = calculateCharacterStats({ characterClass: 'WARRIOR', level: 30 });
     const mage = calculateCharacterStats({ characterClass: 'MAGE', level: 30 });
@@ -48,6 +65,20 @@ describe('canonical character stats', () => {
     expect(endurance.effective.maxHp).toBeGreaterThan(precision.effective.maxHp);
     expect(precision.effective.agility).toBeGreaterThan(endurance.effective.agility);
     expect(endurance.points.spent).toBe(precision.points.spent);
+  });
+
+  it('exposes versioned node effects and rank limits in the authoritative snapshot', () => {
+    const snapshot = calculateCharacterStats({ characterClass: 'MAGE', level: 25 });
+    expect(snapshot.nodes).toEqual(PROGRESSION_NODES);
+    expect(snapshot.nodes.RITUAL_KNOWLEDGE.bonusesPerRank).toEqual({
+      maxHp: 0,
+      maxEnergy: 16,
+      strength: 0,
+      agility: 0,
+      intelligence: 2,
+      armor: 0,
+    });
+    expect(snapshot.nodes.RITUAL_KNOWLEDGE.maxRank).toBe(8);
   });
 
   it('explains the effective value as the exact sum of all sources', () => {
