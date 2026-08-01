@@ -1,6 +1,16 @@
 import type { CharacterClass } from '../../common/domain/game.types.js';
+import type { CombatTelegraphCounter } from '../../contracts/tactical-combat.events.js';
 
-export type SkillTargeting = 'SELF' | 'ENEMY' | 'AREA';
+export type SkillTargeting =
+  | 'SELF'
+  | 'ALLY'
+  | 'ENEMY'
+  | 'AREA'
+  | 'ALL_ALLIES'
+  | 'ALL_ENEMIES'
+  | 'FRONT_ROW'
+  | 'BACK_ROW'
+  | 'ADJACENT';
 export type SkillUnlockState =
   'UNLOCKED' | 'AVAILABLE' | 'LOCKED_LEVEL' | 'LOCKED_PREREQUISITE' | 'LOCKED_POINTS';
 
@@ -16,6 +26,7 @@ export type CombatEffectOperation =
       armorPenetration?: number;
       targetHpBelow?: number;
       bonusCoefficient?: number;
+      consumesStatusKey?: string;
     }
   | {
       type: 'APPLY_STATUS';
@@ -23,6 +34,8 @@ export type CombatEffectOperation =
       durationTurns: number;
       magnitude?: number;
       chance?: number;
+      harmful?: boolean;
+      hardControl?: boolean;
     }
   | {
       type: 'HEAL';
@@ -34,6 +47,14 @@ export type CombatEffectOperation =
       scaling: SkillScalingStat;
       coefficient: number;
       durationTurns: number;
+    }
+  | {
+      type: 'CLEANSE';
+      maximumStatuses?: number;
+    }
+  | {
+      type: 'ENERGY_TRANSFER';
+      amount: number;
     };
 
 export interface SkillVisualDefinition {
@@ -42,6 +63,13 @@ export interface SkillVisualDefinition {
   impactEffectKey: string;
   accentColor: string;
   travelMs?: number;
+}
+
+export interface SkillTelegraphDefinition {
+  reactionWindowMs: number;
+  publicIntent: string;
+  interruptible: boolean;
+  counters: readonly CombatTelegraphCounter[];
 }
 
 export interface SkillCatalogDefinition {
@@ -62,6 +90,7 @@ export interface SkillCatalogDefinition {
   effects: readonly CombatEffectOperation[];
   animationKey: string;
   visual: SkillVisualDefinition;
+  telegraph?: SkillTelegraphDefinition;
 }
 
 export interface SkillDefinitionPayload {
@@ -82,6 +111,7 @@ export interface SkillDefinitionPayload {
   effects: CombatEffectOperation[];
   animationKey: string;
   visual: SkillVisualDefinition;
+  telegraph?: SkillTelegraphDefinition;
   rank: number;
   cooldownTurnsRemaining: number;
   unlockState: SkillUnlockState;
