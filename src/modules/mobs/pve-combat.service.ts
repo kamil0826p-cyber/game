@@ -23,7 +23,6 @@ import { MapService } from '../maps/map.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import { PlayerPersistenceService } from '../persistence/player-persistence.service.js';
 import { TradeService } from '../player/trade/trade.service.js';
-import { SKILL_CATALOG } from '../skills/skill.catalog.js';
 import { SkillService } from '../skills/skill.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
@@ -352,15 +351,10 @@ export class PveCombatService implements OnModuleDestroy {
   }
 
   private async buildActor(session: PlayerSession): Promise<CombatActorInput> {
-    const tree = await this.skills.getSnapshot(session.userId, session.characterId);
-    const learned = tree.skills
-      .filter((skill) => skill.rank > 0)
-      .flatMap((skill) => {
-        const definition = SKILL_CATALOG.find((candidate) => candidate.key === skill.key);
-        return definition
-          ? [{ definition, cooldownTurnsRemaining: skill.cooldownTurnsRemaining }]
-          : [];
-      });
+    const loadout = await this.skills.getCombatLoadout(
+      session.userId,
+      session.characterId,
+    );
     return {
       actorId: session.characterId,
       kind: 'PLAYER',
@@ -377,7 +371,8 @@ export class PveCombatService implements OnModuleDestroy {
       agility: session.agility,
       intelligence: session.intelligence,
       armor: session.armor,
-      skills: learned,
+      skills: loadout.definitions,
+      fallbackAction: loadout.fallbackAction,
     };
   }
 
