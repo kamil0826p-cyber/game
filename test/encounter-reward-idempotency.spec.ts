@@ -57,18 +57,13 @@ describe('encounter reward idempotency', () => {
         findUnique: vi.fn().mockResolvedValue({
           id: 'character-id',
           userId: 'user-id',
-          silver: 25,
         }),
       },
-      characterCurrencyLedger: {
+      encounterRewardLedger: {
         findUnique: vi.fn().mockResolvedValue({
-          metadata: {
-            kind: 'ENCOUNTER_REWARD',
-            combatId: 'combat-id',
-            encounterKey: 'brood-hunt',
-            mobDefinitionKey: mob.definitionKey,
-            settlement,
-          },
+          combatId: 'combat-id',
+          encounterKey: 'brood-hunt',
+          settlement,
         }),
       },
     };
@@ -106,14 +101,14 @@ describe('encounter reward idempotency', () => {
     ).resolves.toEqual(settlement);
     expect(progression.recomputeInTransaction).not.toHaveBeenCalled();
     expect(quests.recordMobKill).not.toHaveBeenCalled();
-    expect(transaction.characterCurrencyLedger.findUnique).toHaveBeenCalledWith({
+    expect(transaction.encounterRewardLedger.findUnique).toHaveBeenCalledWith({
       where: {
         characterId_operationId: {
           characterId: 'character-id',
           operationId: 'encounter:combat-id',
         },
       },
-      select: { metadata: true },
+      select: { combatId: true, encounterKey: true, settlement: true },
     });
   });
 });
