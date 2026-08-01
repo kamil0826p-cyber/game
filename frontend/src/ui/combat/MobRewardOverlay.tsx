@@ -75,11 +75,33 @@ export function MobRewardOverlay(): React.JSX.Element | null {
           ))}
         </div>
 
+        {reward.claimQueuedLoot.length > 0 ? (
+          <div className="mt-3 rounded border border-sky-400/30 bg-sky-950/30 p-3 text-xs text-sky-100">
+            <strong className="block">
+              {locale === 'pl'
+                ? 'Pełny ekwipunek — łup zapisany do odbioru'
+                : 'Inventory full — loot saved for claim'}
+            </strong>
+            <p className="mt-1 text-sky-200/80">
+              {locale === 'pl'
+                ? 'Żaden przedmiot nie przepadł. Zwolnij miejsce i odbierz go z kolejki nagród.'
+                : 'No item was lost. Free inventory space and collect it from the reward queue.'}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {reward.claimQueuedLoot.map((item) => (
+                <li key={item.itemKey}>
+                  {item.icon} {item.name} ×{item.quantity}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         {reward.skippedLoot.length > 0 ? (
           <p className="mt-3 rounded border border-red-400/30 bg-red-950/30 p-3 text-xs text-red-200">
             {locale === 'pl'
-              ? 'Część łupu nie zmieściła się w ekwipunku.'
-              : 'Some loot did not fit in your inventory.'}
+              ? 'Nie udało się rozliczyć części łupu. Zgłoś ten przypadek administracji.'
+              : 'Some loot could not be settled. Please report this case to an administrator.'}
           </p>
         ) : null}
 
