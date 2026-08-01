@@ -13,7 +13,6 @@ import {
   getProgression,
   respecProgression,
 } from '../../game/realtime/progressionClient';
-import { gameStore } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import { Modal } from './Modal';
 
@@ -71,32 +70,16 @@ export function CharacterModal({ character, onClose }: { character: SelfCharacte
     return () => { active = false; };
   }, [connection, character.characterId]);
 
-  const applySnapshot = (snapshot: ProgressionSnapshot, silverCost = 0) => {
+  const synchronizeMutation = async (snapshot: ProgressionSnapshot): Promise<void> => {
     setProgression(snapshot);
-    const silver = Math.max(0, (character.silver ?? 0) - silverCost);
-    gameStore.updateInventoryState({
-      capacity: 0,
-      items: [],
-      silver,
-      character: {
-        hp: Math.min(character.hp, snapshot.effective.maxHp),
-        maxHp: snapshot.effective.maxHp,
-        energy: Math.min(character.energy, snapshot.effective.maxEnergy),
-        maxEnergy: snapshot.effective.maxEnergy,
-        strength: snapshot.effective.strength,
-        agility: snapshot.effective.agility,
-        intelligence: snapshot.effective.intelligence,
-        armor: snapshot.effective.armor,
-        silver,
-      },
-    });
+    await connection.getInventory();
   };
 
   const choose = async (nodeKey: ProgressionNodeKey) => {
     setBusy(true);
     setError(undefined);
     try {
-      applySnapshot(await chooseProgression(connection, nodeKey));
+      await synchronizeMutation(await chooseProgression(connection, nodeKey));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -106,11 +89,10 @@ export function CharacterModal({ character, onClose }: { character: SelfCharacte
 
   const respec = async () => {
     if (!progression) return;
-    const cost = progression.respec.silverCost;
     setBusy(true);
     setError(undefined);
     try {
-      applySnapshot(await respecProgression(connection), cost);
+      await synchronizeMutation(await respecProgression(connection));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
