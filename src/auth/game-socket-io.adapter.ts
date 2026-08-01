@@ -6,6 +6,34 @@ import { createClient } from 'redis';
 import { Server, type ServerOptions } from 'socket.io';
 import { GameConfigService } from '../config/game-config.service.js';
 
+export const GAME_SOCKET_NAMESPACE_MAX_LISTENERS = 32;
+
+interface EventEmitterLike {
+  getMaxListeners(): number;
+  setMaxListeners(maxListeners: number): unknown;
+}
+
+/**
+ * Nest registers one Socket.IO `connection` listener per gateway. All game
+ * gateways intentionally share `/game`, so the namespace can legitimately
+ * exceed Node's default warning threshold of ten listeners. Keep a bounded,
+ * namespace-local allowance instead of disabling EventEmitter warnings
+ * globally, so accidental listener growth elsewhere is still reported.
+ */
+export function configureNamespaceListenerLimit(target: unknown): void {
+  if (!target || typeof target !== 'object') return;
+  const emitter = target as Partial<EventEmitterLike>;
+  if (
+    typeof emitter.getMaxListeners !== 'function' ||
+    typeof emitter.setMaxListeners !== 'function'
+  ) return;
+
+  const currentLimit = (emitter as EventEmitterLike).getMaxListeners();
+  if (currentLimit < GAME_SOCKET_NAMESPACE_MAX_LISTENERS) {
+    (emitter as EventEmitterLike).setMaxListeners(GAME_SOCKET_NAMESPACE_MAX_LISTENERS);
+  }
+}
+
 export class GameSocketIoAdapter extends IoAdapter {
   private readonly logger = new Logger(GameSocketIoAdapter.name);
   private adapterConstructor?: ReturnType<typeof createAdapter>;
@@ -47,6 +75,15 @@ export class GameSocketIoAdapter extends IoAdapter {
     this.logger.log(
       `Socket.IO Redis adapter connected for realm ${this.config.values.GAME_REALM_SLUG}.`,
     );
+  }
+
+  override create(
+    port: number,
+    options?: ServerOptions & { namespace?: string; server?: any },
+  ): Server {
+    const socketServer = super.create(port, options);
+    if (options?.namespace) configureNamespaceListenerLimit(socketServer);
+    return socketServer;
   }
 
   createIOServer(port: number, options?: ServerOptions): Server {
