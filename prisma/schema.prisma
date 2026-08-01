@@ -222,19 +222,20 @@ model CharacterCurrencyLedger {
 }
 
 model Map {
-  id        String   @id @default(uuid()) @db.Uuid
-  realmId   String   @db.Uuid
-  key       String   @db.VarChar(96)
-  name      String   @db.VarChar(160)
-  width     Int
-  height    Int
-  zoneType  ZoneType @default(SAFE)
-  spawnX    Int
-  spawnY    Int
-  tiledData Json     @db.JsonB
-  version   Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid()) @db.Uuid
+  realmId     String   @db.Uuid
+  key         String   @db.VarChar(96)
+  name        String   @db.VarChar(160)
+  width       Int
+  height      Int
+  zoneType    ZoneType @default(SAFE)
+  spawnX      Int
+  spawnY      Int
+  tiledData   Json     @db.JsonB
+  version     Int      @default(1)
+  contentHash String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   realm              Realm           @relation("RealmMaps", fields: [realmId], references: [id], onDelete: Cascade)
   defaultForRealms   Realm[]         @relation("RealmDefaultMap")
@@ -285,6 +286,7 @@ model SkillDefinition {
   animationKey     String          @default("none") @db.VarChar(96)
   effectDefinition Json            @default("{}") @db.JsonB
   visualDefinition Json            @default("{}") @db.JsonB
+  contentHash      String?         @db.VarChar(64)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -328,6 +330,7 @@ model ItemDefinition {
   description String   @db.Text
   stackLimit  Int      @default(1)
   metadata    Json     @default("{}") @db.JsonB
+  contentHash String?  @db.VarChar(64)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -335,15 +338,16 @@ model ItemDefinition {
 }
 
 model InventoryItem {
-  id               String         @id @default(uuid()) @db.Uuid
-  characterId      String         @db.Uuid
-  itemDefinitionId String         @db.Uuid
-  quantity         Int            @default(1)
-  slotIndex        Int
-  equippedSlot     EquipmentSlot?
-  instanceData     Json           @default("{}") @db.JsonB
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                    String         @id @default(uuid()) @db.Uuid
+  characterId           String         @db.Uuid
+  itemDefinitionId      String         @db.Uuid
+  quantity              Int            @default(1)
+  slotIndex             Int
+  equippedSlot          EquipmentSlot?
+  instanceData          Json           @default("{}") @db.JsonB
+  definitionContentHash String?         @db.VarChar(64)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   character       Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
   itemDefinition  ItemDefinition   @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
@@ -361,6 +365,7 @@ model QuestDefinition {
   minimumLevel Int      @default(1)
   steps        Json     @default("[]") @db.JsonB
   rewards      Json     @default("{}") @db.JsonB
+  contentHash  String?  @db.VarChar(64)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -368,15 +373,16 @@ model QuestDefinition {
 }
 
 model CharacterQuest {
-  id                String              @id @default(uuid()) @db.Uuid
-  characterId       String              @db.Uuid
-  questDefinitionId String              @db.Uuid
-  status            QuestProgressStatus @default(NOT_STARTED)
-  progress          Json                @default("{}") @db.JsonB
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id                    String              @id @default(uuid()) @db.Uuid
+  characterId           String              @db.Uuid
+  questDefinitionId     String              @db.Uuid
+  status                QuestProgressStatus @default(NOT_STARTED)
+  progress              Json                @default("{}") @db.JsonB
+  definitionContentHash String?              @db.VarChar(64)
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
   questDefinition QuestDefinition @relation(fields: [questDefinitionId], references: [id], onDelete: Restrict)
@@ -385,16 +391,17 @@ model CharacterQuest {
 }
 
 model NpcDefinition {
-  id        String   @id @default(uuid()) @db.Uuid
-  mapId     String   @db.Uuid
-  key       String   @db.VarChar(96)
-  name      String   @db.VarChar(120)
-  x         Int
-  y         Int
-  outfitKey String   @db.VarChar(64)
-  dialogue  Json     @default("{}") @db.JsonB
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid()) @db.Uuid
+  mapId       String   @db.Uuid
+  key         String   @db.VarChar(96)
+  name        String   @db.VarChar(120)
+  x           Int
+  y           Int
+  outfitKey   String   @db.VarChar(64)
+  dialogue    Json     @default("{}") @db.JsonB
+  contentHash String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
@@ -403,19 +410,20 @@ model NpcDefinition {
 }
 
 model MobDefinition {
-  id        String   @id @default(uuid()) @db.Uuid
-  mapId     String   @db.Uuid
-  key       String   @db.VarChar(96)
-  name      String   @db.VarChar(120)
-  x         Int
-  y         Int
-  level     Int
-  outfitKey String   @db.VarChar(64)
-  stats     Json     @default("{}") @db.JsonB
-  lootTable Json     @default("[]") @db.JsonB
-  respawnMs Int      @default(30000)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid()) @db.Uuid
+  mapId       String   @db.Uuid
+  key         String   @db.VarChar(96)
+  name        String   @db.VarChar(120)
+  x           Int
+  y           Int
+  level       Int
+  outfitKey   String   @db.VarChar(64)
+  stats       Json     @default("{}") @db.JsonB
+  lootTable   Json     @default("[]") @db.JsonB
+  respawnMs   Int      @default(30000)
+  contentHash String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
@@ -530,4 +538,132 @@ model TradeOfferItem {
 
   @@unique([tradeSessionId, inventoryItemId])
   @@index([offeredByCharacterId])
+}
+
+model ContentRelease {
+  id            String    @id @default(uuid()) @db.Uuid
+  sequence      BigInt    @unique @default(autoincrement())
+  hash          String    @unique @db.VarChar(64)
+  schemaVersion Int
+  manifest      Json      @db.JsonB
+  logicalDiff   Json      @default("{}") @db.JsonB
+  status        String    @default("STAGED") @db.VarChar(24)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  activatedAt   DateTime? @db.Timestamptz(6)
+  rolledBackAt  DateTime? @db.Timestamptz(6)
+
+  states      ContentState[]
+  definitions ContentDefinition[]
+}
+
+model ContentState {
+  key             String   @id @db.VarChar(64)
+  activeReleaseId String?  @db.Uuid
+  updatedAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  activeRelease ContentRelease? @relation(fields: [activeReleaseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+}
+
+model ContentDefinition {
+  releaseId String @db.Uuid
+  section   String @db.VarChar(48)
+  key       String @db.VarChar(160)
+  body      Json   @db.JsonB
+
+  release ContentRelease @relation(fields: [releaseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([releaseId, section, key])
+  @@index([section, key])
+}
+
+model DomainEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  eventType     String   @db.VarChar(160)
+  eventVersion  Int
+  occurredAt    DateTime @default(now()) @db.Timestamptz(6)
+  serverTime    DateTime @default(now()) @db.Timestamptz(6)
+  realmId       String?  @db.Uuid
+  mapId         String?  @db.Uuid
+  characterId   String?  @db.Uuid
+  accountId     String?  @db.Uuid
+  sessionId     String?  @db.VarChar(160)
+  operationId   String?  @db.VarChar(160)
+  correlationId String?  @db.VarChar(160)
+  contentHash   String?  @db.VarChar(64)
+  clientVersion String?  @db.VarChar(64)
+  payload       Json     @default("{}") @db.JsonB
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  outbox  DomainOutbox?
+  inboxes DomainInbox[]
+
+  @@index([eventType, occurredAt])
+  @@index([characterId, occurredAt])
+  @@index([accountId, occurredAt])
+  @@index([contentHash])
+}
+
+model DomainOutbox {
+  id          BigInt    @id @default(autoincrement())
+  eventId     String    @unique @db.Uuid
+  status      String    @default("PENDING") @db.VarChar(24)
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now()) @db.Timestamptz(6)
+  lockedAt    DateTime? @db.Timestamptz(6)
+  lockedBy    String?   @db.VarChar(160)
+  lastError   String?   @db.Text
+  deliveredAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  event DomainEvent @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([status, availableAt, id])
+  @@index([lockedAt])
+}
+
+model DomainInbox {
+  consumer    String    @db.VarChar(160)
+  eventId     String    @db.Uuid
+  claimedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  processedAt DateTime? @db.Timestamptz(6)
+  resultHash  String?   @db.VarChar(64)
+
+  event DomainEvent @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([consumer, eventId])
+  @@index([processedAt])
+}
+
+model FeatureFlag {
+  id                 String    @id @default(uuid()) @db.Uuid
+  key                String    @db.VarChar(128)
+  version            Int
+  scope              String    @db.VarChar(24)
+  enabled            Boolean   @default(false)
+  rolloutBasisPoints Int       @default(0)
+  variants           Json      @default("[{\"key\":\"control\",\"weight\":10000}]") @db.JsonB
+  salt               String    @db.VarChar(128)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  disabledAt         DateTime? @db.Timestamptz(6)
+
+  assignments FeatureFlagAssignment[]
+
+  @@unique([key, version])
+  @@index([key, enabled, version])
+}
+
+model FeatureFlagAssignment {
+  id          String   @id @default(uuid()) @db.Uuid
+  flagKey     String   @db.VarChar(128)
+  flagVersion Int
+  scope       String   @db.VarChar(24)
+  subjectId   String   @db.VarChar(160)
+  bucket      Int
+  variant     String   @db.VarChar(128)
+  assignedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  flag FeatureFlag @relation(fields: [flagKey, flagVersion], references: [key, version], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([flagKey, flagVersion, scope, subjectId])
+  @@index([scope, subjectId])
 }
