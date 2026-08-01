@@ -2,6 +2,10 @@
 
 This branch implements the reactive narrative foundation described in issue #211.
 
+## Dependency preflight
+
+The current `main` contains the already-merged #210 source package under `.upload`. The pull-request materialization workflow must restore that package on this branch before narrative code is changed, preventing #211 from being built against an incomplete dependency.
+
 ## Safety constraints
 
 - Build from the current `main` branch and the already-merged #210 consequence domain.
