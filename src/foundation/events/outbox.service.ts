@@ -65,18 +65,57 @@ export function outboxConfigurationFromEnvironment(
   environment: NodeJS.ProcessEnv = process.env,
 ): OutboxConfiguration {
   return {
-    pollIntervalMs: integer(environment.OUTBOX_POLL_INTERVAL_MS, 1_000, 100, 60_000, 'OUTBOX_POLL_INTERVAL_MS'),
-    batchSize: integer(environment.OUTBOX_BATCH_SIZE, 100, 1, 1_000, 'OUTBOX_BATCH_SIZE'),
-    maxAttempts: integer(environment.OUTBOX_MAX_ATTEMPTS, 10, 1, 100, 'OUTBOX_MAX_ATTEMPTS'),
-    lockTimeoutMs: integer(environment.OUTBOX_LOCK_TIMEOUT_MS, 60_000, 1_000, 3_600_000, 'OUTBOX_LOCK_TIMEOUT_MS'),
-    retentionDays: integer(environment.ANALYTICS_RETENTION_DAYS, 90, 1, 3_650, 'ANALYTICS_RETENTION_DAYS'),
-    sampleBasisPoints: integer(environment.ANALYTICS_SAMPLE_BASIS_POINTS, 10_000, 0, 10_000, 'ANALYTICS_SAMPLE_BASIS_POINTS'),
+    pollIntervalMs: integer(
+      environment.OUTBOX_POLL_INTERVAL_MS,
+      1_000,
+      100,
+      60_000,
+      'OUTBOX_POLL_INTERVAL_MS',
+    ),
+    batchSize: integer(
+      environment.OUTBOX_BATCH_SIZE,
+      100,
+      1,
+      1_000,
+      'OUTBOX_BATCH_SIZE',
+    ),
+    maxAttempts: integer(
+      environment.OUTBOX_MAX_ATTEMPTS,
+      10,
+      1,
+      100,
+      'OUTBOX_MAX_ATTEMPTS',
+    ),
+    lockTimeoutMs: integer(
+      environment.OUTBOX_LOCK_TIMEOUT_MS,
+      60_000,
+      1_000,
+      3_600_000,
+      'OUTBOX_LOCK_TIMEOUT_MS',
+    ),
+    retentionDays: integer(
+      environment.ANALYTICS_RETENTION_DAYS,
+      90,
+      1,
+      3_650,
+      'ANALYTICS_RETENTION_DAYS',
+    ),
+    sampleBasisPoints: integer(
+      environment.ANALYTICS_SAMPLE_BASIS_POINTS,
+      10_000,
+      0,
+      10_000,
+      'ANALYTICS_SAMPLE_BASIS_POINTS',
+    ),
   };
 }
 
 export function retryDelayMs(attempt: number): number {
   const normalized = Math.max(1, Math.floor(attempt));
-  return Math.min(60 * 60 * 1_000, 1_000 * 2 ** Math.min(12, normalized - 1));
+  return Math.min(
+    60 * 60 * 1_000,
+    1_000 * 2 ** Math.min(12, normalized - 1),
+  );
 }
 
 export function deterministicSampleBucket(eventId: string): number {
@@ -146,7 +185,8 @@ export class OutboxService implements OnModuleInit, OnApplicationShutdown {
       const sampledOut = claimed.filter(
         (row) =>
           !isCriticalDomainEvent(row.eventType) &&
-          deterministicSampleBucket(row.id) >= this.configuration.sampleBasisPoints,
+          deterministicSampleBucket(row.id) >=
+            this.configuration.sampleBasisPoints,
       );
       const publishable = claimed.filter((row) => !sampledOut.includes(row));
       if (sampledOut.length > 0) {
@@ -159,7 +199,9 @@ export class OutboxService implements OnModuleInit, OnApplicationShutdown {
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
           await this.markFailed(publishable, message);
-          this.logger.warn(`Analytics delivery failed without blocking gameplay: ${message}`);
+          this.logger.warn(
+            `Analytics delivery failed without blocking gameplay: ${message}`,
+          );
         }
       }
       await this.cleanupRetentionIfDue();
@@ -174,7 +216,10 @@ export class OutboxService implements OnModuleInit, OnApplicationShutdown {
     this.timer = setTimeout(() => {
       void this.drainOnce()
         .catch((error: unknown) => {
-          this.logger.error('Outbox worker iteration failed.', error instanceof Error ? error.stack : String(error));
+          this.logger.error(
+            'Outbox worker iteration failed.',
+            error instanceof Error ? error.stack : String(error),
+          );
         })
         .finally(() => this.schedule(this.configuration.pollIntervalMs));
     }, delayMs);
@@ -253,7 +298,10 @@ export class OutboxService implements OnModuleInit, OnApplicationShutdown {
     `);
   }
 
-  private async markFailed(rows: readonly ClaimedOutboxEvent[], message: string): Promise<void> {
+  private async markFailed(
+    rows: readonly ClaimedOutboxEvent[],
+    message: string,
+  ): Promise<void> {
     for (const row of rows) {
       const dead = row.attempts >= this.configuration.maxAttempts;
       const delaySeconds = retryDelayMs(row.attempts) / 1_000;
@@ -280,8 +328,13 @@ export class OutboxService implements OnModuleInit, OnApplicationShutdown {
     await this.prisma.$transaction(async (transaction) => {
       await transaction.$executeRaw(Prisma.sql`
         DELETE FROM "DomainOutbox"
-        WHERE "status" = 'DELIVERED'
+        WHERE (
+          "status" = 'DELIVERED'
           AND "deliveredAt" < CURRENT_TIMESTAMP - make_interval(days => ${this.configuration.retentionDays})
+        ) OR (
+          "status" = 'DEAD'
+          AND "createdAt" < CURRENT_TIMESTAMP - make_interval(days => ${this.configuration.retentionDays})
+        )
       `);
       await transaction.$executeRaw(Prisma.sql`
         DELETE FROM "DomainEvent" event
