@@ -289,6 +289,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGER "TradeSession_completed_domain_event_trigger"
+CREATE TRIGGER "TradeSession_completed_domain_event_trigger"
 AFTER INSERT OR UPDATE OF "status" ON "TradeSession"
 FOR EACH ROW EXECUTE FUNCTION "emit_trade_completed_domain_event"();
