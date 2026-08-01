@@ -4,6 +4,6 @@
   right: auto !important;
   left: 50% !important;
   box-sizing: border-box;
-  margin: 0 !important;
-  transform: translate3d(-50%, 0, 0) !important;
+  margin: 0 auto !important;
+  overflow-y:auto
 }
