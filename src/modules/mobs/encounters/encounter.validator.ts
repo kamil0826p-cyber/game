@@ -10,6 +10,7 @@ export interface EncounterValidationResult {
 }
 
 const skillByKey = new Map(SKILL_CATALOG.map((skill) => [skill.key, skill]));
+const stableKey = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function validateEncounterDefinition(
   definition: EncounterDefinition,
@@ -19,7 +20,7 @@ export function validateEncounterDefinition(
   const prefix = `${definition.key}@${definition.version}`;
   const actorKeys = new Set(definition.actors.map((actor) => actor.key));
 
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(definition.key)) {
+  if (!stableKey.test(definition.key)) {
     errors.push(`${prefix}: key must be a stable kebab-case identifier.`);
   }
   if (!Number.isInteger(definition.version) || definition.version < 1) {
@@ -49,6 +50,9 @@ export function validateEncounterDefinition(
   }
 
   for (const actor of definition.actors) {
+    if (!stableKey.test(actor.key)) {
+      errors.push(`${prefix}: actor key ${actor.key} must be a stable kebab-case identifier.`);
+    }
     if (actor.role !== actor.ai.role) {
       errors.push(`${prefix}: ${actor.key} has inconsistent actor and AI roles.`);
     }
@@ -113,7 +117,9 @@ export function validateEncounterDefinition(
       tier.healthMultiplier <= 0 ||
       tier.powerMultiplier <= 0 ||
       tier.rewardMultiplier <= 0 ||
-      tier.targetTurns < 1
+      tier.targetTurns < 1 ||
+      tier.telegraphTargetCount < 1 ||
+      tier.breakCapacity < 1
     ) {
       errors.push(`${prefix}: tier ${tier.minPartySize} has invalid numeric scaling.`);
     }
@@ -128,17 +134,67 @@ export function validateEncounterDefinition(
   const phaseKeys = new Set<string>();
   const summonKeys = new Set<string>();
   definition.phases.forEach((phase, index) => {
+    if (!stableKey.test(phase.key)) {
+      errors.push(`${prefix}: phase key ${phase.key} must be a stable kebab-case identifier.`);
+    }
     if (phaseKeys.has(phase.key)) errors.push(`${prefix}: duplicate phase ${phase.key}.`);
     phaseKeys.add(phase.key);
     if (index > 0 && phase.conditions.length === 0) {
       errors.push(`${prefix}: phase ${phase.key} is unreachable because it has no transition condition.`);
     }
     for (const condition of phase.conditions) {
-      if ('ratio' in condition && (condition.ratio <= 0 || condition.ratio >= 1)) {
-        errors.push(`${prefix}: phase ${phase.key} has an invalid health ratio.`);
-      }
-      if ('actorKey' in condition && !actorKeys.has(condition.actorKey)) {
-        errors.push(`${prefix}: phase ${phase.key} references missing actor ${condition.actorKey}.`);
+      switch (condition.type) {
+        case 'TURN_AT_LEAST':
+          if (!Number.isInteger(condition.turn) || condition.turn < 1) {
+            errors.push(`${prefix}: phase ${phase.key} has an invalid turn condition.`);
+          }
+          break;
+        case 'ENEMY_HP_AT_MOST':
+        case 'ACTOR_HP_AT_MOST':
+          if (condition.ratio <= 0 || condition.ratio >= 1) {
+            errors.push(`${prefix}: phase ${phase.key} has an invalid health ratio.`);
+          }
+          if (condition.type === 'ACTOR_HP_AT_MOST' && !actorKeys.has(condition.actorKey)) {
+            errors.push(`${prefix}: phase ${phase.key} references missing actor ${condition.actorKey}.`);
+          }
+          break;
+        case 'ACTOR_DEFEATED':
+        case 'STATUS_ACTIVE':
+        case 'BREAK_AT_LEAST':
+          if (!actorKeys.has(condition.actorKey)) {
+            errors.push(`${prefix}: phase ${phase.key} references missing actor ${condition.actorKey}.`);
+          }
+          if (
+            condition.type === 'STATUS_ACTIVE' &&
+            (!condition.statusKey || condition.statusKey.trim() !== condition.statusKey)
+          ) {
+            errors.push(`${prefix}: phase ${phase.key} has an invalid status key.`);
+          }
+          if (
+            condition.type === 'BREAK_AT_LEAST' &&
+            (!Number.isInteger(condition.stacks) || condition.stacks < 1)
+          ) {
+            errors.push(`${prefix}: phase ${phase.key} has an invalid break threshold.`);
+          }
+          break;
+        case 'TELEGRAPH_RESOLVED':
+          if (!skillByKey.has(condition.skillKey)) {
+            errors.push(`${prefix}: phase ${phase.key} references missing skill ${condition.skillKey}.`);
+          }
+          if (!definition.telegraphs.some((rule) => rule.skillKey === condition.skillKey)) {
+            errors.push(`${prefix}: phase ${phase.key} references undeclared telegraph ${condition.skillKey}.`);
+          }
+          break;
+        case 'LIVING_PLAYERS_AT_MOST':
+          if (!Number.isInteger(condition.count) || condition.count < 0) {
+            errors.push(`${prefix}: phase ${phase.key} has an invalid living-player threshold.`);
+          }
+          break;
+        case 'INTERACTION_USED':
+          if (!stableKey.test(condition.interactionKey)) {
+            errors.push(`${prefix}: phase ${phase.key} has an invalid interaction key.`);
+          }
+          break;
       }
     }
     for (const actorKey of phase.summonActorKeys ?? []) {
@@ -168,9 +224,9 @@ export function validateEncounterDefinition(
   }
   if (
     definition.defeat.type === 'TURN_LIMIT' &&
-    (!definition.defeat.turnLimit || definition.defeat.turnLimit < 1)
+    (!definition.defeat.turnLimit || !Number.isInteger(definition.defeat.turnLimit) || definition.defeat.turnLimit < 1)
   ) {
-    errors.push(`${prefix}: turn-limit defeat requires a positive limit.`);
+    errors.push(`${prefix}: turn-limit defeat requires a positive integer limit.`);
   }
   if (
     definition.reward.minimumActiveTurnRatio < 0 ||
