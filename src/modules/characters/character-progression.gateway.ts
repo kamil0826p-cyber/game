@@ -7,35 +7,49 @@ import {
 } from '@nestjs/websockets';
 import { z, ZodError, type ZodType } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
-import type { GameSocket, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
+import type {
+  GameSocket,
+  SocketAck,
+  SocketErrorPayload,
+} from '../../contracts/socket.events.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
-import { MILESTONE_KEYS, type MilestoneRanks } from './progression/character-progression.rules.js';
+import {
+  MILESTONE_KEYS,
+  type MilestoneRanks,
+} from './progression/character-progression.rules.js';
 import { CharacterProgressionService } from './progression/character-progression.service.js';
 import type { CharacterProgressionSnapshot } from './progression/character-progression.types.js';
 
 const requestId = z.string().trim().min(1).max(64);
 const progressionRequestSchema = z.object({ requestId }).strict();
-const milestoneAllocateSchema = z.object({
-  requestId,
-  milestoneKey: z.enum(MILESTONE_KEYS),
-}).strict();
-const milestoneSelectionSchema = z.object({
-  key: z.enum(MILESTONE_KEYS),
-  rank: z.number().int().min(0).max(5),
-}).strict();
-const respecSchema = z.object({
-  requestId,
-  operationId: z.string().trim().min(1).max(64),
-  milestones: z.array(milestoneSelectionSchema).max(MILESTONE_KEYS.length).default([]),
-}).strict().superRefine((value, context) => {
-  const keys = value.milestones.map((milestone) => milestone.key);
-  if (new Set(keys).size !== keys.length) {
-    context.addIssue({ code: 'custom', message: 'Duplicate milestone key.' });
-  }
-});
+const milestoneAllocateSchema = z
+  .object({
+    requestId,
+    milestoneKey: z.enum(MILESTONE_KEYS),
+  })
+  .strict();
+const milestoneSelectionSchema = z
+  .object({
+    key: z.enum(MILESTONE_KEYS),
+    rank: z.number().int().min(0).max(5),
+  })
+  .strict();
+const respecSchema = z
+  .object({
+    requestId,
+    operationId: z.string().trim().min(1).max(64),
+    milestones: z.array(milestoneSelectionSchema).max(MILESTONE_KEYS.length).default([]),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const keys = value.milestones.map((milestone) => milestone.key);
+    if (new Set(keys).size !== keys.length) {
+      context.addIssue({ code: 'custom', message: 'Duplicate milestone key.' });
+    }
+  });
 
 type ProgressionRequest = z.infer<typeof progressionRequestSchema>;
 type MilestoneAllocateRequest = z.infer<typeof milestoneAllocateSchema>;
@@ -135,11 +149,11 @@ export class CharacterProgressionGateway {
     session.dirty = true;
   }
 
-  private toMilestoneRanks(
-    milestones: RespecRequest['milestones'],
-  ): MilestoneRanks {
+  private toMilestoneRanks(milestones: RespecRequest['milestones']): MilestoneRanks {
     return Object.fromEntries(
-      milestones.filter((milestone) => milestone.rank > 0).map((milestone) => [milestone.key, milestone.rank]),
+      milestones
+        .filter((milestone) => milestone.rank > 0)
+        .map((milestone) => [milestone.key, milestone.rank]),
     ) as MilestoneRanks;
   }
 
@@ -157,6 +171,13 @@ export class CharacterProgressionGateway {
         code: GAME_ERROR_CODES.INVALID_PAYLOAD,
         message: this.localization.translate('errors.payload.invalid', locale),
         details: { issues: error.issues },
+      };
+    }
+    if (error instanceof Error && error.message.startsWith('MILESTONE_')) {
+      return {
+        code: GAME_ERROR_CODES.INVALID_PAYLOAD,
+        message: this.localization.translate('errors.payload.invalid', locale),
+        details: { reason: error.message },
       };
     }
     this.logger.error(
