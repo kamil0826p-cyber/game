@@ -142,6 +142,7 @@ export interface CombatActorInput extends Omit<
   skills: readonly CombatRuntimeSkill[];
   fallbackAction?: CombatFallbackAction;
   magicResistance?: number;
+  formationPreference?: CombatFormationLine;
 }
 
 export interface CombatTeamInput {
