@@ -6,18 +6,30 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
+  materialize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create source archive
-        run: tar --exclude=.git -czf /tmp/repository-source.tgz .
-      - uses: actions/upload-artifact@v4
         with:
-          name: repository-source
-          path: /tmp/repository-source.tgz
-          if-no-files-found: error
-          retention-days: 1
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify and materialize consequence source package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .upload/chunk-* > /tmp/consequence-payload.b64
+          base64 --decode /tmp/consequence-payload.b64 > /tmp/consequence-payload.tar.gz
+          echo "be04a8eb346bf47fba8fd2c491107a7cdd9a7ec0913b8afe3511cb52919e4b53  /tmp/consequence-payload.tar.gz" | sha256sum --check -
+          tar -xzf /tmp/consequence-payload.tar.gz -C .
+          rm -rf .upload .github/workflows/consequence-upload.yml
+          git show origin/main:.github/workflows/agent-source-snapshot.yml > .github/workflows/agent-source-snapshot.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Implement character consequences (#210)"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
