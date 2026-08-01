@@ -23,6 +23,9 @@ const CATEGORY_NAMES: readonly ContentCategory[] = [
 ];
 
 const objectIdentity = (value: Record<string, unknown>): string | undefined => {
+  if (typeof value.category === 'string' && typeof value.key === 'string') {
+    return `category:${value.category}:key:${value.key}`;
+  }
   if (typeof value.key === 'string') return `key:${value.key}`;
   if (typeof value.id === 'string') return `id:${value.id}`;
   if (
@@ -61,7 +64,11 @@ export function canonicalizeContentValue(value: unknown): unknown {
   const input = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   for (const key of Object.keys(input).sort()) {
-    if (['databaseId', 'createdAt', 'updatedAt', 'resolvedSourceUrl'].includes(key)) continue;
+    if (
+      ['databaseId', 'createdAt', 'updatedAt', 'resolvedSourceUrl'].includes(key)
+    ) {
+      continue;
+    }
     const nested = input[key];
     if (nested === undefined) continue;
     output[key] = canonicalizeContentValue(nested);
@@ -77,7 +84,9 @@ export function stableContentHash(value: unknown): string {
   return createHash('sha256').update(stableContentJson(value)).digest('hex');
 }
 
-export function compileContentPackage(manifest: ContentManifest): CompiledContentPackage {
+export function compileContentPackage(
+  manifest: ContentManifest,
+): CompiledContentPackage {
   const { sourceFingerprints: _sourceFingerprints, ...mechanicalContent } = manifest;
   const canonicalJson = stableContentJson(mechanicalContent);
   return {
@@ -110,10 +119,17 @@ export function logicalContentDiff(
   for (const category of CATEGORY_NAMES) {
     const previousEntries = before.get(category)!;
     const nextEntries = after.get(category)!;
-    const added = [...nextEntries.keys()].filter((key) => !previousEntries.has(key)).sort();
-    const removed = [...previousEntries.keys()].filter((key) => !nextEntries.has(key)).sort();
+    const added = [...nextEntries.keys()]
+      .filter((key) => !previousEntries.has(key))
+      .sort();
+    const removed = [...previousEntries.keys()]
+      .filter((key) => !nextEntries.has(key))
+      .sort();
     const changed = [...nextEntries.keys()]
-      .filter((key) => previousEntries.has(key) && previousEntries.get(key) !== nextEntries.get(key))
+      .filter(
+        (key) =>
+          previousEntries.has(key) && previousEntries.get(key) !== nextEntries.get(key),
+      )
       .sort();
     if (added.length > 0) diff.added[category] = added;
     if (removed.length > 0) diff.removed[category] = removed;

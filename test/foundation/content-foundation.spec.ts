@@ -83,6 +83,21 @@ describe('versioned content foundation', () => {
     expect(stableContentHash(left)).toBe(stableContentHash(right));
   });
 
+  it('keeps snapshot hashes stable when different categories reuse the same key', () => {
+    const left = {
+      schemaVersion: 1,
+      records: [
+        { category: 'items', key: 'shared', payload: { value: 1 } },
+        { category: 'quests', key: 'shared', payload: { value: 2 } },
+      ],
+    };
+    const right = {
+      schemaVersion: 1,
+      records: [...left.records].reverse(),
+    };
+    expect(stableContentHash(left)).toBe(stableContentHash(right));
+  });
+
   it('accepts a fully connected manifest', () => {
     expect(validateContentManifest(validManifest())).toEqual([]);
   });
