@@ -194,18 +194,19 @@ model Character {
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Restrict)
   map   Map   @relation(fields: [mapId], references: [id], onDelete: Restrict)
 
-  skills               CharacterSkill[]
-  inventoryItems       InventoryItem[]
-  quests               CharacterQuest[]
-  currencyLedger       CharacterCurrencyLedger[]
-  sentChatMessages     ChatMessage[]             @relation("ChatSender")
-  receivedWhispers     ChatMessage[]             @relation("ChatTarget")
-  initiatedTrades      TradeSession[]            @relation("TradeInitiator")
-  receivedTrades       TradeSession[]            @relation("TradeRecipient")
-  tradeOffers          TradeOfferItem[]
-  guildMembership      GuildMember?
-  sentGuildInvites     GuildInvite[]              @relation("GuildInviteSender")
-  receivedGuildInvites GuildInvite[]              @relation("GuildInviteTarget")
+  skills                CharacterSkill[]
+  inventoryItems        InventoryItem[]
+  quests                CharacterQuest[]
+  currencyLedger        CharacterCurrencyLedger[]
+  encounterRewardLedger EncounterRewardLedger[]
+  sentChatMessages      ChatMessage[]             @relation("ChatSender")
+  receivedWhispers      ChatMessage[]             @relation("ChatTarget")
+  initiatedTrades       TradeSession[]            @relation("TradeInitiator")
+  receivedTrades        TradeSession[]            @relation("TradeRecipient")
+  tradeOffers           TradeOfferItem[]
+  guildMembership       GuildMember?
+  sentGuildInvites      GuildInvite[]              @relation("GuildInviteSender")
+  receivedGuildInvites  GuildInvite[]              @relation("GuildInviteTarget")
 
   @@unique([realmId, name])
   @@index([userId, realmId])
@@ -228,6 +229,23 @@ model CharacterCurrencyLedger {
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@unique([characterId, operationId])
+  @@index([characterId, createdAt])
+}
+
+model EncounterRewardLedger {
+  id           String   @id @default(uuid()) @db.Uuid
+  characterId  String   @db.Uuid
+  operationId  String   @db.VarChar(128)
+  combatId     String   @db.Uuid
+  encounterKey String   @db.VarChar(96)
+  settlement   Json     @db.JsonB
+  createdAt    DateTime @default(now())
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, operationId])
+  @@unique([characterId, combatId])
+  @@index([combatId])
   @@index([characterId, createdAt])
 }
 
