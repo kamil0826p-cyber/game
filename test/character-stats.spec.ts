@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { physicalDamageMultiplier } from '../src/modules/combat/combat.rules.js';
 import {
   addStatVectors,
+  applyArmorDiminishingReturns,
+  applyPrimaryDiminishingReturns,
   calculateCharacterStats,
   progressionPointsForLevel,
+  subtractStatVectors,
 } from '../src/modules/progression/character-stats.js';
 
 const equipment = { maxHp: 40, maxEnergy: 12, strength: 3, agility: 2, intelligence: 1, armor: 4 };
@@ -65,7 +69,37 @@ describe('canonical character stats', () => {
     ));
   });
 
-  it('applies documented diminishing returns to derived power and armor', () => {
+  it('preserves an existing effective build exactly through the legacy migration adjustment', () => {
+    const oldEffective = {
+      maxHp: 777,
+      maxEnergy: 333,
+      strength: 91,
+      agility: 67,
+      intelligence: 24,
+      armor: 58,
+    };
+    const canonical = calculateCharacterStats({ characterClass: 'WARRIOR', level: 42, equipment });
+    const legacyAdjustment = subtractStatVectors(
+      oldEffective,
+      canonical.sources.base,
+      canonical.sources.automaticProgression,
+      canonical.sources.milestoneChoices,
+      canonical.sources.equipment,
+      canonical.sources.temporary,
+    );
+    const migrated = calculateCharacterStats({
+      characterClass: 'WARRIOR',
+      level: 42,
+      equipment,
+      legacyAdjustment,
+    });
+    expect(migrated.effective).toEqual(oldEffective);
+  });
+
+  it('uses the same hard caps for UI derivation and production armor mitigation', () => {
+    expect(applyPrimaryDiminishingReturns(1_000)).toBe(140);
+    expect(applyArmorDiminishingReturns(1_000)).toBe(100);
+    expect(physicalDamageMultiplier(1_000)).toBe(physicalDamageMultiplier(160));
     const snapshot = calculateCharacterStats({
       characterClass: 'WARRIOR',
       level: 100,
