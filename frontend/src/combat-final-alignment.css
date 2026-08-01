@@ -1,0 +1,9 @@
+/* Final viewport-level alignment overrides for tactical combat. */
+.combat-arena-root > ol[aria-live='polite'] {
+  position: fixed !important;
+  right: auto !important;
+  left: 50% !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  transform: translate3d(-50%, 0, 0) !important;
+}

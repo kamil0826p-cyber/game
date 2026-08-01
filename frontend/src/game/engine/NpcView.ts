@@ -46,7 +46,7 @@ export class NpcView {
     this.sprite.zIndex = 2;
 
     const interactionMarker = new Text({ text: '', style: { fill: 0xfbbf24, fontSize: 16, fontWeight: 'bold', stroke: { color: 0x451a03, width: 3 } } });
-    interactionMarker.anchor.set(0.5); interactionMarker.position.set(0, -48); interactionMarker.zIndex = 3;
+    interactionMarker.anchor.set(0.5); interactionMarker.position.set(0, -56); interactionMarker.zIndex = 3;
     const refreshMarker = () => {
       if (npc.interactionType === 'MERCHANT') interactionMarker.text = '¤';
       else if (npc.interactionType !== 'QUEST') interactionMarker.text = '…';
