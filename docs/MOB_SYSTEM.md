@@ -34,9 +34,9 @@ Phase summons are inserted as normal actors into the existing combat team and tu
 
 ## Contributions and rewards
 
-Reward eligibility measures damage, healing, shields/protection, cleanses, interrupts and mechanic actions. Withdrawn, late, inactive and zero-contribution characters can be excluded with a clear reason; support is not evaluated only by damage.
+Reward eligibility measures damage, healing, shields/protection, cleanses, interrupts and mechanic actions. Timeout-generated fallback actions are not counted as participation. Withdrawn, late, inactive and zero-contribution characters can be excluded with a clear reason; support is not evaluated only by damage.
 
-Encounter XP is scaled and then split among eligible players. Loot stays personal. The complete settlement is recorded transactionally in the existing currency ledger under a unique `encounter:<combatId>` operation. Replaying completion returns that stored settlement instead of granting XP, inventory items or quest progress again.
+Encounter XP is scaled and then split among eligible players. Loot stays personal. The complete settlement is recorded transactionally in `EncounterRewardLedger` under a unique `encounter:<combatId>` operation, with additional uniqueness on character and combat. Replaying completion returns that stored settlement instead of granting XP, inventory items or quest progress again.
 
 ## Respawn lifecycle
 
