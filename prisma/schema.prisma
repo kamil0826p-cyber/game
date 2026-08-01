@@ -175,10 +175,14 @@ model Character {
   silver       Int @default(0)
   gold         Int @default(0)
 
-  stateVersion Int      @default(0)
-  lastSavedAt  DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  progressionVersion    Int       @default(0)
+  progressionData       Json      @default("{}") @db.JsonB
+  freeRespecAvailable   Boolean   @default(true)
+  progressionMigratedAt DateTime?
+  stateVersion          Int       @default(0)
+  lastSavedAt           DateTime  @default(now())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Restrict)
@@ -268,25 +272,25 @@ model Portal {
 }
 
 model SkillDefinition {
-  id               String          @id @default(uuid()) @db.Uuid
-  key              String          @unique @db.VarChar(96)
-  name             String          @db.VarChar(120)
-  description      String          @db.Text
+  id               String         @id @default(uuid()) @db.Uuid
+  key              String         @unique @db.VarChar(96)
+  name             String         @db.VarChar(120)
+  description      String         @db.Text
   requiredClass    CharacterClass?
-  minimumLevel     Int             @default(1)
-  energyCost       Int             @default(0)
-  cooldownTurns    Int             @default(0)
-  targeting        SkillTargeting  @default(ENEMY)
-  maxRank          Int             @default(1)
-  displayOrder     Int             @default(0)
-  treeRow          Int             @default(0)
-  treeColumn       Int             @default(0)
-  icon             String          @default("✦") @db.VarChar(16)
-  animationKey     String          @default("none") @db.VarChar(96)
-  effectDefinition Json            @default("{}") @db.JsonB
-  visualDefinition Json            @default("{}") @db.JsonB
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  minimumLevel     Int            @default(1)
+  energyCost       Int            @default(0)
+  cooldownTurns    Int            @default(0)
+  targeting        SkillTargeting @default(ENEMY)
+  maxRank          Int            @default(1)
+  displayOrder     Int            @default(0)
+  treeRow          Int            @default(0)
+  treeColumn       Int            @default(0)
+  icon             String         @default("✦") @db.VarChar(16)
+  animationKey     String         @default("none") @db.VarChar(96)
+  effectDefinition Json           @default("{}") @db.JsonB
+  visualDefinition Json           @default("{}") @db.JsonB
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   characterSkills CharacterSkill[]
   prerequisites   SkillPrerequisite[] @relation("SkillPrerequisites")
