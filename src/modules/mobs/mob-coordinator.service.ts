@@ -166,6 +166,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
           nextLevelExperience: settlement.nextLevelExperience,
           loot: settlement.loot,
           skippedLoot: settlement.skippedLoot,
+          claimQueuedLoot: settlement.claimQueuedLoot,
           self: this.world.toSelfState(session),
         };
         this.publisher.emit(session.socketId, 'mob:rewards', payload);
