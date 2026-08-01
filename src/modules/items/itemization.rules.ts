@@ -62,6 +62,9 @@ export const itemSnapshotHash = (snapshot: ItemInstanceSnapshot): string =>
 const finiteInteger = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : fallback;
 
+const isInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value);
+
 export const parseItemDefinitionMetadata = (value: Prisma.JsonValue): ItemDefinitionMetadata => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('ITEM_METADATA_INVALID');
@@ -70,13 +73,36 @@ export const parseItemDefinitionMetadata = (value: Prisma.JsonValue): ItemDefini
   if (!ITEM_CATEGORIES.has(String(raw.category))) throw new Error('ITEM_CATEGORY_INVALID');
   if (!ITEM_RARITIES.has(String(raw.rarity))) throw new Error('ITEM_RARITY_INVALID');
   if (typeof raw.icon !== 'string' || raw.icon.length === 0) throw new Error('ITEM_ICON_INVALID');
-  if (!Number.isInteger(raw.buyPriceSilver) || !Number.isInteger(raw.sellPriceSilver)) {
+  if (!isInteger(raw.buyPriceSilver) || !isInteger(raw.sellPriceSilver)) {
     throw new Error('ITEM_PRICE_INVALID');
   }
   const metadata = raw as unknown as ItemDefinitionMetadata;
   if (metadata.category === 'EQUIPMENT') {
     if (!metadata.equipmentSlot) throw new Error('ITEM_EQUIPMENT_SLOT_INVALID');
     if (finiteInteger(metadata.minimumLevel, 0) < 1) throw new Error('ITEM_LEVEL_INVALID');
+  }
+  if (metadata.mechanics) {
+    if (
+      metadata.mechanics.version !== 1 ||
+      !metadata.mechanics.archetypeKey ||
+      !isInteger(metadata.mechanics.powerLevel) ||
+      metadata.mechanics.powerLevel < 1 ||
+      !isInteger(metadata.mechanics.powerBudget) ||
+      metadata.mechanics.powerBudget < 0
+    ) {
+      throw new Error('ITEM_MECHANICS_INVALID');
+    }
+    const count = metadata.mechanics.affixCount;
+    if (
+      count &&
+      (!isInteger(count.minimum) ||
+        !isInteger(count.maximum) ||
+        count.minimum < 0 ||
+        count.maximum < count.minimum ||
+        count.maximum > 2)
+    ) {
+      throw new Error('ITEM_AFFIX_COUNT_INVALID');
+    }
   }
   return metadata;
 };
@@ -105,12 +131,12 @@ const rollValue = (definition: ItemAffixDefinition, random: SeededRandom): numbe
 
 const affixConflicts = (
   definition: ItemAffixDefinition,
-  selected: readonly RolledItemAffix[],
+  selectedDefinitions: readonly ItemAffixDefinition[],
 ): boolean => {
-  const selectedTags = new Set(selected.flatMap((affix) => affix.tags));
+  const selectedTags = new Set(selectedDefinitions.flatMap((affix) => affix.tags));
   if (definition.incompatibleTags.some((tag) => selectedTags.has(tag))) return true;
-  return selected.some((affix) =>
-    affix.tags.some((tag) => definition.incompatibleTags.includes(tag)),
+  return selectedDefinitions.some((selected) =>
+    selected.incompatibleTags.some((tag) => definition.tags.includes(tag)),
   );
 };
 
@@ -146,6 +172,7 @@ const rollAffixes = (input: {
     Math.max(input.minimum, input.maximum),
   );
   const selected: RolledItemAffix[] = [];
+  const selectedDefinitions: ItemAffixDefinition[] = [];
   let spent = 0;
 
   for (let index = 0; index < requested; index += 1) {
@@ -161,7 +188,7 @@ const rollAffixes = (input: {
       ) {
         return false;
       }
-      return !affixConflicts(candidate, selected);
+      return !affixConflicts(candidate, selectedDefinitions);
     });
     const definition = weightedPick(candidates, random);
     if (!definition) break;
@@ -178,6 +205,7 @@ const rollAffixes = (input: {
       tags: [...definition.tags],
       statBonuses: { [definition.stat]: roll },
     });
+    selectedDefinitions.push(definition);
     spent += definition.powerCost;
   }
   return selected;
@@ -207,7 +235,7 @@ export const createItemInstanceSnapshot = (input: {
     minimum: count.minimum,
     maximum: count.maximum,
     powerLevel: mechanics.powerLevel,
-    availableBudget: mechanics.powerBudget - Math.max(0, fixedPower),
+    availableBudget: mechanics.powerBudget - fixedPower,
     requiredClass: input.metadata.requiredClass,
     seed: input.seed,
   });
@@ -229,10 +257,18 @@ export const createItemInstanceSnapshot = (input: {
     seed: input.seed,
     affixes,
     relic: relicDefinition
-      ? { ...relicDefinition, modifier: { ...relicDefinition.modifier }, rulesVersion: ITEM_RELIC_RULES_VERSION }
+      ? {
+          ...relicDefinition,
+          modifier: { ...relicDefinition.modifier },
+          rulesVersion: ITEM_RELIC_RULES_VERSION,
+        }
       : undefined,
     curse: curseDefinition
-      ? { ...curseDefinition, cost: { ...curseDefinition.cost }, rulesVersion: ITEM_RELIC_RULES_VERSION }
+      ? {
+          ...curseDefinition,
+          cost: { ...curseDefinition.cost },
+          rulesVersion: ITEM_RELIC_RULES_VERSION,
+        }
       : undefined,
     craftQuality: Math.max(0, Math.min(100, Math.trunc(input.craftQuality ?? 0))),
     origin: normalizeOrigin(input.origin),
@@ -293,6 +329,59 @@ export const writeItemInstanceData = (
   return JSON.parse(JSON.stringify({ ...raw, itemization: snapshot })) as Prisma.InputJsonValue;
 };
 
+const findAffixDefinition = (key: string): ItemAffixDefinition | undefined =>
+  Object.values(ITEM_AFFIX_POOLS)
+    .flat()
+    .find((candidate) => candidate.key === key);
+
+const sameStrings = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const validateRolledAffix = (
+  affix: RolledItemAffix,
+  snapshot: ItemInstanceSnapshot,
+  selectedDefinitions: readonly ItemAffixDefinition[],
+): ItemAffixDefinition => {
+  const definition = findAffixDefinition(affix.key);
+  if (!definition) throw new Error('ITEM_AFFIX_UNKNOWN');
+  if (
+    affix.name !== definition.name ||
+    affix.kind !== definition.kind ||
+    affix.tier !== definition.tier ||
+    affix.minimumRoll !== definition.minimumRoll ||
+    affix.maximumRoll !== definition.maximumRoll ||
+    affix.powerCost !== definition.powerCost ||
+    !sameStrings(affix.tags, definition.tags)
+  ) {
+    throw new Error('ITEM_AFFIX_SNAPSHOT_TAMPERED');
+  }
+  if (
+    !Number.isInteger(affix.roll) ||
+    affix.roll < definition.minimumRoll ||
+    affix.roll > definition.maximumRoll ||
+    affix.statBonuses[definition.stat] !== affix.roll ||
+    Object.entries(affix.statBonuses).some(
+      ([stat, value]) => stat !== definition.stat || value !== affix.roll,
+    )
+  ) {
+    throw new Error('ITEM_AFFIX_ROLL_INVALID');
+  }
+  if (definition.minimumPowerLevel > snapshot.powerLevel) {
+    throw new Error('ITEM_AFFIX_POWER_LEVEL_INVALID');
+  }
+  if (
+    definition.classTags?.length &&
+    snapshot.requiredClass &&
+    !definition.classTags.includes(snapshot.requiredClass)
+  ) {
+    throw new Error('ITEM_AFFIX_CLASS_INVALID');
+  }
+  if (affixConflicts(definition, selectedDefinitions)) {
+    throw new Error('ITEM_AFFIX_INCOMPATIBLE');
+  }
+  return definition;
+};
+
 export function validateItemInstanceSnapshot(
   value: unknown,
   definitionKey: string,
@@ -310,52 +399,94 @@ export function validateItemInstanceSnapshot(
     throw new Error('ITEM_SNAPSHOT_VERSION_UNSUPPORTED');
   }
   if (snapshot.definitionKey !== definitionKey) throw new Error('ITEM_SNAPSHOT_DEFINITION_MISMATCH');
-  if (snapshot.category !== metadata.category || snapshot.rarity !== metadata.rarity) {
+  if (
+    snapshot.category !== metadata.category ||
+    snapshot.rarity !== metadata.rarity ||
+    snapshot.equipmentSlot !== metadata.equipmentSlot ||
+    snapshot.requiredClass !== metadata.requiredClass
+  ) {
     throw new Error('ITEM_SNAPSHOT_METADATA_MISMATCH');
   }
-  if (!Number.isInteger(snapshot.powerBudget) || snapshot.powerBudget < 0) {
+  if (
+    !Number.isInteger(snapshot.powerLevel) ||
+    snapshot.powerLevel < 1 ||
+    !Number.isInteger(snapshot.powerBudget) ||
+    snapshot.powerBudget < 0 ||
+    !Number.isInteger(snapshot.powerSpent)
+  ) {
     throw new Error('ITEM_POWER_BUDGET_INVALID');
   }
-  if (!Array.isArray(snapshot.affixes)) throw new Error('ITEM_AFFIXES_INVALID');
+  if (!Array.isArray(snapshot.affixes) || snapshot.affixes.length > 2) {
+    throw new Error('ITEM_AFFIXES_INVALID');
+  }
   const kinds = new Set<string>();
-  const tags = new Set<string>();
+  const selectedDefinitions: ItemAffixDefinition[] = [];
   let affixPower = 0;
   for (const affix of snapshot.affixes) {
     if (kinds.has(affix.kind)) throw new Error('ITEM_AFFIX_KIND_DUPLICATE');
     kinds.add(affix.kind);
-    if (
-      !Number.isInteger(affix.roll) ||
-      affix.roll < affix.minimumRoll ||
-      affix.roll > affix.maximumRoll
-    ) {
-      throw new Error('ITEM_AFFIX_ROLL_INVALID');
-    }
-    const definition = Object.values(ITEM_AFFIX_POOLS)
-      .flat()
-      .find((candidate) => candidate.key === affix.key);
-    if (!definition) throw new Error('ITEM_AFFIX_UNKNOWN');
-    if (definition.incompatibleTags.some((tag) => tags.has(tag))) {
-      throw new Error('ITEM_AFFIX_INCOMPATIBLE');
-    }
-    for (const tag of affix.tags) tags.add(tag);
-    affixPower += affix.powerCost;
+    const definition = validateRolledAffix(affix, snapshot, selectedDefinitions);
+    selectedDefinitions.push(definition);
+    affixPower += definition.powerCost;
   }
-  if (snapshot.relic && ITEM_RELICS[snapshot.relic.key]?.key !== snapshot.relic.key) {
-    throw new Error('ITEM_RELIC_UNKNOWN');
+
+  const catalogRelic = snapshot.relic ? ITEM_RELICS[snapshot.relic.key] : undefined;
+  if (
+    snapshot.relic &&
+    (!catalogRelic ||
+      snapshot.relic.rulesVersion !== ITEM_RELIC_RULES_VERSION ||
+      snapshot.relic.name !== catalogRelic.name ||
+      snapshot.relic.description !== catalogRelic.description ||
+      snapshot.relic.skillKey !== catalogRelic.skillKey ||
+      snapshot.relic.powerCost !== catalogRelic.powerCost ||
+      snapshot.relic.uniqueGroup !== catalogRelic.uniqueGroup ||
+      JSON.stringify(snapshot.relic.modifier) !== JSON.stringify(catalogRelic.modifier))
+  ) {
+    throw new Error('ITEM_RELIC_SNAPSHOT_TAMPERED');
   }
-  if (snapshot.curse && ITEM_CURSES[snapshot.curse.key]?.key !== snapshot.curse.key) {
-    throw new Error('ITEM_CURSE_UNKNOWN');
+  const catalogCurse = snapshot.curse ? ITEM_CURSES[snapshot.curse.key] : undefined;
+  if (
+    snapshot.curse &&
+    (!catalogCurse ||
+      snapshot.curse.rulesVersion !== ITEM_RELIC_RULES_VERSION ||
+      snapshot.curse.name !== catalogCurse.name ||
+      snapshot.curse.description !== catalogCurse.description ||
+      snapshot.curse.preview !== catalogCurse.preview ||
+      snapshot.curse.powerCredit !== catalogCurse.powerCredit ||
+      JSON.stringify(snapshot.curse.cost) !== JSON.stringify(catalogCurse.cost))
+  ) {
+    throw new Error('ITEM_CURSE_SNAPSHOT_TAMPERED');
   }
+
   const expectedPower =
-    affixPower + (snapshot.relic?.powerCost ?? 0) - (snapshot.curse?.powerCredit ?? 0);
+    affixPower + (catalogRelic?.powerCost ?? 0) - (catalogCurse?.powerCredit ?? 0);
   if (snapshot.powerSpent !== expectedPower || snapshot.powerSpent > snapshot.powerBudget) {
     throw new Error('ITEM_POWER_BUDGET_EXCEEDED');
   }
-  if (!snapshot.origin?.operationId || !snapshot.origin.generatedAt) {
+  if (
+    !snapshot.origin?.operationId ||
+    !snapshot.origin.sourceKey ||
+    !snapshot.origin.generatedAt ||
+    !Number.isInteger(snapshot.origin.contentVersion) ||
+    snapshot.origin.contentVersion < 1
+  ) {
     throw new Error('ITEM_ORIGIN_INVALID');
   }
-  if (!Array.isArray(snapshot.mutations) || snapshot.mutations.length === 0) {
+  if (
+    !Array.isArray(snapshot.mutations) ||
+    snapshot.mutations.length === 0 ||
+    snapshot.mutations.some(
+      (mutation, index) =>
+        mutation.sequence !== index + 1 ||
+        !mutation.operationId ||
+        !mutation.at ||
+        !/^[a-f0-9]{64}$/.test(mutation.afterHash),
+    )
+  ) {
     throw new Error('ITEM_MUTATION_HISTORY_INVALID');
+  }
+  if (snapshot.boundCharacterId && snapshot.tradePolicy !== 'CHARACTER_BOUND') {
+    throw new Error('ITEM_BIND_POLICY_INVALID');
   }
 }
 
@@ -532,7 +663,7 @@ export const applyEquippedRelicsToLoadout = (
   loadout: SkillCombatLoadout,
   snapshots: readonly ItemInstanceSnapshot[],
 ): SkillCombatLoadout => {
-  const relics = snapshots.flatMap((snapshot) => snapshot.relic ? [snapshot.relic] : []);
+  const relics = snapshots.flatMap((snapshot) => (snapshot.relic ? [snapshot.relic] : []));
   const groups = new Set<string>();
   const active = relics.filter((relic) => {
     if (groups.has(relic.uniqueGroup)) return false;
@@ -559,7 +690,9 @@ export class ItemTriggerRecursionGuard {
   private readonly stack: string[] = [];
 
   run<T>(triggerKey: string, operation: () => T): T {
-    if (this.stack.length >= ITEM_TRIGGER_MAX_DEPTH) throw new Error('ITEM_TRIGGER_DEPTH_EXCEEDED');
+    if (this.stack.length >= ITEM_TRIGGER_MAX_DEPTH) {
+      throw new Error('ITEM_TRIGGER_DEPTH_EXCEEDED');
+    }
     if (this.stack.includes(triggerKey)) throw new Error('ITEM_TRIGGER_RECURSION_BLOCKED');
     this.stack.push(triggerKey);
     try {
@@ -581,11 +714,16 @@ export const resolveLootProtection = (input: {
 }): LootProtectionResult => {
   const duplicateBlocked = Boolean(
     input.uniqueKey &&
-    input.ownedUniqueKeys?.includes(input.uniqueKey) &&
-    input.duplicateHasValue === false,
+      input.ownedUniqueKeys?.includes(input.uniqueKey) &&
+      input.duplicateHasValue === false,
   );
   if (duplicateBlocked) {
-    return { granted: false, guaranteed: false, duplicateBlocked: true, nextMisses: input.misses };
+    return {
+      granted: false,
+      guaranteed: false,
+      duplicateBlocked: true,
+      nextMisses: input.misses,
+    };
   }
   const guaranteed = input.misses >= Math.max(0, input.guaranteedAfterMisses);
   const granted = guaranteed || input.roll < Math.max(0, Math.min(1, input.chance));
