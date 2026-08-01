@@ -65,11 +65,14 @@ const BACK_LEFT_ANCHORS: readonly ArenaAnchor[] = [
 const combatantRenderScaleByActorId = new Map<string, number>();
 
 function safeRenderScale(renderScale: number | undefined): number {
-  const scale = renderScale !== undefined && Number.isFinite(renderScale) ? renderScale : 1;
+  const scale =
+    renderScale !== undefined && Number.isFinite(renderScale) ? renderScale : 1;
   return Math.max(0.2, Math.min(3, scale));
 }
 
-export function isSelfCastCombatAction(action: CombatActionResolutionPayload | undefined): boolean {
+export function isSelfCastCombatAction(
+  action: CombatActionResolutionPayload | undefined,
+): boolean {
   return Boolean(
     action &&
       action.action === 'SKILL' &&
@@ -78,32 +81,94 @@ export function isSelfCastCombatAction(action: CombatActionResolutionPayload | u
   );
 }
 
-export function usesAttackMotion(action: CombatActionResolutionPayload | undefined): boolean {
+export function hasDirectOffensiveImpact(
+  action: CombatActionResolutionPayload | undefined,
+): boolean {
   if (!action) return false;
   if (action.action === 'BASIC_ATTACK') return true;
-  return action.action === 'SKILL' && !isSelfCastCombatAction(action);
+  if (action.action !== 'SKILL') return false;
+  return action.results.some(
+    (result) =>
+      result.hpDelta < 0 || result.shieldAbsorbed > 0 || result.dodged,
+  );
+}
+
+export function usesAttackMotion(
+  action: CombatActionResolutionPayload | undefined,
+): boolean {
+  return hasDirectOffensiveImpact(action);
+}
+
+export function usesCombatProjectile(
+  action: CombatActionResolutionPayload | undefined,
+): boolean {
+  return Boolean(
+    action &&
+      !isSelfCastCombatAction(action) &&
+      action.visual.projectileEffectKey,
+  );
 }
 
 export function getCombatVfxFamily(
   actionOrAnimationKey: CombatActionResolutionPayload | string,
 ): CombatVfxFamily {
-  if (typeof actionOrAnimationKey !== 'string' && isSelfCastCombatAction(actionOrAnimationKey)) {
-    return 'support';
+  if (typeof actionOrAnimationKey !== 'string') {
+    if (isSelfCastCombatAction(actionOrAnimationKey)) return 'support';
+    if (!hasDirectOffensiveImpact(actionOrAnimationKey)) {
+      if (actionOrAnimationKey.skillKey?.startsWith('encounter:')) return 'support';
+      if (
+        actionOrAnimationKey.skillKey?.startsWith('tactical:') ||
+        actionOrAnimationKey.skillKey?.startsWith('telegraph:')
+      ) {
+        return 'status';
+      }
+    }
   }
-  const animationKey = typeof actionOrAnimationKey === 'string'
-    ? actionOrAnimationKey
-    : actionOrAnimationKey.animationKey;
+  const animationKey =
+    typeof actionOrAnimationKey === 'string'
+      ? actionOrAnimationKey
+      : actionOrAnimationKey.animationKey;
   const key = animationKey.toLowerCase();
-  if (key.includes('fire') || key.includes('flame') || key.includes('ember') || key.includes('meteor')) return 'fire';
+  if (
+    key.includes('fire') ||
+    key.includes('flame') ||
+    key.includes('ember') ||
+    key.includes('meteor')
+  ) {
+    return 'fire';
+  }
   if (key.includes('frost') || key.includes('ice')) return 'frost';
-  if (key.includes('arcane') || key.includes('time') || key.includes('cataclysm')) return 'arcane';
-  if (key.includes('arrow') || key.includes('shot') || key.includes('hunt') || key.includes('volley')) return 'projectile';
-  if (key.includes('status') || key.includes('stunned') || key.includes('start')) return 'status';
+  if (
+    key.includes('arcane') ||
+    key.includes('time') ||
+    key.includes('cataclysm')
+  ) {
+    return 'arcane';
+  }
+  if (
+    key.includes('arrow') ||
+    key.includes('shot') ||
+    key.includes('hunt') ||
+    key.includes('volley')
+  ) {
+    return 'projectile';
+  }
+  if (
+    key.includes('status') ||
+    key.includes('stunned') ||
+    key.includes('start')
+  ) {
+    return 'status';
+  }
   return 'physical';
 }
 
-function withMobRenderScale(participant: CombatParticipantPayload): CombatParticipantPayload {
-  if (participant.kind !== 'MOB' || participant.renderScale !== undefined) return participant;
+function withMobRenderScale(
+  participant: CombatParticipantPayload,
+): CombatParticipantPayload {
+  if (participant.kind !== 'MOB' || participant.renderScale !== undefined) {
+    return participant;
+  }
   const mob = Object.values(mobStore.getSnapshot()).find(
     (candidate) => candidate.outfitKey === participant.outfitKey,
   );
@@ -125,7 +190,10 @@ export function combatEffectPointForActor(
   position: CombatStagePosition,
   actorId: string,
 ): CombatEffectPoint {
-  return combatEffectPoint(position, combatantRenderScaleByActorId.get(actorId) ?? 1);
+  return combatEffectPoint(
+    position,
+    combatantRenderScaleByActorId.get(actorId) ?? 1,
+  );
 }
 
 export function combatTeams(
@@ -140,19 +208,39 @@ export function combatTeams(
       participant.kind === 'MOB' ? safeRenderScale(participant.renderScale) : 1,
     );
   }
-  const own = participants.find((participant) => participant.characterId === ownCharacterId);
+  const own = participants.find(
+    (participant) => participant.characterId === ownCharacterId,
+  );
   if (!own) return undefined;
-  const ownTeamId = own.teamId ?? combat.teams?.find((team) => team.actorIds.includes(own.actorId))?.teamId;
+  const ownTeamId =
+    own.teamId ??
+    combat.teams?.find((team) => team.actorIds.includes(own.actorId))?.teamId;
   if (!ownTeamId) {
-    const opponent = participants.find((participant) => participant.actorId !== own.actorId);
+    const opponent = participants.find(
+      (participant) => participant.actorId !== own.actorId,
+    );
     return opponent
-      ? { own, allies: [own], enemies: [opponent], ownTeamId: 'legacy-own', enemyTeamId: 'legacy-enemy' }
+      ? {
+          own,
+          allies: [own],
+          enemies: [opponent],
+          ownTeamId: 'legacy-own',
+          enemyTeamId: 'legacy-enemy',
+        }
       : undefined;
   }
   const ownTeam = combat.teams?.find((team) => team.teamId === ownTeamId);
   const enemyTeam = combat.teams?.find((team) => team.teamId !== ownTeamId);
-  const allies = participants.filter((participant) => participant.teamId === ownTeamId || ownTeam?.actorIds.includes(participant.actorId));
-  const enemies = participants.filter((participant) => participant.teamId !== ownTeamId && (enemyTeam ? enemyTeam.actorIds.includes(participant.actorId) : true));
+  const allies = participants.filter(
+    (participant) =>
+      participant.teamId === ownTeamId ||
+      ownTeam?.actorIds.includes(participant.actorId),
+  );
+  const enemies = participants.filter(
+    (participant) =>
+      participant.teamId !== ownTeamId &&
+      (enemyTeam ? enemyTeam.actorIds.includes(participant.actorId) : true),
+  );
   if (!enemyTeam || enemies.length === 0) return undefined;
   return { own, allies, enemies, ownTeamId, enemyTeamId: enemyTeam.teamId };
 }
@@ -166,7 +254,9 @@ export function combatSides(
   return teams && opponent ? { own: teams.own, opponent } : undefined;
 }
 
-export function isCombatantAlive(participant: CombatParticipantPayload): boolean {
+export function isCombatantAlive(
+  participant: CombatParticipantPayload,
+): boolean {
   return participant.hp > 0 && !participant.withdrawn;
 }
 
@@ -174,7 +264,10 @@ export function selectCombatTarget(
   enemies: readonly CombatParticipantPayload[],
   currentActorId?: string,
 ): CombatParticipantPayload | undefined {
-  const current = enemies.find((participant) => participant.actorId === currentActorId && isCombatantAlive(participant));
+  const current = enemies.find(
+    (participant) =>
+      participant.actorId === currentActorId && isCombatantAlive(participant),
+  );
   return current ?? enemies.find(isCombatantAlive);
 }
 
@@ -198,7 +291,10 @@ function backScale(backCount: number): number {
   return 0.61;
 }
 
-function mirrorAnchor(anchor: ArenaAnchor, side: 'left' | 'right'): ArenaAnchor {
+function mirrorAnchor(
+  anchor: ArenaAnchor,
+  side: 'left' | 'right',
+): ArenaAnchor {
   return side === 'left' ? anchor : { ...anchor, x: 100 - anchor.x };
 }
 
@@ -229,18 +325,21 @@ export function combatFormationSlots(
 
   const frontCount = Math.min(5, count);
   const backCount = Math.max(0, count - frontCount);
-  const slots = FRONT_LEFT_ANCHORS
-    .slice(0, frontCount)
-    .map((anchor) => toStagePosition(anchor, side, 'front', frontScale(count)));
+  const slots = FRONT_LEFT_ANCHORS.slice(0, frontCount).map((anchor) =>
+    toStagePosition(anchor, side, 'front', frontScale(count)),
+  );
   slots.push(
-    ...BACK_LEFT_ANCHORS
-      .slice(0, backCount)
-      .map((anchor) => toStagePosition(anchor, side, 'back', backScale(backCount))),
+    ...BACK_LEFT_ANCHORS.slice(0, backCount).map((anchor) =>
+      toStagePosition(anchor, side, 'back', backScale(backCount)),
+    ),
   );
   return slots;
 }
 
-export function actionDamageFor(action: CombatActionResolutionPayload, actorId: string): number {
+export function actionDamageFor(
+  action: CombatActionResolutionPayload,
+  actorId: string,
+): number {
   return action.results
     .filter((result) => result.targetActorId === actorId)
     .reduce((total, result) => total + Math.min(0, result.hpDelta), 0);
