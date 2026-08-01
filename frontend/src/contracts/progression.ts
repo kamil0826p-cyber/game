@@ -18,12 +18,21 @@ export interface ProgressionStatVector {
   armor: number;
 }
 
+export interface ProgressionNodeDefinition {
+  key: ProgressionNodeKey;
+  name: string;
+  description: string;
+  maxRank: number;
+  bonusesPerRank: ProgressionStatVector;
+}
+
 export interface ProgressionSnapshot {
   version: number;
   characterClass: CharacterClass;
   level: number;
   choices: ProgressionNodeKey[];
   nodeRanks: Record<ProgressionNodeKey, number>;
+  nodes: Record<ProgressionNodeKey, ProgressionNodeDefinition>;
   points: {
     earned: number;
     spent: number;
