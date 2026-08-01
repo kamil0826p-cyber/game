@@ -78,10 +78,10 @@ export function synchronizeEncounter(
   now: number,
 ): CombatSnapshot {
   observeTelegraph(runtime, execution.state);
-  ingestRuntimeEvents(runtime, execution.state);
+  ingestEncounterRuntimeEvents(runtime, execution.state);
   if (runtime.status === 'ACTIVE') applyEncounterOutcome(engine, runtime, execution.state, now);
   if (runtime.status === 'ACTIVE') transitionPhase(runtime, execution, now);
-  ingestRuntimeEvents(runtime, execution.state);
+  ingestEncounterRuntimeEvents(runtime, execution.state);
   return decorateEncounterSnapshot(engine.snapshot(runtime), runtime, execution.state);
 }
 
@@ -184,10 +184,7 @@ export function evaluateEncounterEligibility(
   ) {
     return { eligible: false, reason: 'AFK', score, activeTurnRatio };
   }
-  if (
-    score < state.encounter.definition.reward.minimumContribution &&
-    contribution.actions === 0
-  ) {
+  if (score < state.encounter.definition.reward.minimumContribution) {
     return { eligible: false, reason: 'NO_CONTRIBUTION', score, activeTurnRatio };
   }
   return { eligible: true, reason: 'ELIGIBLE', score, activeTurnRatio };
@@ -496,7 +493,10 @@ function observeTelegraph(runtime: CombatRuntime, state: EncounterRuntimeState):
   state.observedTelegraphs.set(runtime.telegraph.actorId, runtime.telegraph.skillKey);
 }
 
-function ingestRuntimeEvents(runtime: CombatRuntime, state: EncounterRuntimeState): void {
+export function ingestEncounterRuntimeEvents(
+  runtime: CombatRuntime,
+  state: EncounterRuntimeState,
+): void {
   const events = runtime.events.filter((event) => event.sequence > state.processedEventSequence);
   const telegraphSkills = new Set(
     state.encounter.definition.telegraphs.map((rule) => rule.skillKey),
@@ -515,42 +515,66 @@ function ingestRuntimeEvents(runtime: CombatRuntime, state: EncounterRuntimeStat
     }
 
     const source = runtime.actors.find((actor) => actor.actorId === event.actorId);
-    if (!source || source.kind !== 'PLAYER') {
-      state.processedEventSequence = Math.max(state.processedEventSequence, event.sequence);
-      continue;
+    const sourceContribution =
+      source?.kind === 'PLAYER'
+        ? ensureContribution(state, source.actorId, runtime.turnNumber)
+        : undefined;
+    const timeoutFallback = Boolean(
+      sourceContribution && sourceContribution.pendingTimeoutActions > 0,
+    );
+
+    if (sourceContribution && timeoutFallback) {
+      sourceContribution.pendingTimeoutActions -= 1;
+    } else if (sourceContribution && source) {
+      if (!['STATUS_TICK', 'TURN_SKIPPED'].includes(event.action)) {
+        sourceContribution.actions += 1;
+      }
+      for (const result of event.results) {
+        const target = runtime.actors.find((actor) => actor.actorId === result.targetActorId);
+        if (!target) continue;
+        if (target.teamId !== source.teamId && result.hpDelta < 0) {
+          sourceContribution.damage += Math.abs(result.hpDelta);
+        }
+        if (target.teamId === source.teamId && result.hpDelta > 0) {
+          sourceContribution.healing += result.hpDelta;
+        }
+        if (result.shieldDelta > 0) {
+          sourceContribution.protection += result.shieldDelta;
+        }
+      }
+      if (event.skillKey === 'tactical:interrupt') sourceContribution.interrupts += 1;
+      if (event.skillKey === 'tactical:cleanse') sourceContribution.cleanses += 1;
+      if (
+        event.skillKey &&
+        ['tactical:intercept', 'tactical:reposition', 'tactical:mark', 'tactical:taunt'].includes(
+          event.skillKey,
+        )
+      ) {
+        sourceContribution.mechanics += 1;
+      }
     }
-    const contribution = ensureContribution(state, source.actorId, runtime.turnNumber);
-    const timeoutFallback = contribution.pendingTimeoutActions > 0;
-    if (timeoutFallback) {
-      contribution.pendingTimeoutActions -= 1;
-      state.processedEventSequence = Math.max(state.processedEventSequence, event.sequence);
-      continue;
-    }
-    if (!['STATUS_TICK', 'TURN_SKIPPED'].includes(event.action)) contribution.actions += 1;
+
     for (const result of event.results) {
       const target = runtime.actors.find((actor) => actor.actorId === result.targetActorId);
-      if (!target) continue;
-      if (target.teamId !== source.teamId && result.hpDelta < 0) {
-        contribution.damage += Math.abs(result.hpDelta);
+      if (
+        result.interceptedByActorId &&
+        result.hpDelta < 0
+      ) {
+        const interceptor = runtime.actors.find(
+          (actor) => actor.actorId === result.interceptedByActorId,
+        );
+        if (interceptor?.kind === 'PLAYER') {
+          ensureContribution(state, interceptor.actorId, runtime.turnNumber).protection += Math.abs(
+            result.hpDelta,
+          );
+        }
       }
-      if (target.teamId === source.teamId && result.hpDelta > 0) {
-        contribution.healing += result.hpDelta;
-      }
-      if (result.shieldDelta > 0) contribution.protection += result.shieldDelta;
-      if (result.interceptedByActorId) {
-        contribution.protection += Math.abs(Math.min(0, result.hpDelta));
+      if ((result.counterDamage ?? 0) > 0 && target?.kind === 'PLAYER') {
+        ensureContribution(state, target.actorId, runtime.turnNumber).damage +=
+          result.counterDamage ?? 0;
       }
     }
-    if (event.skillKey === 'tactical:interrupt') contribution.interrupts += 1;
-    if (event.skillKey === 'tactical:cleanse') contribution.cleanses += 1;
-    if (
-      event.skillKey &&
-      ['tactical:intercept', 'tactical:reposition', 'tactical:mark', 'tactical:taunt'].includes(
-        event.skillKey,
-      )
-    ) {
-      contribution.mechanics += 1;
-    }
+
     state.processedEventSequence = Math.max(state.processedEventSequence, event.sequence);
   }
 }
