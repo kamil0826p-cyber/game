@@ -175,6 +175,12 @@ model Character {
   silver       Int @default(0)
   gold         Int @default(0)
 
+  progressionVersion     Int  @default(2)
+  progressionChoices     Json @default("[]") @db.JsonB
+  legacyStatAdjustment   Json @default("{}") @db.JsonB
+  freeProgressionRespecs Int  @default(1)
+  statRevision           Int  @default(0)
+
   stateVersion Int      @default(0)
   lastSavedAt  DateTime @default(now())
   createdAt    DateTime @default(now())
