@@ -44,7 +44,13 @@ export interface ContentAttemptRecord {
   error: string | null;
 }
 function toRelease(record: RawContentRelease): ContentReleaseRecord { return { ...record, manifest: record.manifest as unknown as CompiledContentManifest, diff: record.diff as unknown as ContentDiff }; }
-export async function acquireContentLock(tx: SqlClient): Promise<void> { await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(${CONTENT_LOCK_KEY})`); }
+export async function acquireContentLock(tx: SqlClient): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ locked: boolean }>>(Prisma.sql`
+    SELECT TRUE AS "locked"
+    FROM (SELECT pg_advisory_xact_lock(${CONTENT_LOCK_KEY})) AS acquired
+  `);
+  if (rows[0]?.locked !== true) throw new Error('Content deployment advisory lock could not be acquired.');
+}
 async function findRelease(client: SqlClient, predicate: Prisma.Sql): Promise<ContentReleaseRecord | null> {
   const rows = await client.$queryRaw<RawContentRelease[]>(Prisma.sql`
     SELECT "id", "version", "schemaVersion", "sourceHash", "operationId", "state",
