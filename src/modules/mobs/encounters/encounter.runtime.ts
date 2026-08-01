@@ -221,6 +221,9 @@ function applyEncounterOutcome(
     : undefined;
   if (target && !canFight(target)) {
     forfeitTeam(engine, runtime, state.enemyTeamId, now);
+    if (runtime.status === 'FINISHED' && runtime.winnerTeamId === state.playerTeamId) {
+      runtime.finishReason = 'DEFEATED';
+    }
   }
 }
 
