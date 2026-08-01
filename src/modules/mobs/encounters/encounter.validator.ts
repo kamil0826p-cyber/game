@@ -10,7 +10,7 @@ export interface EncounterValidationResult {
 }
 
 const skillByKey = new Map(SKILL_CATALOG.map((skill) => [skill.key, skill]));
-const stableKey = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const stableKey = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 
 export function validateEncounterDefinition(
   definition: EncounterDefinition,
@@ -21,7 +21,7 @@ export function validateEncounterDefinition(
   const actorKeys = new Set(definition.actors.map((actor) => actor.key));
 
   if (!stableKey.test(definition.key)) {
-    errors.push(`${prefix}: key must be a stable kebab-case identifier.`);
+    errors.push(`${prefix}: key must be a stable lowercase identifier.`);
   }
   if (!Number.isInteger(definition.version) || definition.version < 1) {
     errors.push(`${prefix}: version must be a positive integer.`);
@@ -51,7 +51,7 @@ export function validateEncounterDefinition(
 
   for (const actor of definition.actors) {
     if (!stableKey.test(actor.key)) {
-      errors.push(`${prefix}: actor key ${actor.key} must be a stable kebab-case identifier.`);
+      errors.push(`${prefix}: actor key ${actor.key} must be a stable lowercase identifier.`);
     }
     if (actor.role !== actor.ai.role) {
       errors.push(`${prefix}: ${actor.key} has inconsistent actor and AI roles.`);
@@ -135,7 +135,7 @@ export function validateEncounterDefinition(
   const summonKeys = new Set<string>();
   definition.phases.forEach((phase, index) => {
     if (!stableKey.test(phase.key)) {
-      errors.push(`${prefix}: phase key ${phase.key} must be a stable kebab-case identifier.`);
+      errors.push(`${prefix}: phase key ${phase.key} must be a stable lowercase identifier.`);
     }
     if (phaseKeys.has(phase.key)) errors.push(`${prefix}: duplicate phase ${phase.key}.`);
     phaseKeys.add(phase.key);
