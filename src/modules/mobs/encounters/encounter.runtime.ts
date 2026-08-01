@@ -1,6 +1,17 @@
 import type { CombatSnapshot } from '../../../contracts/socket.events.js';
 import { CombatEngine } from '../../combat/combat.engine.js';
-import type { CombatRuntime, CombatRuntimeActor } from '../../combat/combat.types.js';
+import {
+  COMBAT_EVENT_HISTORY_LIMIT,
+  COMBAT_FORMATION_FRONT_SLOTS,
+  COMBAT_FORMATION_TOTAL_SLOTS,
+  COMBAT_TEAM_LIMIT,
+  formationLineForSlot,
+} from '../../combat/combat.rules.js';
+import type {
+  CombatActorInput,
+  CombatRuntime,
+  CombatRuntimeActor,
+} from '../../combat/combat.types.js';
 import { encounterActorId } from './encounter.actor-factory.js';
 import type {
   ClaimedEncounter,
@@ -20,6 +31,7 @@ export function createEncounterExecution(
   const rootActor = runtime.actors.find((actor) => actor.actorId === claimed.rootActorId);
   const player = runtime.actors.find((actor) => actor.kind === 'PLAYER');
   if (!rootActor || !player) throw new Error('ENCOUNTER_RUNTIME_INVALID');
+  applyFormationPreferences(runtime, rootActor.teamId, claimed.initialActors);
   const rootKey = claimed.encounter.definition.initialActorKeys[0]!;
   const actorIdByKey = new Map<string, string>();
   const actorKeyById = new Map<string, string>();
@@ -63,7 +75,7 @@ export function synchronizeEncounter(
   now: number,
 ): CombatSnapshot {
   ingestContributions(runtime, execution.state);
-  if (runtime.status === 'ACTIVE') transitionPhase(engine, runtime, execution, now);
+  if (runtime.status === 'ACTIVE') transitionPhase(runtime, execution, now);
   ingestContributions(runtime, execution.state);
   return decorateEncounterSnapshot(engine.snapshot(runtime), runtime, execution.state);
 }
@@ -95,9 +107,7 @@ export function decorateEncounterSnapshot(
       phaseIndex: state.phaseIndex,
       phaseCount: state.encounter.definition.phases.length,
       arenaModifier: state.arenaModifier,
-      mechanics: [
-        ...new Set([...state.encounter.tier.mechanics, ...phase.mechanics]),
-      ],
+      mechanics: [...new Set([...state.encounter.tier.mechanics, ...phase.mechanics])],
       partySize: state.encounter.partySize,
       recommendedPartySize: state.encounter.definition.recommendedPartySize,
       minimumPartySize: state.encounter.definition.minimumPartySize,
@@ -172,7 +182,6 @@ export function encounterRewardOperationId(combatId: string): string {
 }
 
 function transitionPhase(
-  engine: CombatEngine,
   runtime: CombatRuntime,
   execution: EncounterExecution,
   now: number,
@@ -207,7 +216,7 @@ function transitionPhase(
     })
     .slice(0, remainingAllowance);
   if (candidates.length === 0) return;
-  engine.summon(
+  summonIntoSharedCombat(
     runtime,
     execution.state.enemyTeamId,
     candidates.map((entry) => entry.actor),
@@ -218,6 +227,127 @@ function transitionPhase(
     execution.state.summonedActorKeys.add(candidate.actorKey);
     execution.pendingActors.delete(candidate.actorKey);
   }
+}
+
+function summonIntoSharedCombat(
+  runtime: CombatRuntime,
+  teamId: string,
+  inputs: readonly CombatActorInput[],
+  now: number,
+  label: string,
+): void {
+  if (runtime.status !== 'ACTIVE' || inputs.length === 0) return;
+  const team = runtime.teams.find((candidate) => candidate.teamId === teamId);
+  if (!team) throw new Error('ENCOUNTER_SUMMON_TEAM_MISSING');
+  const current = runtime.actors.filter((actor) => actor.teamId === teamId);
+  if (current.length + inputs.length > COMBAT_TEAM_LIMIT) {
+    throw new Error('ENCOUNTER_SUMMON_LIMIT');
+  }
+  const existingIds = new Set(runtime.actors.map((actor) => actor.actorId));
+  if (inputs.some((input) => existingIds.has(input.actorId))) {
+    throw new Error('ENCOUNTER_SUMMON_DUPLICATE');
+  }
+  const occupied = new Set(current.map((actor) => actor.formationSlot));
+  const summoned = inputs.map((input) => {
+    const slot = allocateFormationSlot(occupied, input.formationPreference);
+    occupied.add(slot);
+    const {
+      formationPreference: _formationPreference,
+      skills,
+      fallbackAction,
+      magicResistance,
+      ...base
+    } = input;
+    return {
+      ...base,
+      teamId,
+      formationSlot: slot,
+      formationLine: formationLineForSlot(slot),
+      magicResistance: magicResistance ?? Math.max(0, Math.round(input.armor * 0.35)),
+      fallbackAction: fallbackAction ?? 'DEFEND',
+      withdrawn: false,
+      controlDrStacks: 0,
+      controlDrExpiresTurn: 0,
+      statuses: [],
+      skills: new Map(
+        skills.map((skill) => [
+          skill.definition.key,
+          {
+            definition: skill.definition,
+            cooldownTurnsRemaining: skill.cooldownTurnsRemaining,
+          },
+        ]),
+      ),
+    } satisfies CombatRuntimeActor;
+  });
+  runtime.actors.push(...summoned);
+  team.actorIds.push(...summoned.map((actor) => actor.actorId));
+  runtime.turnOrder.push(...summoned.map((actor) => actor.actorId));
+  runtime.events.push({
+    sequence: runtime.nextSequence++,
+    actorId: team.anchorActorId,
+    action: 'SKILL',
+    skillKey: 'encounter:summon',
+    label,
+    animationKey: 'encounter-summon',
+    visual: {
+      castEffectKey: 'encounter-summon:cast',
+      impactEffectKey: 'encounter-summon:impact',
+      accentColor: '#a78bfa',
+    },
+    results: summoned.map((actor) => ({
+      targetActorId: actor.actorId,
+      hpDelta: 0,
+      energyDelta: 0,
+      shieldDelta: 0,
+      shieldAbsorbed: 0,
+      dodged: false,
+      statusesApplied: [],
+      statusesRemoved: [],
+    })),
+    occurredAt: now,
+  });
+  if (runtime.events.length > COMBAT_EVENT_HISTORY_LIMIT) {
+    runtime.events.splice(0, runtime.events.length - COMBAT_EVENT_HISTORY_LIMIT);
+  }
+}
+
+function applyFormationPreferences(
+  runtime: CombatRuntime,
+  teamId: string,
+  inputs: readonly CombatActorInput[],
+): void {
+  const occupied = new Set<number>();
+  for (const input of inputs) {
+    const actor = runtime.actors.find(
+      (candidate) => candidate.teamId === teamId && candidate.actorId === input.actorId,
+    );
+    if (!actor) continue;
+    const slot = allocateFormationSlot(occupied, input.formationPreference);
+    occupied.add(slot);
+    actor.formationSlot = slot;
+    actor.formationLine = formationLineForSlot(slot);
+  }
+}
+
+function allocateFormationSlot(
+  occupied: ReadonlySet<number>,
+  preference?: 'FRONT' | 'BACK',
+): number {
+  const preferred =
+    preference === 'BACK'
+      ? range(COMBAT_FORMATION_FRONT_SLOTS, COMBAT_FORMATION_TOTAL_SLOTS)
+      : preference === 'FRONT'
+        ? range(0, COMBAT_FORMATION_FRONT_SLOTS)
+        : range(0, COMBAT_FORMATION_TOTAL_SLOTS);
+  const fallback = range(0, COMBAT_FORMATION_TOTAL_SLOTS);
+  const slot = [...preferred, ...fallback].find((candidate) => !occupied.has(candidate));
+  if (slot === undefined) throw new Error('ENCOUNTER_FORMATION_FULL');
+  return slot;
+}
+
+function range(start: number, end: number): number[] {
+  return Array.from({ length: Math.max(0, end - start) }, (_, index) => start + index);
 }
 
 function conditionMatches(
