@@ -13,6 +13,8 @@
     "start:debug": "npm run prisma:prepare && nest start --debug --watch",
     "typecheck": "npm run prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "npm run prisma:generate && vitest run",
+    "test:unit": "npm run prisma:generate && vitest run test/foundation",
+    "test:integration": "npm run prisma:generate && vitest run test/integration",
     "test:watch": "npm run prisma:generate && vitest",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
@@ -20,6 +22,17 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "prisma:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run prisma:seed",
+    "content:validate": "tsx src/foundation/content/content.cli.ts validate",
+    "content:deploy": "tsx src/foundation/content/content.cli.ts deploy",
+    "content:rollback": "tsx src/foundation/content/content.cli.ts rollback",
+    "report": "tsx src/foundation/reporting/report.cli.ts all",
+    "report:funnel": "tsx src/foundation/reporting/report.cli.ts funnel",
+    "report:retention": "tsx src/foundation/reporting/report.cli.ts retention",
+    "report:economy": "tsx src/foundation/reporting/report.cli.ts economy",
+    "report:items": "tsx src/foundation/reporting/report.cli.ts items",
+    "report:combat": "tsx src/foundation/reporting/report.cli.ts combat",
+    "report:diagnostics": "tsx src/foundation/reporting/report.cli.ts diagnostics",
+    "balance:simulate": "tsx src/foundation/simulation/balance.cli.ts suite",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "frontend:install": "npm --prefix frontend install",
@@ -27,7 +40,7 @@
     "frontend:build": "npm --prefix frontend run build",
     "frontend:typecheck": "npm --prefix frontend run typecheck",
     "frontend:test": "npm --prefix frontend run test",
-    "check:all": "npm run typecheck && npm test && npm run frontend:typecheck && npm run frontend:test && npm run frontend:build"
+    "check:all": "npm run typecheck && npm test && npm run build && npm run frontend:typecheck && npm run frontend:test && npm run frontend:build"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28", "@nestjs/core": "11.1.28", "@nestjs/platform-express": "11.1.28", "@nestjs/platform-socket.io": "11.1.28", "@nestjs/websockets": "11.1.28", "@prisma/adapter-pg": "7.9.1", "@prisma/client": "7.9.1", "@socket.io/redis-adapter": "^8.3.0", "dotenv": "^17.2.1", "firebase-admin": "14.2.0", "helmet": "^8.1.0", "pg": "^8.16.3", "redis": "^5.8.2", "reflect-metadata": "^0.2.2", "rxjs": "^7.8.2", "socket.io": "^4.8.1", "zod": "^4.1.12"
