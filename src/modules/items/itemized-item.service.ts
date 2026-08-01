@@ -32,6 +32,11 @@ export class ItemizedItemService extends CanonicalItemService {
     super(prisma, characterProgression);
   }
 
+  override async onModuleInit(): Promise<void> {
+    await super.onModuleInit();
+    await this.catalog.ensure();
+  }
+
   override async getInventory(userId: string, characterId: string): Promise<InventorySnapshot> {
     const snapshot = await super.getInventory(userId, characterId);
     await this.catalog.ensure();
