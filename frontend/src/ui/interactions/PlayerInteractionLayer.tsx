@@ -12,6 +12,7 @@ import { canTradeWithPlayer } from '../../game/trade/playerTrade';
 import { useI18n } from '../../i18n/I18nProvider';
 import { CombatArena } from '../combat/CombatArena';
 import { CombatRequestModal } from '../combat/CombatRequestModal';
+import { EncounterSummary } from '../combat/EncounterSummary';
 import { TradeModal } from '../trade/TradeModal';
 import { ActorContextMenu } from './ActorContextMenu';
 
@@ -252,7 +253,10 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
       );
     if (combat.status === 'ACTIVE' || combat.status === 'FINISHED')
       return (
-        <CombatArena combat={combat} onChange={setCombat} onClose={() => void closeCombat()} />
+        <>
+          <CombatArena combat={combat} onChange={setCombat} onClose={() => void closeCombat()} />
+          <EncounterSummary combat={combat} />
+        </>
       );
   }
   if (trade && state.activeModal === 'trade')
