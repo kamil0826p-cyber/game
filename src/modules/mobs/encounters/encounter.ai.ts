@@ -36,20 +36,22 @@ export function planEncounterAction(
     (candidate) => candidate.key === actorKey,
   );
   if (!template) return undefined;
+  const availableActions = filterRedundantActions(runtime, legalActions);
+  if (availableActions.length === 0) return undefined;
   const phase = state.encounter.definition.phases[state.phaseIndex];
   const random = createSeededRandom(
     `${state.seed}:${runtime.combatId}:${runtime.turnNumber}:${actor.actorId}:${state.phaseKey}`,
   );
 
   if (runtime.phase === 'REACTION') {
-    const interrupt = legalActions.find((action) => action.action === 'INTERRUPT');
+    const interrupt = availableActions.find((action) => action.action === 'INTERRUPT');
     if (interrupt) return commandFor(runtime, actor, state, interrupt, template, random, 'interrupt telegraph');
-    const defend = legalActions.find((action) => action.action === 'DEFEND');
+    const defend = availableActions.find((action) => action.action === 'DEFEND');
     if (defend) return commandFor(runtime, actor, state, defend, template, random, 'defend against telegraph');
   }
 
   if (phase?.mechanics.includes('METEOR_TELEGRAPH')) {
-    const meteor = legalActions.find(
+    const meteor = availableActions.find(
       (action) => action.action === 'SKILL' && action.skillKey === 'mage-meteor',
     );
     if (meteor) return commandFor(runtime, actor, state, meteor, template, random, 'scripted phase telegraph');
@@ -57,26 +59,45 @@ export function planEncounterAction(
 
   const phasePriority = template.ai.phaseActionPriority?.[state.phaseKey] ?? [];
   for (const action of phasePriority) {
-    const legal = legalActions.find((candidate) => candidate.action === action);
+    const legal = availableActions.find((candidate) => candidate.action === action);
     if (legal) return commandFor(runtime, actor, state, legal, template, random, `phase priority ${action}`);
   }
 
   const rolePriority = roleActions(template);
   for (const action of rolePriority) {
-    const legal = legalActions.find((candidate) => candidate.action === action);
+    const legal = availableActions.find((candidate) => candidate.action === action);
     if (legal) return commandFor(runtime, actor, state, legal, template, random, `role priority ${action}`);
   }
 
-  const weighted = legalActions
+  const weighted = availableActions
     .map((action) => ({
       action,
       weight: Math.max(0, template.ai.actionWeights[action.action] ?? defaultWeight(action)),
     }))
     .filter((entry) => entry.weight > 0);
-  const selected = pickWeighted(weighted, random)?.action ?? legalActions[0];
+  const selected = pickWeighted(weighted, random)?.action ?? availableActions[0];
   return selected
     ? commandFor(runtime, actor, state, selected, template, random, 'weighted legal action')
     : undefined;
+}
+
+function filterRedundantActions(
+  runtime: CombatRuntime,
+  legalActions: readonly CombatLegalAction[],
+): CombatLegalAction[] {
+  return legalActions.flatMap((action) => {
+    if (action.action !== 'MARK') return [action];
+    const targetActorIds = action.targetActorIds.filter((actorId) => {
+      const target = runtime.actors.find((candidate) => candidate.actorId === actorId);
+      return Boolean(
+        target &&
+          !target.statuses.some(
+            (status) => status.key === 'EXPOSED' && status.turnsRemaining > 0,
+          ),
+      );
+    });
+    return targetActorIds.length > 0 ? [{ ...action, targetActorIds }] : [];
+  });
 }
 
 function roleActions(template: EncounterActorTemplate): CombatActionCommand['action'][] {
