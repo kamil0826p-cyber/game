@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   featureFlagBucket,
+  featureFlagVariantBucket,
   selectFeatureFlagVariant,
-} from '../../src/foundation/feature-flags/feature-flag.service.js';
+} from '../../src/foundation/feature-flags/feature-flag.assignment.js';
 
 const definition = {
   key: 'new-combat-rules',
@@ -23,12 +24,22 @@ describe('feature flag assignment', () => {
   it('does not depend on rollout percentage, preventing reshuffles when rollout changes', () => {
     const tenPercent = { ...definition, rolloutPercentage: 10 };
     const ninetyPercent = { ...definition, rolloutPercentage: 90 };
-    const atTenPercent = featureFlagBucket(tenPercent, 'character-42');
-    const atNinetyPercent = featureFlagBucket(ninetyPercent, 'character-42');
-    expect(atTenPercent).toBe(atNinetyPercent);
+    expect(featureFlagBucket(tenPercent, 'character-42')).toBe(
+      featureFlagBucket(ninetyPercent, 'character-42'),
+    );
   });
 
-  it('selects weighted variants deterministically', () => {
+  it('uses an independent deterministic bucket for variant distribution', () => {
+    const rolloutBucket = featureFlagBucket(definition, 'character-42');
+    const firstVariantBucket = featureFlagVariantBucket(definition, 'character-42');
+    const secondVariantBucket = featureFlagVariantBucket(definition, 'character-42');
+    expect(firstVariantBucket).toBe(secondVariantBucket);
+    expect(firstVariantBucket).toBeGreaterThanOrEqual(0);
+    expect(firstVariantBucket).toBeLessThan(10_000);
+    expect(firstVariantBucket).not.toBe(rolloutBucket);
+  });
+
+  it('selects weighted variants across the full variant bucket', () => {
     const variants = [
       { key: 'control-plus', weight: 1 },
       { key: 'candidate', weight: 3 },

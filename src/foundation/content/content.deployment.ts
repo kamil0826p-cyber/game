@@ -27,6 +27,9 @@ export async function deployContentPackage(
   sourceManifest: ContentManifest,
 ): Promise<ContentDeploymentResult> {
   return prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`
+      SELECT pg_advisory_xact_lock(hashtext('game-content-deployment'))
+    `;
     const nextSnapshot = await captureContentSnapshot(transaction, sourceManifest);
     const hash = stableContentHash({
       schemaVersion: sourceManifest.schemaVersion,
@@ -40,9 +43,7 @@ export async function deployContentPackage(
       where: { id: 'active' },
       include: { contentVersion: { include: { snapshots: true } } },
     });
-    const previousSnapshot = active
-      ? snapshotRecords(active.contentVersion.snapshots)
-      : [];
+    const previousSnapshot = active ? snapshotRecords(active.contentVersion.snapshots) : [];
     const diff = logicalContentDiff(previousSnapshot, nextSnapshot);
 
     if (existing) {

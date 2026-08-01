@@ -13,7 +13,11 @@ describe('analytics sanitizer', () => {
           content: 'private conversation',
           authorEmail: 'friend@example.com',
         },
-        list: [{ access_token: 'token' }, { value: 'other@example.com' }],
+        list: [
+          { access_token: 'token' },
+          { authToken: 'other-token' },
+          { value: 'Contact other@example.com now' },
+        ],
       },
       safe: { characterId: 'character-1', amount: 10 },
     });
@@ -25,7 +29,11 @@ describe('analytics sanitizer', () => {
         firebaseToken: '[REDACTED]',
         cookie: '[REDACTED]',
         chat: '[REDACTED]',
-        list: [{ access_token: '[REDACTED]' }, { value: '[REDACTED_EMAIL]' }],
+        list: [
+          { access_token: '[REDACTED]' },
+          { authToken: '[REDACTED]' },
+          { value: 'Contact [REDACTED_EMAIL] now' },
+        ],
       },
       safe: { characterId: 'character-1', amount: 10 },
     });

@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { Client } from 'pg';
 import { PrismaClient } from '../src/generated/prisma/client.ts';
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
@@ -11,6 +12,7 @@ const tsxCli = resolve(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs')
 const connectionString =
   process.env.DATABASE_URL ?? 'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public';
 const realmSlug = process.env.GAME_REALM_SLUG ?? 'world-1';
+const seedLockName = 'game-prisma-seed-all';
 
 function runSeed(scriptName: string, ...arguments_: string[]): void {
   const scriptPath = resolve(currentDirectory, scriptName);
@@ -22,58 +24,70 @@ function runSeed(scriptName: string, ...arguments_: string[]): void {
 
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`Seed script ${scriptName} failed with exit code ${result.status ?? 'unknown'}.`);
+    throw new Error(
+      `Seed script ${scriptName} failed with exit code ${result.status ?? 'unknown'}.`,
+    );
   }
 }
 
-async function verifyQuestContent(): Promise<void> {
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-  try {
-    const realm = await prisma.realm.findUnique({ where: { slug: realmSlug } });
-    if (!realm) throw new Error(`Seed verification failed: realm ${realmSlug} does not exist.`);
+async function verifyQuestContent(prisma: PrismaClient): Promise<void> {
+  const realm = await prisma.realm.findUnique({ where: { slug: realmSlug } });
+  if (!realm) throw new Error(`Seed verification failed: realm ${realmSlug} does not exist.`);
 
-    const map = await prisma.map.findUnique({
-      where: { realmId_key: { realmId: realm.id, key: 'greenfields' } },
-    });
-    if (!map) throw new Error('Seed verification failed: Greenfields does not exist.');
+  const map = await prisma.map.findUnique({
+    where: { realmId_key: { realmId: realm.id, key: 'greenfields' } },
+  });
+  if (!map) throw new Error('Seed verification failed: Greenfields does not exist.');
 
-    const [quest, npc, activeContent] = await Promise.all([
-      prisma.questDefinition.findUnique({ where: { key: 'rabbit-fur-for-mira' } }),
-      prisma.npcDefinition.findUnique({
-        where: { mapId_key: { mapId: map.id, key: 'mira-tanner' } },
-      }),
-      prisma.activeContentVersion.findUnique({
-        where: { id: 'active' },
-        include: { contentVersion: true },
-      }),
-    ]);
+  const [quest, npc, activeContent] = await Promise.all([
+    prisma.questDefinition.findUnique({ where: { key: 'rabbit-fur-for-mira' } }),
+    prisma.npcDefinition.findUnique({
+      where: { mapId_key: { mapId: map.id, key: 'mira-tanner' } },
+    }),
+    prisma.activeContentVersion.findUnique({
+      where: { id: 'active' },
+      include: { contentVersion: true },
+    }),
+  ]);
 
-    if (!quest) throw new Error('Seed verification failed: rabbit-fur-for-mira quest does not exist.');
-    if (!npc) throw new Error('Seed verification failed: Mira quest NPC does not exist.');
-    if (!activeContent) throw new Error('Seed verification failed: no active content version exists.');
-    if (npc.outfitKey !== 'npc-quest-mira') {
-      throw new Error(`Seed verification failed: Mira has unexpected outfit ${npc.outfitKey}.`);
-    }
-
-    const dialogue = npc.dialogue as { type?: unknown; quest?: { questKey?: unknown } } | null;
-    if (dialogue?.type !== 'QUEST' || dialogue.quest?.questKey !== quest.key) {
-      throw new Error('Seed verification failed: Mira is not connected to the rabbit-fur quest.');
-    }
-
-    console.log(
-      `Verified quest NPC ${npc.name} (${npc.key}) on Greenfields at ${npc.x},${npc.y}, connected to ${quest.key}; active content ${activeContent.contentVersion.hash}.`,
-    );
-  } finally {
-    await prisma.$disconnect();
+  if (!quest) {
+    throw new Error('Seed verification failed: rabbit-fur-for-mira quest does not exist.');
   }
+  if (!npc) throw new Error('Seed verification failed: Mira quest NPC does not exist.');
+  if (!activeContent) {
+    throw new Error('Seed verification failed: no active content version exists.');
+  }
+  if (npc.outfitKey !== 'npc-quest-mira') {
+    throw new Error(`Seed verification failed: Mira has unexpected outfit ${npc.outfitKey}.`);
+  }
+
+  const dialogue = npc.dialogue as { type?: unknown; quest?: { questKey?: unknown } } | null;
+  if (dialogue?.type !== 'QUEST' || dialogue.quest?.questKey !== quest.key) {
+    throw new Error('Seed verification failed: Mira is not connected to the rabbit-fur quest.');
+  }
+
+  console.log(
+    `Verified quest NPC ${npc.name} (${npc.key}) on Greenfields at ${npc.x},${npc.y}, connected to ${quest.key}; active content ${activeContent.contentVersion.hash}.`,
+  );
 }
 
 async function main(): Promise<void> {
   runSeed('seed-foundation.ts', 'validate');
-  runSeed('seed.ts');
-  runSeed('seed-quests.ts');
-  runSeed('seed-foundation.ts', 'deploy');
-  await verifyQuestContent();
+
+  const lockClient = new Client({ connectionString });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  await lockClient.connect();
+  await lockClient.query('SELECT pg_advisory_lock(hashtext($1))', [seedLockName]);
+  try {
+    runSeed('seed.ts');
+    runSeed('seed-quests.ts');
+    runSeed('seed-foundation.ts', 'deploy');
+    await verifyQuestContent(prisma);
+  } finally {
+    await prisma.$disconnect();
+    await lockClient.query('SELECT pg_advisory_unlock(hashtext($1))', [seedLockName]);
+    await lockClient.end();
+  }
 }
 
 main().catch((error: unknown) => {

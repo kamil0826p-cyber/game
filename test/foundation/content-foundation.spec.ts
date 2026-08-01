@@ -23,11 +23,24 @@ const validManifest = (): ContentManifest => ({
   quests: [
     {
       key: 'gather',
-      objectives: [{ id: 'collect', type: 'COLLECT_ITEM', itemKey: 'herb', quantity: 2 }],
-      rewards: { experience: 10, silver: 5, items: [{ itemKey: 'potion', quantity: 1 }] },
+      objectives: [
+        { id: 'collect', type: 'COLLECT_ITEM', itemKey: 'herb', quantity: 2 },
+      ],
+      rewards: {
+        experience: 10,
+        silver: 5,
+        items: [{ itemKey: 'potion', quantity: 1 }],
+      },
     },
   ],
-  mobs: [{ key: 'rat', mapKey: 'field', spawnPoints: [{ x: 5, y: 5 }], lootTableKey: 'rat-loot' }],
+  mobs: [
+    {
+      key: 'rat',
+      mapKey: 'field',
+      spawnPoints: [{ x: 5, y: 5 }],
+      lootTableKey: 'rat-loot',
+    },
+  ],
   encounters: [{ key: 'rat-pack', mobKeys: ['rat'] }],
   skills: [
     { key: 'strike', prerequisiteKeys: [] },
@@ -81,7 +94,9 @@ describe('versioned content foundation', () => {
       quests: [
         {
           ...manifest.quests[0]!,
-          objectives: [{ id: 'collect', type: 'COLLECT_ITEM', itemKey: 'missing', quantity: 1 }],
+          objectives: [
+            { id: 'collect', type: 'COLLECT_ITEM', itemKey: 'missing', quantity: 1 },
+          ],
         },
       ],
     };
@@ -111,10 +126,42 @@ describe('versioned content foundation', () => {
       ],
     };
     const issues = validateContentManifest(broken);
-    expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'CYCLE' })]));
+    expect(issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'CYCLE' })]),
+    );
     expect(issues).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'UNREACHABLE_NODE' })]),
     );
+  });
+
+  it('detects collisions across portals, NPCs and mob spawn points', () => {
+    const manifest = validManifest();
+    const broken: ContentManifest = {
+      ...manifest,
+      portals: [
+        {
+          key: 'field-exit',
+          sourceMapKey: 'field',
+          destinationMapKey: 'field',
+          sourceX: 1,
+          sourceY: 1,
+          targetX: 2,
+          targetY: 2,
+        },
+      ],
+      mobs: [
+        {
+          key: 'rat',
+          mapKey: 'field',
+          spawnPoints: [{ x: 1, y: 1 }],
+          lootTableKey: 'rat-loot',
+        },
+      ],
+    };
+    const collisions = validateContentManifest(broken).filter(
+      (issue) => issue.code === 'POSITION_COLLISION',
+    );
+    expect(collisions).toHaveLength(2);
   });
 
   it('returns a logical per-category diff', () => {

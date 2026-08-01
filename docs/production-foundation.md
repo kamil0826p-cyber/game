@@ -24,7 +24,7 @@ npm run build
 npm run start
 ```
 
-The same content hash is an idempotent replay. It does not create a new `ContentVersion`, reset a character, replace inventory, remove quest progress or alter currency balances.
+The same content hash is an idempotent replay. It does not create a new `ContentVersion`, reset a character, replace inventory, remove quest progress or alter currency balances. Startup seeds are serialized with a PostgreSQL advisory lock so multiple application replicas cannot deploy content concurrently.
 
 ## Content validation and versioning
 
@@ -64,7 +64,7 @@ Rollback to a known hash:
 npm run content:rollback -- rollback:<64-character-hash>
 ```
 
-Rollback runs in a database transaction. It restores the snapshotted maps, portals, NPCs, quests, mobs, skills, prerequisites and items, then moves the active pointer. Player inventory, character quests and balances are not deleted. Legacy definitions referenced by player instances are retained rather than destructively removed.
+Rollback first verifies every stored snapshot hash and the complete package hash, then runs under the same deployment advisory lock in a database transaction. It restores the snapshotted maps, portals, NPCs, quests, mobs, skills, prerequisites and items, then moves the active pointer. Player inventory, character quests and balances are not deleted. Legacy definitions referenced by player instances are retained rather than destructively removed.
 
 Emergency rule: if validation or materialization fails, leave the current active pointer unchanged, fix the source, and redeploy. Never manually edit `ActiveContentVersion` without restoring definitions in the same transaction.
 
@@ -149,7 +149,7 @@ Default scenarios cover solo, 3v3, 5v5 and 10v10. Identical seeds produce identi
 
 Flags are immutable by `(key, version)` for scope, salt and variants. Publish a new version to change those fields. Enabling/disabling and rollout percentage are operational controls.
 
-Assignments are persisted for account, character, realm, group or guild scope. The bucket depends only on immutable flag identity and the scope ID. Increasing rollout therefore adds users without reshuffling existing assignments. Disabling a flag is an immediate kill switch and resolves to control without deleting assignments.
+Assignments are persisted for account, character, realm, group or guild scope only after a scope enters the rollout. Rollout eligibility and variant selection use separate deterministic buckets derived from immutable flag identity and the scope ID. Increasing rollout therefore adds users without reshuffling existing assignments or skewing variant weights. Disabling a flag is an immediate kill switch and resolves to control without deleting assignments.
 
 ## CI
 

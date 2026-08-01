@@ -24,6 +24,10 @@ describe('deterministic production combat simulator', () => {
     });
     expect(result.turns).toBeGreaterThan(0);
     expect(result.survivors.teamA + result.survivors.teamB).toBeLessThanOrEqual(20);
+    expect(result.composition).toEqual({
+      teamA: { size: 10, characterClass: 'ARCHER', level: 60 },
+      teamB: { size: 10, characterClass: 'WARRIOR', level: 60 },
+    });
     expect(['TEAM_A', 'TEAM_B', 'DRAW']).toContain(result.winner);
   });
 

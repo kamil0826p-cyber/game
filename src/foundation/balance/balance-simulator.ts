@@ -34,6 +34,7 @@ export interface BalanceSimulationReport {
   turns: number;
   ttkTurns: number | null;
   survivors: { teamA: number; teamB: number };
+  composition: { teamA: BalanceTeamTemplate; teamB: BalanceTeamTemplate };
   actionUsage: Record<string, number>;
   skillEfficiency: Record<string, { uses: number; damage: number; healing: number }>;
   timedOut: boolean;
@@ -66,7 +67,17 @@ const primaryStats = (
   characterClass: SimulationClass,
   level: number,
   multiplier: number,
-): Pick<CombatActorInput, 'strength' | 'agility' | 'intelligence' | 'armor' | 'maxHp' | 'hp' | 'maxEnergy' | 'energy'> => {
+): Pick<
+  CombatActorInput,
+  | 'strength'
+  | 'agility'
+  | 'intelligence'
+  | 'armor'
+  | 'maxHp'
+  | 'hp'
+  | 'maxEnergy'
+  | 'energy'
+> => {
   const basePrimary = Math.round((12 + level * 2.2) * multiplier);
   const secondary = Math.round((7 + level * 0.8) * multiplier);
   const maxHp = Math.round((120 + level * 18) * multiplier);
@@ -105,11 +116,15 @@ const actor = (
 };
 
 const team = (id: 'a' | 'b', template: BalanceTeamTemplate): CombatTeamInput => {
-  const actors = Array.from({ length: template.size }, (_, index) => actor(id, index, template));
+  const actors = Array.from({ length: template.size }, (_, index) =>
+    actor(id, index, template),
+  );
   return { anchorActorId: actors[0]!.actorId, actors };
 };
 
-const damageSkill = (actor: CombatRuntimeActor): SkillCatalogDefinition | undefined =>
+const damageSkill = (
+  actor: CombatRuntimeActor,
+): SkillCatalogDefinition | undefined =>
   [...actor.skills.values()]
     .filter(
       ({ definition, cooldownTurnsRemaining }) =>
@@ -117,14 +132,21 @@ const damageSkill = (actor: CombatRuntimeActor): SkillCatalogDefinition | undefi
         actor.energy >= definition.energyCost &&
         definition.effects.some((effect) => effect.type === 'DAMAGE'),
     )
-    .sort((left, right) => right.definition.energyCost - left.definition.energyCost)[0]?.definition;
+    .sort((left, right) => right.definition.energyCost - left.definition.energyCost)[0]
+    ?.definition;
 
-const commandFor = (runtime: CombatRuntime, actor: CombatRuntimeActor): CombatActionCommand => {
+const commandFor = (
+  runtime: CombatRuntime,
+  actor: CombatRuntimeActor,
+): CombatActionCommand => {
   const enemies = runtime.actors.filter(
-    (candidate) => candidate.teamId !== actor.teamId && candidate.hp > 0 && !candidate.withdrawn,
+    (candidate) =>
+      candidate.teamId !== actor.teamId && candidate.hp > 0 && !candidate.withdrawn,
   );
   const target = enemies.sort(
-    (left, right) => left.hp / left.maxHp - right.hp / right.maxHp || left.actorId.localeCompare(right.actorId),
+    (left, right) =>
+      left.hp / left.maxHp - right.hp / right.maxHp ||
+      left.actorId.localeCompare(right.actorId),
   )[0];
   const skill = damageSkill(actor);
   if (!skill) return { action: 'BASIC_ATTACK', targetActorId: target?.actorId };
@@ -136,9 +158,14 @@ const commandFor = (runtime: CombatRuntime, actor: CombatRuntimeActor): CombatAc
 };
 
 const living = (runtime: CombatRuntime, teamId: string): number =>
-  runtime.actors.filter((candidate) => candidate.teamId === teamId && candidate.hp > 0 && !candidate.withdrawn).length;
+  runtime.actors.filter(
+    (candidate) =>
+      candidate.teamId === teamId && candidate.hp > 0 && !candidate.withdrawn,
+  ).length;
 
-export function runBalanceScenario(scenario: BalanceScenario): BalanceSimulationReport {
+export function runBalanceScenario(
+  scenario: BalanceScenario,
+): BalanceSimulationReport {
   const random = seededRandom(scenario.seed);
   const engine = new CombatEngine(random);
   const runtime = engine.createRequest(
@@ -152,21 +179,33 @@ export function runBalanceScenario(scenario: BalanceScenario): BalanceSimulation
   );
   engine.start(runtime, 0);
   const actionUsage: Record<string, number> = {};
-  const skillEfficiency: Record<string, { uses: number; damage: number; healing: number }> = {};
+  const skillEfficiency: Record<
+    string,
+    { uses: number; damage: number; healing: number }
+  > = {};
   const maxTurns = scenario.maxTurns ?? 2_000;
   let actions = 0;
 
   while (runtime.status === 'ACTIVE' && actions < maxTurns) {
-    const activeActor = runtime.actors.find((candidate) => candidate.actorId === runtime.activeActorId);
+    const activeActor = runtime.actors.find(
+      (candidate) => candidate.actorId === runtime.activeActorId,
+    );
     if (!activeActor) throw new Error('Simulation runtime has no active actor.');
     const beforeSequence = runtime.nextSequence;
     const command = commandFor(runtime, activeActor);
     engine.act(runtime, activeActor.actorId, command, actions * 100);
     actions += 1;
     const resolution = runtime.events.find((event) => event.sequence === beforeSequence);
-    const key = command.action === 'SKILL' ? command.skillKey ?? 'unknown-skill' : 'basic-attack';
+    const key =
+      command.action === 'SKILL'
+        ? (command.skillKey ?? 'unknown-skill')
+        : 'basic-attack';
     actionUsage[key] = (actionUsage[key] ?? 0) + 1;
-    const efficiency = (skillEfficiency[key] ??= { uses: 0, damage: 0, healing: 0 });
+    const efficiency = (skillEfficiency[key] ??= {
+      uses: 0,
+      damage: 0,
+      healing: 0,
+    });
     efficiency.uses += 1;
     for (const result of resolution?.results ?? []) {
       if (result.hpDelta < 0) efficiency.damage += -result.hpDelta;
@@ -189,10 +228,14 @@ export function runBalanceScenario(scenario: BalanceScenario): BalanceSimulation
     scenarioKey: scenario.key,
     seed: scenario.seed,
     winner,
-    finishReason: timedOut ? 'TIMEOUT' : runtime.finishReason ?? runtime.status,
+    finishReason: timedOut ? 'TIMEOUT' : (runtime.finishReason ?? runtime.status),
     turns: runtime.turnNumber,
     ttkTurns: timedOut ? null : runtime.turnNumber,
     survivors: { teamA: living(runtime, teamAId), teamB: living(runtime, teamBId) },
+    composition: {
+      teamA: { ...scenario.teamA },
+      teamB: { ...scenario.teamB },
+    },
     actionUsage,
     skillEfficiency,
     timedOut,
@@ -206,10 +249,21 @@ export function compareBalanceReports(
 ): BalanceComparison {
   const regressions: BalanceRegression[] = [];
   const ttkThreshold = thresholds.ttkRatio ?? 0.2;
-  if (baseline.ttkTurns !== null && candidate.ttkTurns !== null && baseline.ttkTurns > 0) {
-    const deltaRatio = Math.abs(candidate.ttkTurns - baseline.ttkTurns) / baseline.ttkTurns;
+  if (
+    baseline.ttkTurns !== null &&
+    candidate.ttkTurns !== null &&
+    baseline.ttkTurns > 0
+  ) {
+    const deltaRatio =
+      Math.abs(candidate.ttkTurns - baseline.ttkTurns) / baseline.ttkTurns;
     if (deltaRatio > ttkThreshold) {
-      regressions.push({ metric: 'ttkTurns', baseline: baseline.ttkTurns, candidate: candidate.ttkTurns, deltaRatio, threshold: ttkThreshold });
+      regressions.push({
+        metric: 'ttkTurns',
+        baseline: baseline.ttkTurns,
+        candidate: candidate.ttkTurns,
+        deltaRatio,
+        threshold: ttkThreshold,
+      });
     }
   }
   const survivorThreshold = thresholds.survivorDelta ?? 2;
@@ -217,14 +271,40 @@ export function compareBalanceReports(
   const candidateSurvivors = candidate.survivors.teamA - candidate.survivors.teamB;
   const survivorDelta = Math.abs(candidateSurvivors - baselineSurvivors);
   if (survivorDelta > survivorThreshold) {
-    regressions.push({ metric: 'survivorDelta', baseline: baselineSurvivors, candidate: candidateSurvivors, deltaRatio: survivorDelta, threshold: survivorThreshold });
+    regressions.push({
+      metric: 'survivorDelta',
+      baseline: baselineSurvivors,
+      candidate: candidateSurvivors,
+      deltaRatio: survivorDelta,
+      threshold: survivorThreshold,
+    });
   }
   return { passed: regressions.length === 0, regressions };
 }
 
 export const DEFAULT_BALANCE_SCENARIOS: readonly BalanceScenario[] = [
-  { key: 'solo-mirror', seed: 101, teamA: { size: 1, characterClass: 'WARRIOR', level: 30 }, teamB: { size: 1, characterClass: 'WARRIOR', level: 30 } },
-  { key: 'three-v-three', seed: 303, teamA: { size: 3, characterClass: 'MAGE', level: 40 }, teamB: { size: 3, characterClass: 'ARCHER', level: 40 } },
-  { key: 'five-v-five', seed: 505, teamA: { size: 5, characterClass: 'WARRIOR', level: 50 }, teamB: { size: 5, characterClass: 'MAGE', level: 50 } },
-  { key: 'ten-v-ten', seed: 1_010, teamA: { size: 10, characterClass: 'ARCHER', level: 60 }, teamB: { size: 10, characterClass: 'WARRIOR', level: 60 } },
+  {
+    key: 'solo-mirror',
+    seed: 101,
+    teamA: { size: 1, characterClass: 'WARRIOR', level: 30 },
+    teamB: { size: 1, characterClass: 'WARRIOR', level: 30 },
+  },
+  {
+    key: 'three-v-three',
+    seed: 303,
+    teamA: { size: 3, characterClass: 'MAGE', level: 40 },
+    teamB: { size: 3, characterClass: 'ARCHER', level: 40 },
+  },
+  {
+    key: 'five-v-five',
+    seed: 505,
+    teamA: { size: 5, characterClass: 'WARRIOR', level: 50 },
+    teamB: { size: 5, characterClass: 'MAGE', level: 50 },
+  },
+  {
+    key: 'ten-v-ten',
+    seed: 1_010,
+    teamA: { size: 10, characterClass: 'ARCHER', level: 60 },
+    teamB: { size: 10, characterClass: 'WARRIOR', level: 60 },
+  },
 ];

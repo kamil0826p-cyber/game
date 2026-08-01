@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
+import { stableContentHash } from './content.canonical.js';
 import type { ContentSnapshotRecord } from './content.types.js';
 
 const record = (value: unknown, context: string): Record<string, unknown> => {
@@ -9,17 +10,19 @@ const record = (value: unknown, context: string): Record<string, unknown> => {
 };
 
 const text = (value: unknown, context: string): string => {
-  if (typeof value !== 'string' || value.length === 0) throw new Error(`Missing ${context}.`);
+  if (typeof value !== 'string') throw new Error(`Missing ${context}.`);
   return value;
 };
 
 const integer = (value: unknown, context: string): number => {
-  if (typeof value !== 'number' || !Number.isInteger(value)) throw new Error(`Invalid ${context}.`);
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    throw new Error(`Invalid ${context}.`);
+  }
   return value;
 };
 
-const optionalText = (value: unknown): string | undefined =>
-  typeof value === 'string' ? value : undefined;
+const optionalText = (value: unknown): string | null =>
+  typeof value === 'string' ? value : null;
 
 const json = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 
@@ -36,13 +39,38 @@ export async function rollbackContentVersion(
   targetHash: string,
 ): Promise<void> {
   await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`
+      SELECT pg_advisory_xact_lock(hashtext('game-content-deployment'))
+    `;
     const target = await transaction.contentVersion.findUnique({
       where: { hash: targetHash },
       include: { snapshots: true },
     });
     if (!target) throw new Error(`Unknown content version ${targetHash}.`);
-    const current = await transaction.activeContentVersion.findUnique({ where: { id: 'active' } });
 
+    const snapshotRecords = target.snapshots.map((snapshot) => ({
+      category: snapshot.category as ContentSnapshotRecord['category'],
+      key: snapshot.key,
+      payload: snapshot.payload,
+    }));
+    for (const snapshot of target.snapshots) {
+      if (stableContentHash(snapshot.payload) !== snapshot.payloadHash) {
+        throw new Error(
+          `Content snapshot ${snapshot.category}/${snapshot.key} failed integrity verification.`,
+        );
+      }
+    }
+    const verifiedHash = stableContentHash({
+      schemaVersion: target.schemaVersion,
+      records: snapshotRecords,
+    });
+    if (verifiedHash !== target.hash) {
+      throw new Error(`Content version ${targetHash} failed package integrity verification.`);
+    }
+
+    const current = await transaction.activeContentVersion.findUnique({
+      where: { id: 'active' },
+    });
     const realms = new Map(
       (await transaction.realm.findMany()).map((realm) => [realm.slug, realm]),
     );
@@ -62,7 +90,10 @@ export async function rollbackContentVersion(
           name: text(payload.name, `${snapshot.key}.name`),
           width: integer(payload.width, `${snapshot.key}.width`),
           height: integer(payload.height, `${snapshot.key}.height`),
-          zoneType: text(payload.zoneType, `${snapshot.key}.zoneType`) as 'SAFE' | 'OUTLAW' | 'PVP',
+          zoneType: text(payload.zoneType, `${snapshot.key}.zoneType`) as
+            | 'SAFE'
+            | 'OUTLAW'
+            | 'PVP',
           spawnX: integer(payload.spawnX, `${snapshot.key}.spawnX`),
           spawnY: integer(payload.spawnY, `${snapshot.key}.spawnY`),
           tiledData: json(payload.tiledData),
@@ -72,7 +103,10 @@ export async function rollbackContentVersion(
           name: text(payload.name, `${snapshot.key}.name`),
           width: integer(payload.width, `${snapshot.key}.width`),
           height: integer(payload.height, `${snapshot.key}.height`),
-          zoneType: text(payload.zoneType, `${snapshot.key}.zoneType`) as 'SAFE' | 'OUTLAW' | 'PVP',
+          zoneType: text(payload.zoneType, `${snapshot.key}.zoneType`) as
+            | 'SAFE'
+            | 'OUTLAW'
+            | 'PVP',
           spawnX: integer(payload.spawnX, `${snapshot.key}.spawnX`),
           spawnY: integer(payload.spawnY, `${snapshot.key}.spawnY`),
           tiledData: json(payload.tiledData),
@@ -84,11 +118,19 @@ export async function rollbackContentVersion(
 
     for (const snapshot of byCategory(target.snapshots, 'portals')) {
       const payload = record(snapshot.payload, snapshot.key);
-      const sourceKey = `${text(payload.sourceRealmSlug, `${snapshot.key}.sourceRealmSlug`)}/${text(payload.sourceMapKey, `${snapshot.key}.sourceMapKey`)}`;
-      const destinationKey = `${text(payload.destinationRealmSlug, `${snapshot.key}.destinationRealmSlug`)}/${text(payload.destinationMapKey, `${snapshot.key}.destinationMapKey`)}`;
+      const sourceKey = `${text(
+        payload.sourceRealmSlug,
+        `${snapshot.key}.sourceRealmSlug`,
+      )}/${text(payload.sourceMapKey, `${snapshot.key}.sourceMapKey`)}`;
+      const destinationKey = `${text(
+        payload.destinationRealmSlug,
+        `${snapshot.key}.destinationRealmSlug`,
+      )}/${text(payload.destinationMapKey, `${snapshot.key}.destinationMapKey`)}`;
       const sourceMapId = mapIds.get(sourceKey);
       const destinationMapId = mapIds.get(destinationKey);
-      if (!sourceMapId || !destinationMapId) throw new Error(`Rollback portal ${snapshot.key} references a missing map.`);
+      if (!sourceMapId || !destinationMapId) {
+        throw new Error(`Rollback portal ${snapshot.key} references a missing map.`);
+      }
       const sourceX = integer(payload.sourceX, `${snapshot.key}.sourceX`);
       const sourceY = integer(payload.sourceY, `${snapshot.key}.sourceY`);
       await transaction.portal.upsert({
@@ -149,17 +191,26 @@ export async function rollbackContentVersion(
       const payload = record(snapshot.payload, snapshot.key);
       const key = text(payload.key, `${snapshot.key}.key`);
       const prerequisiteKeys = Array.isArray(payload.prerequisiteKeys)
-        ? payload.prerequisiteKeys.map((entry) => text(entry, `${snapshot.key}.prerequisiteKeys`))
+        ? payload.prerequisiteKeys.map((entry) =>
+            text(entry, `${snapshot.key}.prerequisiteKeys`),
+          )
         : [];
       skillPrerequisites.set(key, prerequisiteKeys);
       const data = {
         name: text(payload.name, `${snapshot.key}.name`),
         description: text(payload.description, `${snapshot.key}.description`),
-        requiredClass: optionalText(payload.requiredClass) as 'MAGE' | 'WARRIOR' | 'ARCHER' | undefined,
+        requiredClass: optionalText(payload.requiredClass) as
+          | 'MAGE'
+          | 'WARRIOR'
+          | 'ARCHER'
+          | null,
         minimumLevel: integer(payload.minimumLevel, `${snapshot.key}.minimumLevel`),
         energyCost: integer(payload.energyCost, `${snapshot.key}.energyCost`),
         cooldownTurns: integer(payload.cooldownTurns, `${snapshot.key}.cooldownTurns`),
-        targeting: text(payload.targeting, `${snapshot.key}.targeting`) as 'SELF' | 'ENEMY' | 'AREA',
+        targeting: text(payload.targeting, `${snapshot.key}.targeting`) as
+          | 'SELF'
+          | 'ENEMY'
+          | 'AREA',
         maxRank: integer(payload.maxRank, `${snapshot.key}.maxRank`),
         displayOrder: integer(payload.displayOrder, `${snapshot.key}.displayOrder`),
         treeRow: integer(payload.treeRow, `${snapshot.key}.treeRow`),
@@ -175,16 +226,25 @@ export async function rollbackContentVersion(
         update: data,
       });
     }
+
     const skills = new Map(
-      (await transaction.skillDefinition.findMany({ select: { id: true, key: true } })).map((skill) => [skill.key, skill.id]),
+      (
+        await transaction.skillDefinition.findMany({ select: { id: true, key: true } })
+      ).map((skill) => [skill.key, skill.id]),
     );
     for (const [skillKey, prerequisites] of skillPrerequisites) {
       const skillDefinitionId = skills.get(skillKey);
-      if (!skillDefinitionId) throw new Error(`Rollback skill ${skillKey} was not written.`);
+      if (!skillDefinitionId) {
+        throw new Error(`Rollback skill ${skillKey} was not written.`);
+      }
       await transaction.skillPrerequisite.deleteMany({ where: { skillDefinitionId } });
       for (const prerequisiteKey of prerequisites) {
         const prerequisiteSkillDefinitionId = skills.get(prerequisiteKey);
-        if (!prerequisiteSkillDefinitionId) throw new Error(`Rollback skill ${skillKey} references missing prerequisite ${prerequisiteKey}.`);
+        if (!prerequisiteSkillDefinitionId) {
+          throw new Error(
+            `Rollback skill ${skillKey} references missing prerequisite ${prerequisiteKey}.`,
+          );
+        }
         await transaction.skillPrerequisite.create({
           data: { skillDefinitionId, prerequisiteSkillDefinitionId },
         });
@@ -193,9 +253,14 @@ export async function rollbackContentVersion(
 
     for (const snapshot of byCategory(target.snapshots, 'npcs')) {
       const payload = record(snapshot.payload, snapshot.key);
-      const mapKey = `${text(payload.realmSlug, `${snapshot.key}.realmSlug`)}/${text(payload.mapKey, `${snapshot.key}.mapKey`)}`;
+      const mapKey = `${text(payload.realmSlug, `${snapshot.key}.realmSlug`)}/${text(
+        payload.mapKey,
+        `${snapshot.key}.mapKey`,
+      )}`;
       const mapId = mapIds.get(mapKey);
-      if (!mapId) throw new Error(`Rollback NPC ${snapshot.key} references missing map ${mapKey}.`);
+      if (!mapId) {
+        throw new Error(`Rollback NPC ${snapshot.key} references missing map ${mapKey}.`);
+      }
       const key = text(payload.key, `${snapshot.key}.key`);
       const data = {
         name: text(payload.name, `${snapshot.key}.name`),
@@ -213,9 +278,14 @@ export async function rollbackContentVersion(
 
     for (const snapshot of byCategory(target.snapshots, 'mobs')) {
       const payload = record(snapshot.payload, snapshot.key);
-      const mapKey = `${text(payload.realmSlug, `${snapshot.key}.realmSlug`)}/${text(payload.mapKey, `${snapshot.key}.mapKey`)}`;
+      const mapKey = `${text(payload.realmSlug, `${snapshot.key}.realmSlug`)}/${text(
+        payload.mapKey,
+        `${snapshot.key}.mapKey`,
+      )}`;
       const mapId = mapIds.get(mapKey);
-      if (!mapId) throw new Error(`Rollback mob ${snapshot.key} references missing map ${mapKey}.`);
+      if (!mapId) {
+        throw new Error(`Rollback mob ${snapshot.key} references missing map ${mapKey}.`);
+      }
       const key = text(payload.key, `${snapshot.key}.key`);
       const data = {
         name: text(payload.name, `${snapshot.key}.name`),

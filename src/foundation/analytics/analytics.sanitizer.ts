@@ -4,6 +4,7 @@ const MAX_DEPTH = 20;
 const MAX_ARRAY_ITEMS = 200;
 const MAX_OBJECT_KEYS = 200;
 const MAX_STRING_LENGTH = 4_096;
+const EMAIL_PATTERN = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
 
 const sensitiveKey = (key: string, path: readonly string[]): boolean => {
   const normalized = key.replaceAll(/[^a-z0-9]/gi, '').toLowerCase();
@@ -13,10 +14,9 @@ const sensitiveKey = (key: string, path: readonly string[]): boolean => {
     normalized.includes('authorization') ||
     normalized.includes('cookie') ||
     normalized.includes('firebase') ||
-    normalized.includes('refreshtoken') ||
-    normalized.includes('accesstoken') ||
-    normalized.includes('idtoken') ||
-    normalized === 'token' ||
+    normalized.endsWith('token') ||
+    normalized.includes('apikey') ||
+    normalized.includes('privatekey') ||
     normalized.includes('secret') ||
     normalized === 'email' ||
     normalized.endsWith('email') ||
@@ -33,13 +33,17 @@ const sensitiveKey = (key: string, path: readonly string[]): boolean => {
     const normalizedSegment = segment.toLowerCase();
     return normalizedSegment.includes('chat') || normalizedSegment.includes('message');
   });
-  return (normalized === 'content' || normalized === 'message' || normalized === 'text') &&
-    insideConversation;
+  return (
+    (normalized === 'content' || normalized === 'message' || normalized === 'text') &&
+    insideConversation
+  );
 };
 
 const sanitizeString = (value: string): string => {
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return REDACTED_EMAIL;
-  return value.length > MAX_STRING_LENGTH ? `${value.slice(0, MAX_STRING_LENGTH)}…` : value;
+  const withoutEmails = value.replaceAll(EMAIL_PATTERN, REDACTED_EMAIL);
+  return withoutEmails.length > MAX_STRING_LENGTH
+    ? `${withoutEmails.slice(0, MAX_STRING_LENGTH)}…`
+    : withoutEmails;
 };
 
 export function sanitizeAnalyticsPayload(
@@ -48,7 +52,12 @@ export function sanitizeAnalyticsPayload(
   depth = 0,
 ): unknown {
   if (depth > MAX_DEPTH) return '[MAX_DEPTH]';
-  if (value === null || value === undefined || typeof value === 'boolean' || typeof value === 'number') {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'boolean' ||
+    typeof value === 'number'
+  ) {
     return value;
   }
   if (typeof value === 'string') return sanitizeString(value);
@@ -57,12 +66,17 @@ export function sanitizeAnalyticsPayload(
   if (Array.isArray(value)) {
     return value
       .slice(0, MAX_ARRAY_ITEMS)
-      .map((entry, index) => sanitizeAnalyticsPayload(entry, [...path, String(index)], depth + 1));
+      .map((entry, index) =>
+        sanitizeAnalyticsPayload(entry, [...path, String(index)], depth + 1),
+      );
   }
   if (typeof value !== 'object') return String(value);
 
   const output: Record<string, unknown> = {};
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(0, MAX_OBJECT_KEYS)) {
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(
+    0,
+    MAX_OBJECT_KEYS,
+  )) {
     output[key] = sensitiveKey(key, path)
       ? REDACTED
       : sanitizeAnalyticsPayload(nested, [...path, key], depth + 1);

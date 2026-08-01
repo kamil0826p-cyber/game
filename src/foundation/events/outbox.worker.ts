@@ -16,7 +16,12 @@ interface ClaimedOutboxRow {
   attempts: number;
 }
 
-const integerEnvironment = (name: string, fallback: number, minimum: number, maximum: number): number => {
+const integerEnvironment = (
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number => {
   const raw = process.env[name];
   if (!raw) return fallback;
   const parsed = Number(raw);
@@ -43,8 +48,18 @@ export class OutboxWorker implements OnModuleInit, OnApplicationShutdown {
   private readonly workerId = randomUUID();
   private readonly enabled = booleanEnvironment('OUTBOX_WORKER_ENABLED', true);
   private readonly batchSize = integerEnvironment('OUTBOX_BATCH_SIZE', 50, 1, 500);
-  private readonly intervalMs = integerEnvironment('OUTBOX_POLL_INTERVAL_MS', 1_000, 100, 60_000);
-  private readonly staleLockSeconds = integerEnvironment('OUTBOX_STALE_LOCK_SECONDS', 120, 10, 3_600);
+  private readonly intervalMs = integerEnvironment(
+    'OUTBOX_POLL_INTERVAL_MS',
+    1_000,
+    100,
+    60_000,
+  );
+  private readonly staleLockSeconds = integerEnvironment(
+    'OUTBOX_STALE_LOCK_SECONDS',
+    120,
+    10,
+    3_600,
+  );
   private readonly maxAttempts = integerEnvironment('OUTBOX_MAX_ATTEMPTS', 8, 1, 100);
   private timer?: NodeJS.Timeout;
   private running = false;
@@ -73,7 +88,10 @@ export class OutboxWorker implements OnModuleInit, OnApplicationShutdown {
       for (const row of claimed) await this.processClaim(row);
       return claimed.length;
     } catch (error: unknown) {
-      this.logger.error('Outbox polling failed.', error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        'Outbox polling failed.',
+        error instanceof Error ? error.stack : String(error),
+      );
       return 0;
     } finally {
       this.running = false;
@@ -103,7 +121,8 @@ export class OutboxWorker implements OnModuleInit, OnApplicationShutdown {
         SET "status" = 'PROCESSING'::"OutboxStatus",
             "lockedAt" = NOW(),
             "lockedBy" = ${this.workerId},
-            "attempts" = outbox."attempts" + 1
+            "attempts" = outbox."attempts" + 1,
+            "updatedAt" = NOW()
         FROM candidates
         WHERE outbox."id" = candidates."id"
         RETURNING outbox."id", outbox."eventId", outbox."attempts"
@@ -112,7 +131,9 @@ export class OutboxWorker implements OnModuleInit, OnApplicationShutdown {
   }
 
   private async processClaim(claim: ClaimedOutboxRow): Promise<void> {
-    const event = await this.prisma.domainEvent.findUnique({ where: { id: claim.eventId } });
+    const event = await this.prisma.domainEvent.findUnique({
+      where: { id: claim.eventId },
+    });
     if (!event) {
       await this.failClaim(claim, new Error(`Domain event ${claim.eventId} no longer exists.`));
       return;
@@ -180,7 +201,9 @@ export class OutboxWorker implements OnModuleInit, OnApplicationShutdown {
           },
         });
       });
-      this.logger.error(`Event ${claim.eventId} moved to dead letter after ${claim.attempts} attempts.`);
+      this.logger.error(
+        `Event ${claim.eventId} moved to dead letter after ${claim.attempts} attempts.`,
+      );
       return;
     }
 

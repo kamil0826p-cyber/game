@@ -136,7 +136,9 @@ export async function captureContentSnapshot(
         animationKey: skill.animationKey,
         effectDefinition: skill.effectDefinition,
         visualDefinition: skill.visualDefinition,
-        prerequisiteKeys: skill.prerequisites.map((entry) => entry.prerequisite.key),
+        prerequisiteKeys: skill.prerequisites
+          .map((entry) => entry.prerequisite.key)
+          .sort(),
       },
     });
   }

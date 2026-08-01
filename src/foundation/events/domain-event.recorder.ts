@@ -16,7 +16,9 @@ export class DomainEventRecorder {
   constructor(private readonly prisma: PrismaService) {}
 
   async record(input: DomainEventInput): Promise<DomainEventEnvelope> {
-    return this.prisma.$transaction((transaction) => this.recordInTransaction(transaction, input));
+    return this.prisma.$transaction((transaction) =>
+      this.recordInTransaction(transaction, input),
+    );
   }
 
   async recordInTransaction(
@@ -29,7 +31,9 @@ export class DomainEventRecorder {
     });
     const id = randomUUID();
     const occurredAt = new Date();
-    const sanitizedPayload = sanitizeAnalyticsPayload(input.payload) as Prisma.InputJsonValue;
+    const sanitizedPayload = sanitizeAnalyticsPayload(
+      input.payload ?? {},
+    ) as Prisma.InputJsonValue;
     const critical = input.critical ?? criticalType(input.type);
     const context = input.context ?? {};
 
