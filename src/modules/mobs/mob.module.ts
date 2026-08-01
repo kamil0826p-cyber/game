@@ -6,6 +6,7 @@ import { MapModule } from '../maps/map.module.js';
 import { MovementModule } from '../movement/movement.module.js';
 import { PersistenceModule } from '../persistence/persistence.module.js';
 import { TradeModule } from '../player/trade/trade.module.js';
+import { ProgressionModule } from '../progression/progression.module.js';
 import { QuestModule } from '../quests/quest.module.js';
 import { SkillModule } from '../skills/skill.module.js';
 import { WorldModule } from '../world/world.module.js';
@@ -15,7 +16,18 @@ import { MobRewardService } from './mob-reward.service.js';
 import { PveCombatService } from './pve-combat.service.js';
 
 @Module({
-  imports: [CombatModule, GroupModule, MapModule, MovementModule, PersistenceModule, TradeModule, QuestModule, SkillModule, WorldModule],
+  imports: [
+    CombatModule,
+    GroupModule,
+    MapModule,
+    MovementModule,
+    PersistenceModule,
+    TradeModule,
+    ProgressionModule,
+    QuestModule,
+    SkillModule,
+    WorldModule,
+  ],
   providers: [KeyedSerialExecutor, MobRewardService, MobCoordinatorService, PveCombatService, MobGateway],
   exports: [MobCoordinatorService, PveCombatService],
 })
