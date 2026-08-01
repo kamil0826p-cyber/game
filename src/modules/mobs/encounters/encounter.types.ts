@@ -59,7 +59,11 @@ export type EncounterPhaseCondition =
   | { type: 'ENEMY_HP_AT_MOST'; ratio: number }
   | { type: 'ACTOR_HP_AT_MOST'; actorKey: string; ratio: number }
   | { type: 'ACTOR_DEFEATED'; actorKey: string }
-  | { type: 'LIVING_PLAYERS_AT_MOST'; count: number };
+  | { type: 'TELEGRAPH_RESOLVED'; skillKey: string; interrupted: boolean }
+  | { type: 'STATUS_ACTIVE'; actorKey: string; statusKey: string }
+  | { type: 'BREAK_AT_LEAST'; actorKey: string; stacks: number }
+  | { type: 'LIVING_PLAYERS_AT_MOST'; count: number }
+  | { type: 'INTERACTION_USED'; interactionKey: string };
 
 export interface EncounterPhaseDefinition {
   key: string;
@@ -146,6 +150,12 @@ export interface EncounterAiPlan {
   reason: string;
 }
 
+export interface EncounterTelegraphResolution {
+  skillKey: string;
+  interrupted: boolean;
+  turn: number;
+}
+
 export interface EncounterRuntimeState {
   encounter: ScaledEncounter;
   rootMobId: string;
@@ -160,6 +170,9 @@ export interface EncounterRuntimeState {
   actorIdByKey: Map<string, string>;
   actorKeyById: Map<string, string>;
   contributions: Map<string, EncounterContribution>;
+  observedTelegraphs: Map<string, string>;
+  resolvedTelegraphs: EncounterTelegraphResolution[];
+  interactions: Set<string>;
   aiTrace: string[];
   seed: number;
 }
