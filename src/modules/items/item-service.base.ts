@@ -28,7 +28,6 @@ type ItemMetadata = {
   sellPriceSilver: number;
   sellable?: boolean;
 };
-type CharacterStats = { strength: number; agility: number; intelligence: number; armor: number; maxHp: number; maxEnergy: number };
 type ItemDefinitionView = {
   key: string;
   name: string;
@@ -156,70 +155,6 @@ export class ItemServiceBase {
         silver: character.silver,
       } : undefined,
     };
-  }
-
-  protected async baseStatsBeforeEquipmentChange(tx: Prisma.TransactionClient, characterId: string): Promise<CharacterStats> {
-    const character = await tx.character.findUniqueOrThrow({
-      where: { id: characterId },
-      select: {
-        strength: true,
-        agility: true,
-        intelligence: true,
-        armor: true,
-        maxHp: true,
-        maxEnergy: true,
-        inventoryItems: { where: { equippedSlot: { not: null } }, include: { itemDefinition: true } },
-      },
-    });
-    const bonuses = this.sumBonuses((character.inventoryItems as InventoryRecord[]).map((item: InventoryRecord) =>
-      this.metadata(this.itemView(item).metadata).statBonuses));
-    return {
-      strength: character.strength - bonuses.strength,
-      agility: character.agility - bonuses.agility,
-      intelligence: character.intelligence - bonuses.intelligence,
-      armor: character.armor - bonuses.armor,
-      maxHp: character.maxHp - bonuses.maxHp,
-      maxEnergy: character.maxEnergy - bonuses.maxEnergy,
-    };
-  }
-
-  protected async applyEffectiveStats(tx: Prisma.TransactionClient, characterId: string, base: CharacterStats): Promise<void> {
-    const equipped = await tx.inventoryItem.findMany({
-      where: { characterId, equippedSlot: { not: null } },
-      include: { itemDefinition: true },
-    });
-    const bonuses = this.sumBonuses((equipped as InventoryRecord[]).map((item: InventoryRecord) =>
-      this.metadata(this.itemView(item).metadata).statBonuses));
-    const maxHp = base.maxHp + bonuses.maxHp;
-    const maxEnergy = base.maxEnergy + bonuses.maxEnergy;
-    const current = await tx.character.findUniqueOrThrow({
-      where: { id: characterId },
-      select: { hp: true, energy: true },
-    });
-    await tx.character.update({
-      where: { id: characterId },
-      data: {
-        strength: base.strength + bonuses.strength,
-        agility: base.agility + bonuses.agility,
-        intelligence: base.intelligence + bonuses.intelligence,
-        armor: base.armor + bonuses.armor,
-        maxHp,
-        maxEnergy,
-        hp: Math.min(current.hp, maxHp),
-        energy: Math.min(current.energy, maxEnergy),
-      },
-    });
-  }
-
-  protected sumBonuses(values: Array<StatBonuses | undefined>): Required<StatBonuses> {
-    return values.reduce<Required<StatBonuses>>((sum, value) => ({
-      strength: sum.strength + (value?.strength ?? 0),
-      agility: sum.agility + (value?.agility ?? 0),
-      intelligence: sum.intelligence + (value?.intelligence ?? 0),
-      armor: sum.armor + (value?.armor ?? 0),
-      maxHp: sum.maxHp + (value?.maxHp ?? 0),
-      maxEnergy: sum.maxEnergy + (value?.maxEnergy ?? 0),
-    }), { strength: 0, agility: 0, intelligence: 0, armor: 0, maxHp: 0, maxEnergy: 0 });
   }
 
   protected async addToInventory(
