@@ -125,10 +125,14 @@ export class ItemizedItemService extends CanonicalItemService {
         },
         include: { itemDefinition: true, character: true },
       });
-      if (!item) this.invalidItem({ reason: 'ITEM_UNAVAILABLE_OR_OFFERED' });
+      if (!item) this.rejectItemizationItem({ reason: 'ITEM_UNAVAILABLE_OR_OFFERED' });
       const metadata = parseItemDefinitionMetadata(item.itemDefinition.metadata);
-      if (metadata.category !== 'EQUIPMENT' || !metadata.equipmentSlot) this.invalidItem();
-      if (metadata.requiredClass && metadata.requiredClass !== item.character.class) this.invalidItem();
+      if (metadata.category !== 'EQUIPMENT' || !metadata.equipmentSlot) {
+        this.rejectItemizationItem();
+      }
+      if (metadata.requiredClass && metadata.requiredClass !== item.character.class) {
+        this.rejectItemizationItem();
+      }
       if ((metadata.minimumLevel ?? 1) > item.character.level) {
         throw new GameError(
           GAME_ERROR_CODES.ITEM_LEVEL_REQUIRED,
@@ -143,7 +147,7 @@ export class ItemizedItemService extends CanonicalItemService {
         legacyOperationId: `legacy-migration:${item.id}`,
       });
       if (snapshot.boundCharacterId && snapshot.boundCharacterId !== characterId) {
-        this.invalidItem({ reason: 'ITEM_BOUND_TO_OTHER_CHARACTER' });
+        this.rejectItemizationItem({ reason: 'ITEM_BOUND_TO_OTHER_CHARACTER' });
       }
       const preview = buildItemEquipPreview(metadata, snapshot);
       if (preview.requiresConfirmation && confirmationHash !== preview.confirmationHash) {
@@ -333,7 +337,9 @@ export class ItemizedItemService extends CanonicalItemService {
       });
       if (snapshot.relic) groups.add(snapshot.relic.uniqueGroup);
     }
-    if (groups.size > 2) this.invalidItem({ reason: 'ACTIVE_RELIC_LIMIT', limit: 2 });
+    if (groups.size > 2) {
+      this.rejectItemizationItem({ reason: 'ACTIVE_RELIC_LIMIT', limit: 2 });
+    }
   }
 
   private bindSnapshot(
@@ -369,7 +375,7 @@ export class ItemizedItemService extends CanonicalItemService {
     );
   }
 
-  private invalidItem(details?: Record<string, unknown>): never {
+  private rejectItemizationItem(details?: Record<string, unknown>): never {
     throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', details);
   }
 }
