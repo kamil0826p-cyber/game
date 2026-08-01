@@ -19,6 +19,7 @@ const REPORT_VIEWS = {
   'combat-modes': 'AnalyticsCombatHealthByModeDaily',
   'party-sizes': 'AnalyticsCombatPartySizeDaily',
   skills: 'AnalyticsSkillPerformanceDaily',
+  'turn-timing': 'AnalyticsCombatTurnTimingDaily',
   queue: 'AnalyticsQueueHealth',
   anomalies: 'AnalyticsAnomalies',
 } as const;
@@ -47,7 +48,9 @@ async function report(prisma: PrismaClient, view: string, limit: number): Promis
     `SELECT * FROM "${view}" ORDER BY 1 DESC LIMIT $1`,
     limit,
   );
-  process.stdout.write(`${JSON.stringify(rows, (_, value) => typeof value === 'bigint' ? Number(value) : value, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(rows, (_, value) => (typeof value === 'bigint' ? Number(value) : value), 2)}\n`,
+  );
 }
 
 async function setExperiment(prisma: PrismaClient): Promise<void> {
@@ -56,7 +59,9 @@ async function setExperiment(prisma: PrismaClient): Promise<void> {
   const rollout = integer('rollout', 0)!;
   const variantsRaw = argument('variants');
   if (!key || version === undefined || !variantsRaw) {
-    throw new Error('experiment:set requires --key, --version and --variants=control:5000,treatment:5000.');
+    throw new Error(
+      'experiment:set requires --key, --version and --variants=control:5000,treatment:5000.',
+    );
   }
   if (!/^[a-z0-9][a-z0-9_-]{0,95}$/i.test(key)) throw new Error('Experiment key is invalid.');
   if (version < 1) throw new Error('Experiment version must be a positive integer.');
@@ -64,34 +69,48 @@ async function setExperiment(prisma: PrismaClient): Promise<void> {
   const variants = variantsRaw.split(',').map((entry) => {
     const [variantKey, weightRaw] = entry.split(':');
     const weight = Number(weightRaw);
-    if (!variantKey || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(variantKey) || !Number.isInteger(weight) || weight < 1) {
+    if (
+      !variantKey ||
+      !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(variantKey) ||
+      !Number.isInteger(weight) ||
+      weight < 1
+    ) {
       throw new Error(`Invalid variant ${entry}.`);
     }
     return { key: variantKey, weight };
   });
-  if (new Set(variants.map((variant) => variant.key)).size !== variants.length) throw new Error('Variant keys must be unique.');
-  if (variants.reduce((sum, value) => sum + value.weight, 0) !== 10_000) throw new Error('Variant weights must total 10000.');
+  if (new Set(variants.map((variant) => variant.key)).size !== variants.length) {
+    throw new Error('Variant keys must be unique.');
+  }
+  if (variants.reduce((sum, value) => sum + value.weight, 0) !== 10_000) {
+    throw new Error('Variant weights must total 10000.');
+  }
   if (rollout < 0 || rollout > 10_000) throw new Error('Rollout must be 0-10000.');
 
   const rawStatus = argument('status') ?? 'disabled';
-  if (!['active', 'disabled'].includes(rawStatus)) throw new Error('Experiment status must be active or disabled.');
+  if (!['active', 'disabled'].includes(rawStatus)) {
+    throw new Error('Experiment status must be active or disabled.');
+  }
   const status = rawStatus === 'active' ? 'ACTIVE' : 'DISABLED';
-  const existing = await prisma.$queryRaw<Array<{
-    rolloutBasisPoints: number;
-    variants: Prisma.JsonValue;
-    salt: string;
-  }>>(Prisma.sql`
+  const existing = await prisma.$queryRaw<
+    Array<{
+      rolloutBasisPoints: number;
+      variants: Prisma.JsonValue;
+      salt: string;
+    }>
+  >(Prisma.sql`
     SELECT "rolloutBasisPoints", "variants", "salt"
     FROM "AnalyticsExperiment" WHERE "key" = ${key} AND "version" = ${version}
     LIMIT 1
   `);
   const requestedSalt = argument('salt');
   const salt = requestedSalt ?? existing[0]?.salt ?? randomBytes(24).toString('hex');
-  if (existing[0] && (
-    existing[0].rolloutBasisPoints !== rollout ||
-    JSON.stringify(existing[0].variants) !== JSON.stringify(variants) ||
-    existing[0].salt !== salt
-  )) {
+  if (
+    existing[0] &&
+    (existing[0].rolloutBasisPoints !== rollout ||
+      JSON.stringify(existing[0].variants) !== JSON.stringify(variants) ||
+      existing[0].salt !== salt)
+  ) {
     throw new Error(`Experiment ${key} v${version} is immutable; create a new version.`);
   }
 
@@ -128,7 +147,11 @@ async function main(): Promise<void> {
     if (isReportCommand(command)) await report(prisma, REPORT_VIEWS[command], limit);
     else if (command === 'experiment:set') await setExperiment(prisma);
     else if (command === 'experiment:disable') await disableExperiment(prisma);
-    else throw new Error(`Usage: npm run analytics -- ${Object.keys(REPORT_VIEWS).join('|')}|experiment:set|experiment:disable`);
+    else {
+      throw new Error(
+        `Usage: npm run analytics -- ${Object.keys(REPORT_VIEWS).join('|')}|experiment:set|experiment:disable`,
+      );
+    }
   } finally {
     await prisma.$disconnect();
   }
