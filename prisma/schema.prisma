@@ -51,6 +51,12 @@ enum SkillTargeting {
   SELF
   ENEMY
   AREA
+  ALLY
+  ALL_ALLIES
+  ALL_ENEMIES
+  FRONT_ROW
+  BACK_ROW
+  ADJACENT
 }
 
 enum EquipmentSlot {
