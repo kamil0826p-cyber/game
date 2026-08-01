@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../../auth/auth.module.js';
 import { AdminModule } from '../admin/admin.module.js';
+import { CharacterProgressionGateway } from '../characters/character-progression.gateway.js';
 import { CharacterModule } from '../characters/character.module.js';
 import { CombatModule } from '../combat/combat.module.js';
 import { MapModule } from '../maps/map.module.js';
@@ -29,6 +30,12 @@ import { SessionLifecycleService } from './session-lifecycle.service.js';
     MovementModule,
     SkillModule,
   ],
-  providers: [GameGateway, CharacterRosterGateway, SessionClaimExecutor, SessionLifecycleService],
+  providers: [
+    GameGateway,
+    CharacterRosterGateway,
+    CharacterProgressionGateway,
+    SessionClaimExecutor,
+    SessionLifecycleService,
+  ],
 })
 export class RealtimeModule {}

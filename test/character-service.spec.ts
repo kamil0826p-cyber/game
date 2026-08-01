@@ -31,15 +31,37 @@ const createHarness = () => {
       defaultMapId: 'map-id',
     }),
   };
+  const progression = {
+    initialStats: vi.fn().mockReturnValue({
+      maxHp: 75,
+      maxEnergy: 120,
+      strength: 4,
+      agility: 7,
+      intelligence: 14,
+      armor: 2,
+    }),
+    initialProgressionData: vi.fn().mockReturnValue({
+      milestones: {},
+      legacyAdjustment: {},
+      permanent: {},
+      temporary: {},
+      audit: [],
+    }),
+  };
   return {
+    progression,
     transaction,
-    service: new CharacterService(prisma as never, realmService as never),
+    service: new CharacterService(
+      prisma as never,
+      realmService as never,
+      progression as never,
+    ),
   };
 };
 
 describe('CharacterService', () => {
   it('executes the PostgreSQL advisory lock and creates the selected gender atomically', async () => {
-    const { service, transaction } = createHarness();
+    const { service, transaction, progression } = createHarness();
 
     const character = await service.createCharacter('user-id', {
       name: 'Second Hero',
@@ -53,10 +75,13 @@ describe('CharacterService', () => {
     expect(transaction.character.count).toHaveBeenCalledWith({
       where: { userId: 'user-id', realmId: 'realm-id' },
     });
+    expect(progression.initialStats).toHaveBeenCalledWith('MAGE');
     expect(transaction.character.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         gender: 'FEMALE',
         outfitKey: 'mage-apprentice',
+        progressionVersion: 1,
+        freeRespecAvailable: true,
       }),
     });
     expect(character).toMatchObject({

@@ -12,6 +12,7 @@ import { GameSocketClient } from './GameSocketClient';
 import { installGroupSocketBridge } from './groupSocketBridge';
 import { installGuildSocketBridge } from './guildSocketBridge';
 import { installMobSocketBridge } from './mobSocketBridge';
+import { installCharacterProgressionSocketBridge } from './progressionSocketBridge';
 
 const GameConnectionContext = createContext<GameSocketClient | undefined>(undefined);
 interface GameConnectionProviderProps extends PropsWithChildren { user: User; }
@@ -24,6 +25,7 @@ export function GameConnectionProvider({ user, children }: GameConnectionProvide
     installGuildSocketBridge(clientRef.current);
     installMobSocketBridge(clientRef.current);
     installGroupSocketBridge(clientRef.current);
+    installCharacterProgressionSocketBridge(clientRef.current);
   }
   useEffect(() => {
     const client = clientRef.current!;

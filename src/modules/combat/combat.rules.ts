@@ -1,4 +1,5 @@
 import { isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
+import { armorDamageMultiplier } from '../characters/progression/character-progression.rules.js';
 
 export const COMBAT_TURN_TTL_MS = 30_000;
 export const COMBAT_EVENT_HISTORY_LIMIT = 48;
@@ -23,9 +24,9 @@ export function combatActorLockKeys(actorIds: Iterable<string> | string, secondA
 export function physicalDamageMultiplier(armor: number, armorPenetration = 0): number {
   const penetration = Math.min(0.9, Math.max(0, armorPenetration));
   const effectiveArmor = Math.max(0, armor) * (1 - penetration);
-  return 100 / (100 + effectiveArmor);
+  return armorDamageMultiplier(effectiveArmor);
 }
 
 export function magicalDamageMultiplier(armor: number): number {
-  return 100 / (100 + Math.max(0, armor) * 0.35);
+  return armorDamageMultiplier(Math.max(0, armor) * 0.35);
 }
