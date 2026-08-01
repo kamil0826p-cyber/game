@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { SkillBuildSnapshot } from '../../contracts/skillBuild';
 import type { SkillDefinitionPayload } from '../../contracts/socket';
 import { getSkillCopy } from '../../game/skills/skillCopy';
 import { getSkillUseBlockReason } from '../../game/skills/skillUi';
@@ -36,10 +37,27 @@ export function ActionBar({
   const { locale, t } = useI18n();
   const state = useGameState();
   const [active, setActive] = useState<number>();
-  const slots = useMemo(
-    () => [...(state.skillTree?.skills ?? [])].sort((a, b) => a.displayOrder - b.displayOrder),
-    [state.skillTree],
-  );
+  const build = state.skillTree as SkillBuildSnapshot | undefined;
+  const slots = useMemo(() => {
+    const activeKeys = new Set(
+      build
+        ? build.activeLoadout?.isValid
+          ? build.activeLoadout.activeSkillKeys
+          : []
+        : (state.skillTree?.skills ?? [])
+            .filter((skill) => skill.rank > 0)
+            .map((skill) => skill.key),
+    );
+    return [...(state.skillTree?.skills ?? [])]
+      .filter((skill) => activeKeys.has(skill.key) && skill.rank > 0)
+      .sort((first, second) => {
+        const firstIndex = build?.activeLoadout?.activeSkillKeys.indexOf(first.key) ?? -1;
+        const secondIndex = build?.activeLoadout?.activeSkillKeys.indexOf(second.key) ?? -1;
+        if (firstIndex >= 0 && secondIndex >= 0) return firstIndex - secondIndex;
+        return first.displayOrder - second.displayOrder;
+      })
+      .slice(0, build?.activeActionLimit ?? 8);
+  }, [build, state.skillTree]);
 
   const activate = (skill: SkillDefinitionPayload, index: number): void => {
     const hasLegalTarget =

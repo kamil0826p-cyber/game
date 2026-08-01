@@ -5,21 +5,53 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import { ZodError, type ZodType } from 'zod';
+import { z, ZodError, type ZodType } from 'zod';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
-import {
-  skillRequestSchema,
-  skillUnlockSchema,
-  type SkillRequestPayload,
-  type SkillUnlockPayload,
-} from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
-import { SkillService } from './skill.service.js';
-import type { SkillTreeSnapshot } from './skill.types.js';
+import { SkillService, type SkillRespecPreview } from './skill.service.js';
+import type { SkillBuildSnapshot } from './skill.buildcraft.types.js';
+
+const requestId = z.string().trim().min(1).max(128);
+const operationId = z.string().trim().min(1).max(64);
+const version = z.number().int().min(1);
+const nodeRanks = z.record(z.string().min(1).max(96), z.number().int().min(0).max(3));
+const fallbackAction = z.enum(['DEFEND', 'BASIC_ATTACK', 'SKIP']);
+
+const skillRequestSchema = z.object({ requestId });
+const skillUnlockSchema = skillRequestSchema.extend({ skillKey: z.string().min(1).max(96) });
+const specializationSchema = skillRequestSchema.extend({
+  operationId,
+  expectedVersion: version,
+  specializationKey: z.string().min(1).max(96),
+});
+const loadoutSaveSchema = skillRequestSchema.extend({
+  operationId,
+  expectedVersion: version,
+  loadoutId: z.string().uuid().or(z.literal('default')).optional(),
+  name: z.string().trim().min(1).max(32),
+  activeSkillKeys: z.array(z.string().min(1).max(96)).max(8),
+  passiveNodeKeys: z.array(z.string().min(1).max(96)).max(4),
+  fallbackAction,
+});
+const loadoutActivateSchema = skillRequestSchema.extend({
+  operationId,
+  expectedVersion: version,
+  loadoutId: z.string().uuid().or(z.literal('default')),
+});
+const respecPreviewSchema = skillRequestSchema.extend({
+  selectedSpecializationKey: z.string().min(1).max(96).optional(),
+  ranks: nodeRanks,
+});
+const respecSchema = respecPreviewSchema.extend({
+  operationId,
+  expectedVersion: version,
+});
+
+type RequestPayload = z.infer<typeof skillRequestSchema>;
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class SkillGateway {
@@ -36,7 +68,7 @@ export class SkillGateway {
   getSkills(
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
-  ): Promise<SocketAck<SkillTreeSnapshot>> {
+  ): Promise<SocketAck<SkillBuildSnapshot>> {
     return this.handle(client, skillRequestSchema, raw, (session) =>
       this.skills.getSnapshot(session.userId, session.characterId),
     );
@@ -46,18 +78,68 @@ export class SkillGateway {
   unlockSkill(
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
-  ): Promise<SocketAck<SkillTreeSnapshot>> {
+  ): Promise<SocketAck<SkillBuildSnapshot>> {
     return this.handle(client, skillUnlockSchema, raw, (session, payload) =>
       this.skills.unlock(session.userId, session.characterId, payload.skillKey),
     );
   }
 
-  private async handle<TPayload extends SkillRequestPayload | SkillUnlockPayload>(
+  @SubscribeMessage('skills:specialization')
+  selectSpecialization(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<SkillBuildSnapshot>> {
+    return this.handle(client, specializationSchema, raw, (session, payload) =>
+      this.skills.chooseSpecialization(session.userId, session.characterId, payload),
+    );
+  }
+
+  @SubscribeMessage('skills:loadoutSave')
+  saveLoadout(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<SkillBuildSnapshot>> {
+    return this.handle(client, loadoutSaveSchema, raw, (session, payload) =>
+      this.skills.saveLoadout(session.userId, session.characterId, payload),
+    );
+  }
+
+  @SubscribeMessage('skills:loadoutActivate')
+  activateLoadout(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<SkillBuildSnapshot>> {
+    return this.handle(client, loadoutActivateSchema, raw, (session, payload) =>
+      this.skills.activateLoadout(session.userId, session.characterId, payload),
+    );
+  }
+
+  @SubscribeMessage('skills:respecPreview')
+  previewRespec(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<SkillRespecPreview>> {
+    return this.handle(client, respecPreviewSchema, raw, (session, payload) =>
+      this.skills.previewRespec(session.userId, session.characterId, payload),
+    );
+  }
+
+  @SubscribeMessage('skills:respec')
+  respec(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<SkillBuildSnapshot>> {
+    return this.handle(client, respecSchema, raw, (session, payload) =>
+      this.skills.respec(session.userId, session.characterId, payload),
+    );
+  }
+
+  private async handle<TPayload extends RequestPayload, TResult>(
     client: GameSocket,
     schema: ZodType<TPayload>,
     raw: unknown,
-    operation: (session: PlayerSession, payload: TPayload) => Promise<SkillTreeSnapshot>,
-  ): Promise<SocketAck<SkillTreeSnapshot>> {
+    operation: (session: PlayerSession, payload: TPayload) => Promise<TResult>,
+  ): Promise<SocketAck<TResult>> {
     try {
       const payload = schema.parse(raw);
       const session = this.worldState.getBySocketId(client.id);

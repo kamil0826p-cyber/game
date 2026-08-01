@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { User } from 'firebase/auth';
 import { useI18n } from '../../i18n/I18nProvider';
+import { installBuildcraftLocalization } from '../skills/buildcraftLocalization';
 import { GameSocketClient } from './GameSocketClient';
 import { installGroupSocketBridge } from './groupSocketBridge';
 import { installGuildSocketBridge } from './guildSocketBridge';
@@ -20,6 +21,7 @@ interface GameConnectionProviderProps extends PropsWithChildren { user: User; }
 export function GameConnectionProvider({ user, children }: GameConnectionProviderProps): React.JSX.Element {
   const { locale } = useI18n();
   const clientRef = useRef<GameSocketClient | undefined>(undefined);
+  installBuildcraftLocalization(locale);
   if (!clientRef.current) {
     clientRef.current = new GameSocketClient(user, locale);
     installGuildSocketBridge(clientRef.current);
