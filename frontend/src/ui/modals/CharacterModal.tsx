@@ -53,8 +53,15 @@ const statLabel = (key: ProgressionStatKey, polish: boolean): string => {
   return labels[key];
 };
 
-const nonZeroEntries = (vector: ProgressionStatVector): Array<[ProgressionStatKey, number]> =>
-  statKeys.flatMap((key) => (vector[key] === 0 ? [] : [[key, vector[key]]]));
+const nonZeroEntries = (
+  vector: ProgressionStatVector,
+): Array<[ProgressionStatKey, number]> => {
+  const entries: Array<[ProgressionStatKey, number]> = [];
+  for (const key of statKeys) {
+    if (vector[key] !== 0) entries.push([key, vector[key]]);
+  }
+  return entries;
+};
 
 export function CharacterModal({
   character,
@@ -106,7 +113,9 @@ export function CharacterModal({
     ] as const;
   }, [polish, progression]);
 
-  const allocate = async (milestoneKey: CharacterProgressionSnapshot['milestones'][number]['key']) => {
+  const allocate = async (
+    milestoneKey: CharacterProgressionSnapshot['milestones'][number]['key'],
+  ) => {
     if (busyKey) return;
     setBusyKey(milestoneKey);
     try {
@@ -214,7 +223,10 @@ export function CharacterModal({
               {sourceCards.map(([label, vector]) => {
                 const entries = nonZeroEntries(vector);
                 return (
-                  <div key={label} className="rounded-lg border border-white/10 bg-slate-950/35 p-3">
+                  <div
+                    key={label}
+                    className="rounded-lg border border-white/10 bg-slate-950/35 p-3"
+                  >
                     <strong className="text-sm text-amber-100">{label}</strong>
                     {entries.length === 0 ? (
                       <p className="mt-2 text-xs text-slate-500">—</p>
@@ -223,8 +235,13 @@ export function CharacterModal({
                         {entries.map(([key, value]) => (
                           <div key={key} className="flex justify-between gap-3">
                             <dt>{statLabel(key, polish)}</dt>
-                            <dd className={value >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
-                              {value >= 0 ? '+' : ''}{value}
+                            <dd
+                              className={
+                                value >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                              }
+                            >
+                              {value >= 0 ? '+' : ''}
+                              {value}
                             </dd>
                           </div>
                         ))}
@@ -255,11 +272,30 @@ export function CharacterModal({
                 {polish ? 'Wartości pochodne' : 'Derived values'}
               </h4>
               <dl className="mt-3 space-y-2 text-sm text-slate-300">
-                <div className="flex justify-between"><dt>{polish ? 'Redukcja obrażeń pancerza' : 'Armor damage reduction'}</dt><dd>{Math.round(progression.derived.armorDamageReduction * 1000) / 10}%</dd></div>
-                <div className="flex justify-between"><dt>{polish ? 'Inicjatywa' : 'Initiative'}</dt><dd>{progression.derived.initiative}</dd></div>
-                <div className="flex justify-between"><dt>{polish ? 'Unik' : 'Dodge'}</dt><dd>{Math.round(progression.derived.dodgeChance * 1000) / 10}%</dd></div>
-                <div className="flex justify-between"><dt>{polish ? 'Siła kontroli' : 'Control power'}</dt><dd>{progression.derived.controlPower}</dd></div>
-                <div className="flex justify-between"><dt>{polish ? 'Odporność na kontrolę' : 'Control resistance'}</dt><dd>{progression.derived.controlResistance}</dd></div>
+                <div className="flex justify-between">
+                  <dt>
+                    {polish ? 'Redukcja obrażeń pancerza' : 'Armor damage reduction'}
+                  </dt>
+                  <dd>
+                    {Math.round(progression.derived.armorDamageReduction * 1000) / 10}%
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>{polish ? 'Inicjatywa' : 'Initiative'}</dt>
+                  <dd>{progression.derived.initiative}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>{polish ? 'Unik' : 'Dodge'}</dt>
+                  <dd>{Math.round(progression.derived.dodgeChance * 1000) / 10}%</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>{polish ? 'Siła kontroli' : 'Control power'}</dt>
+                  <dd>{progression.derived.controlPower}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>{polish ? 'Odporność na kontrolę' : 'Control resistance'}</dt>
+                  <dd>{progression.derived.controlResistance}</dd>
+                </div>
               </dl>
             </div>
           </section>
@@ -285,11 +321,16 @@ export function CharacterModal({
               {progression.milestones.map((milestone) => {
                 const preview = nonZeroEntries(milestone.previewEffectiveDelta);
                 return (
-                  <article key={milestone.key} className="rounded-xl border border-white/10 bg-slate-950/35 p-4">
+                  <article
+                    key={milestone.key}
+                    className="rounded-xl border border-white/10 bg-slate-950/35 p-4"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h5 className="font-semibold text-slate-100">{milestone.name}</h5>
-                        <p className="mt-1 text-xs leading-5 text-slate-400">{milestone.description}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-400">
+                          {milestone.description}
+                        </p>
                       </div>
                       <span className="rounded-full border border-amber-300/25 px-2 py-1 text-xs text-amber-100">
                         {milestone.currentRank}/{milestone.maxRank}
@@ -297,7 +338,11 @@ export function CharacterModal({
                     </div>
                     <p className="mt-3 min-h-5 text-xs text-emerald-300">
                       {preview.length > 0
-                        ? preview.map(([key, value]) => `${statLabel(key, polish)} +${value}`).join(' · ')
+                        ? preview
+                            .map(
+                              ([key, value]) => `${statLabel(key, polish)} +${value}`,
+                            )
+                            .join(' · ')
                         : milestone.blockedReason ?? '—'}
                     </p>
                     <Button
@@ -321,7 +366,14 @@ export function CharacterModal({
             <div className="mt-2 grid gap-2 text-xs text-slate-400 md:grid-cols-2">
               {progression.softCaps.map((cap) => (
                 <p key={cap.key}>
-                  <strong className="text-slate-200">{cap.key}</strong>: {cap.firstThreshold} / {cap.secondThreshold}; {Math.round(cap.middleRate * 100)}% / {Math.round(cap.highRate * 100)}% {polish ? 'skuteczności kolejnych punktów' : 'effectiveness for later points'}.
+                  <strong className="text-slate-200">{cap.key}</strong>:{' '}
+                  {cap.firstThreshold} / {cap.secondThreshold};{' '}
+                  {Math.round(cap.middleRate * 100)}% /{' '}
+                  {Math.round(cap.highRate * 100)}%{' '}
+                  {polish
+                    ? 'skuteczności kolejnych punktów'
+                    : 'effectiveness for later points'}
+                  .
                 </p>
               ))}
             </div>
