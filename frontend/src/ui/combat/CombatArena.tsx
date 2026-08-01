@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import { OutfitPreview } from '../../components/common/OutfitPreview';
 import type { CombatParticipantPayload, CombatSnapshot } from '../../contracts/socket';
+import type {
+  CombatCommandAction,
+  CombatLegalActionPayload,
+} from '../../contracts/tacticalCombat';
 import {
   combatAnimationDuration,
   combatAnimationReducer,
@@ -10,14 +14,17 @@ import {
   combatFormationSlots,
   combatTeams,
   isCombatantAlive,
-  selectCombatTarget,
   usesAttackMotion,
   type CombatStagePosition,
 } from '../../game/combat/combatPresentation';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
-import { COMBAT_SKILL_INTENT_EVENT, type CombatSkillIntent, ActionBar } from '../hud/ActionBar';
+import {
+  COMBAT_SKILL_INTENT_EVENT,
+  type CombatSkillIntent,
+  ActionBar,
+} from '../hud/ActionBar';
 import { CombatVfx } from './CombatVfx';
 
 interface CombatArenaProps {
@@ -25,6 +32,22 @@ interface CombatArenaProps {
   onChange: (combat: CombatSnapshot) => void;
   onClose: () => void;
 }
+
+const TACTICAL_LABELS: Record<
+  Exclude<CombatCommandAction, 'BASIC_ATTACK' | 'SKILL'>,
+  { pl: string; en: string; glyph: string }
+> = {
+  DEFEND: { pl: 'Obrona', en: 'Defend', glyph: '◈' },
+  INTERCEPT: { pl: 'Osłoń', en: 'Protect', glyph: '♜' },
+  TAUNT: { pl: 'Prowokuj', en: 'Taunt', glyph: '!' },
+  INTERRUPT: { pl: 'Przerwij', en: 'Interrupt', glyph: '✕' },
+  CLEANSE: { pl: 'Oczyść', en: 'Cleanse', glyph: '✦' },
+  MARK: { pl: 'Oznacz', en: 'Expose', glyph: '⌖' },
+  COUNTER: { pl: 'Kontra', en: 'Counter', glyph: '↶' },
+  REPOSITION: { pl: 'Zamień', en: 'Swap', glyph: '⇄' },
+  TRANSFER_ENERGY: { pl: 'Energia', en: 'Energy', glyph: '◇' },
+  SKIP: { pl: 'Czekaj', en: 'Hold', glyph: '…' },
+};
 
 const editable = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
@@ -73,6 +96,7 @@ function BattlefieldUnit({
   attacking,
   hit,
   local,
+  telegraphed,
   onSelect,
 }: {
   participant: CombatParticipantPayload;
@@ -84,6 +108,7 @@ function BattlefieldUnit({
   attacking: boolean;
   hit: boolean;
   local: boolean;
+  telegraphed: boolean;
   onSelect: () => void;
 }): React.JSX.Element {
   const alive = isCombatantAlive(participant);
@@ -98,7 +123,20 @@ function BattlefieldUnit({
     ? 'WYCOFANY'
     : participant.hp <= 0
       ? 'POKONANY'
-      : undefined;
+      : participant.disconnected
+        ? 'ROZŁĄCZONY'
+        : undefined;
+  const resistanceLabel = [
+    participant.formationLine,
+    participant.physicalDamageReduction !== undefined
+      ? `FIZ ${Math.round(participant.physicalDamageReduction * 100)}%`
+      : undefined,
+    participant.magicalDamageReduction !== undefined
+      ? `MAG ${Math.round(participant.magicalDamageReduction * 100)}%`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <button
@@ -107,13 +145,15 @@ function BattlefieldUnit({
         selected ? 'combat-stage-unit-selected' : ''
       } ${active ? 'combat-stage-unit-active' : ''} ${alive ? '' : 'combat-stage-unit-defeated'} ${
         targetable ? 'combat-stage-unit-targetable' : ''
-      }`}
+      } ${telegraphed ? 'ring-2 ring-amber-200 ring-offset-2 ring-offset-black' : ''}`}
       style={style}
       disabled={!targetable}
       onClick={onSelect}
       aria-pressed={selected}
-      aria-label={participant.name}
+      aria-label={`${participant.name}. ${resistanceLabel}`}
+      title={resistanceLabel}
       data-combat-actor-id={participant.actorId}
+      data-formation-line={participant.formationLine}
     >
       <span
         className={`combat-stage-actor ${
@@ -146,13 +186,35 @@ function BattlefieldUnit({
           <strong>{participant.name}</strong>
           <small>Lv. {participant.level}</small>
         </span>
-        <ResourceBar value={participant.hp} maximum={participant.maxHp} type="health" compact />
-        <ResourceBar value={participant.energy} maximum={participant.maxEnergy} type="energy" compact />
+        <ResourceBar
+          value={participant.hp}
+          maximum={participant.maxHp}
+          type="health"
+          compact
+        />
+        <ResourceBar
+          value={participant.energy}
+          maximum={participant.maxEnergy}
+          type="energy"
+          compact
+        />
         <span className="combat-stage-markers">
           {local ? <em>TY</em> : null}
           {active ? <em>TURA</em> : null}
           {selected ? <em>CEL</em> : null}
+          {telegraphed ? <em>ZAPOWIEDŹ</em> : null}
+          {participant.guarding ? <em>OBRONA</em> : null}
+          {participant.protectedByActorId ? <em>OSŁONA</em> : null}
+          {participant.formationLine ? <em>{participant.formationLine}</em> : null}
           {participant.shield > 0 ? <em>◇{participant.shield}</em> : null}
+          {(participant.controlDrStacks ?? 0) > 0 ? (
+            <em>DR {participant.controlDrStacks}</em>
+          ) : null}
+          {participant.statuses.slice(0, 3).map((status) => (
+            <em key={`${status.key}:${status.turnsRemaining}`}>
+              {status.key} {status.turnsRemaining}
+            </em>
+          ))}
           {stateLabel ? <em>{stateLabel}</em> : null}
         </span>
       </span>
@@ -170,22 +232,31 @@ function TeamCaption({
   locale: 'pl' | 'en';
 }): React.JSX.Element {
   const alive = members.filter(isCombatantAlive).length;
-  const title = side === 'left'
-    ? locale === 'pl' ? 'Twoja drużyna' : 'Your team'
-    : locale === 'pl' ? 'Przeciwnicy' : 'Enemies';
+  const title =
+    side === 'left'
+      ? locale === 'pl'
+        ? 'Twoja drużyna'
+        : 'Your team'
+      : locale === 'pl'
+        ? 'Przeciwnicy'
+        : 'Enemies';
   return (
     <div className={`combat-team-caption combat-team-caption-${side}`}>
       <strong>{title}</strong>
-      <span>{alive} / {members.length}</span>
+      <span>
+        {alive} / {members.length}
+      </span>
     </div>
   );
 }
 
 function CombatLog({ combat }: { combat: CombatSnapshot }): React.JSX.Element {
-  const names = new Map(combat.participants.map((participant) => [participant.actorId, participant.name]));
+  const names = new Map(
+    combat.participants.map((participant) => [participant.actorId, participant.name]),
+  );
   return (
     <ol
-      className="absolute bottom-[7.2rem] left-1/2 z-40 w-[min(34rem,38vw)] -translate-x-1/2 space-y-1 rounded-lg border border-white/5 bg-black/45 px-3 py-2 text-center backdrop-blur-sm"
+      className="absolute bottom-[8.8rem] left-1/2 z-40 w-[min(38rem,44vw)] -translate-x-1/2 space-y-1 rounded-lg border border-white/5 bg-black/45 px-3 py-2 text-center backdrop-blur-sm"
       aria-live="polite"
     >
       {combat.recentActions.slice(-4).map((action) => {
@@ -193,11 +264,16 @@ function CombatLog({ combat }: { combat: CombatSnapshot }): React.JSX.Element {
           (sum, result) => sum + Math.min(0, result.hpDelta),
           0,
         );
+        const reaction = action.skillKey?.startsWith('tactical:');
         return (
           <li key={action.sequence} className="truncate text-[10px] text-slate-300">
             <span className="mr-2 text-amber-300/50">#{action.sequence}</span>
-            <strong className="text-amber-100">{names.get(action.actorId)}</strong> · {action.label}
-            {totalDamage < 0 ? <span className="ml-1 text-rose-300">{totalDamage} HP</span> : null}
+            <strong className="text-amber-100">{names.get(action.actorId)}</strong> ·{' '}
+            {action.label}
+            {reaction ? <span className="ml-1 text-cyan-200">REAKCJA</span> : null}
+            {totalDamage < 0 ? (
+              <span className="ml-1 text-rose-300">{totalDamage} HP</span>
+            ) : null}
           </li>
         );
       })}
@@ -205,24 +281,36 @@ function CombatLog({ combat }: { combat: CombatSnapshot }): React.JSX.Element {
   );
 }
 
-export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): React.JSX.Element | null {
+function actionKey(action: CombatLegalActionPayload): string {
+  return `${action.action}:${action.skillKey ?? ''}`;
+}
+
+export function CombatArena({
+  combat,
+  onChange,
+  onClose,
+}: CombatArenaProps): React.JSX.Element | null {
   const connection = useGameConnection();
   const state = useGameState();
   const { t, locale } = useI18n();
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [selectedTargetId, setSelectedTargetId] = useState<string>();
+  const [reducedEffects, setReducedEffects] = useState(false);
   const [animation, dispatchAnimation] = useReducer(
     combatAnimationReducer,
     INITIAL_COMBAT_ANIMATION_STATE,
   );
   const animatedAction = animation.current;
   const teams = useMemo(
-    () => state.self ? combatTeams(combat, state.self.characterId) : undefined,
+    () => (state.self ? combatTeams(combat, state.self.characterId) : undefined),
     [combat, state.self],
   );
   const participants = useMemo(
-    () => new Map(combat.participants.map((participant) => [participant.actorId, participant])),
+    () =>
+      new Map(
+        combat.participants.map((participant) => [participant.actorId, participant]),
+      ),
     [combat.participants],
   );
   const battlefield = useMemo(() => {
@@ -237,15 +325,34 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
     const enemySlots = combatFormationSlots(teams.enemies.length, 'right');
     const positions = new Map<string, CombatStagePosition>();
     teams.allies.forEach((participant, index) => {
-      const slot = allySlots[index];
+      const slot = allySlots[participant.formationSlot ?? index];
       if (slot) positions.set(participant.actorId, slot);
     });
     teams.enemies.forEach((participant, index) => {
-      const slot = enemySlots[index];
+      const slot = enemySlots[participant.formationSlot ?? index];
       if (slot) positions.set(participant.actorId, slot);
     });
     return { allySlots, enemySlots, positions };
   }, [teams]);
+
+  const ownActorId = teams?.own.actorId;
+  const ownLegalActions = useMemo(
+    () => (ownActorId ? combat.legalActionsByActorId?.[ownActorId] ?? [] : []),
+    [combat.legalActionsByActorId, ownActorId],
+  );
+  const legalTargetIds = useMemo(
+    () => new Set(ownLegalActions.flatMap((action) => action.targetActorIds)),
+    [ownLegalActions],
+  );
+  const legalSkillTargetCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        ownLegalActions
+          .filter((action) => action.action === 'SKILL' && action.skillKey)
+          .map((action) => [action.skillKey!, action.targetActorIds.length]),
+      ),
+    [ownLegalActions],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 100);
@@ -259,20 +366,34 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
   useEffect(() => {
     if (!animatedAction) return;
     const sequence = animatedAction.sequence;
+    if (reducedEffects) {
+      dispatchAnimation({ type: 'FINISH', sequence });
+      return;
+    }
     const timer = window.setTimeout(
       () => dispatchAnimation({ type: 'FINISH', sequence }),
       combatAnimationDuration(animatedAction),
     );
     return () => window.clearTimeout(timer);
-  }, [animatedAction]);
+  }, [animatedAction, reducedEffects]);
 
   useEffect(() => {
     if (!teams) return;
-    setSelectedTargetId((current) => selectCombatTarget(teams.enemies, current)?.actorId);
-  }, [combat.combatId, combat.turnNumber, teams]);
+    setSelectedTargetId((current) => {
+      if (current && legalTargetIds.has(current)) return current;
+      const basic = ownLegalActions.find((action) => action.action === 'BASIC_ATTACK');
+      return basic?.targetActorIds[0] ?? ownLegalActions[0]?.targetActorIds[0];
+    });
+  }, [combat.combatId, combat.turnNumber, legalTargetIds, ownLegalActions, teams]);
 
-  const selectedTarget = teams ? selectCombatTarget(teams.enemies, selectedTargetId) : undefined;
-  const isOwnTurn = Boolean(teams && combat.activeActorId === teams.own.actorId);
+  const selectedTarget = selectedTargetId
+    ? participants.get(selectedTargetId)
+    : undefined;
+  const isOwnDecision = Boolean(
+    teams && combat.phase !== 'REACTION' && combat.activeActorId === teams.own.actorId,
+  );
+  const canReact = ownLegalActions.some((action) => action.reactionOnly);
+  const canIssueCommand = isOwnDecision || canReact;
 
   const mutate = async (operation: () => Promise<CombatSnapshot>): Promise<void> => {
     if (busy) return;
@@ -286,14 +407,31 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
     }
   };
 
-  const perform = (action: 'BASIC_ATTACK' | 'SKILL', skillKey?: string): void => {
-    if (!selectedTarget || !isOwnTurn || busy || combat.status !== 'ACTIVE') return;
+  const findLegalAction = (
+    action: CombatCommandAction,
+    skillKey?: string,
+  ): CombatLegalActionPayload | undefined =>
+    ownLegalActions.find(
+      (candidate) =>
+        candidate.action === action &&
+        (action !== 'SKILL' || candidate.skillKey === skillKey),
+    );
+
+  const perform = (action: CombatCommandAction, skillKey?: string): void => {
+    if (!canIssueCommand || busy || combat.status !== 'ACTIVE') return;
+    const legal = findLegalAction(action, skillKey);
+    if (!legal) return;
+    const targetActorId =
+      (selectedTargetId && legal.targetActorIds.includes(selectedTargetId)
+        ? selectedTargetId
+        : legal.targetActorIds[0]) ?? undefined;
     void mutate(() =>
       connection.performTeamCombatAction(
         combat.combatId,
         action,
-        selectedTarget.actorId,
+        targetActorId,
         skillKey,
+        combat.turnNumber,
       ),
     );
   };
@@ -301,7 +439,7 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
   useEffect(() => {
     const useSkill = (event: Event) => {
       const detail = (event as CustomEvent<CombatSkillIntent>).detail;
-      if (!detail || !isOwnTurn || busy || combat.status !== 'ACTIVE') return;
+      if (!detail || !isOwnDecision || busy || combat.status !== 'ACTIVE') return;
       perform('SKILL', detail.skillKey);
     };
     window.addEventListener(COMBAT_SKILL_INTENT_EVENT, useSkill);
@@ -314,10 +452,12 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
         event.key !== '0' ||
         event.repeat ||
         editable(event.target) ||
-        !isOwnTurn ||
+        !isOwnDecision ||
         busy ||
         combat.status !== 'ACTIVE'
-      ) return;
+      ) {
+        return;
+      }
       event.preventDefault();
       perform('BASIC_ATTACK');
     };
@@ -330,18 +470,34 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
     ? participants.get(combat.activeActorId)
     : undefined;
   const activeIsAlly = Boolean(
-    activeParticipant && teams.allies.some((member) => member.actorId === activeParticipant.actorId),
+    activeParticipant &&
+      teams.allies.some((member) => member.actorId === activeParticipant.actorId),
   );
-  const remainingMs = Math.max(0, (combat.turnEndsAt ?? now) - now);
-  const turnPercent = Math.max(0, Math.min(100, (remainingMs / 30_000) * 100));
-  const attackMotion = usesAttackMotion(animatedAction);
-  const damagingTarget = (actorId: string): boolean => Boolean(
-    animatedAction?.results.some(
-      (result) =>
-        result.targetActorId === actorId &&
-        (result.hpDelta < 0 || result.shieldAbsorbed > 0 || result.dodged),
-    ),
+  const phaseReadyAt =
+    combat.phase === 'REACTION'
+      ? combat.telegraph?.startedAt
+      : combat.turnStartedAt;
+  const waitingForPresentation = Boolean(phaseReadyAt && now < phaseReadyAt);
+  const effectiveNow = phaseReadyAt ? Math.max(now, phaseReadyAt) : now;
+  const remainingMs = Math.max(0, (combat.turnEndsAt ?? effectiveNow) - effectiveNow);
+  const phaseDuration =
+    combat.phase === 'REACTION'
+      ? combat.timing?.reactionMs ?? 12_000
+      : combat.timing?.decisionMs ?? 10_000;
+  const turnPercent = Math.max(
+    0,
+    Math.min(100, (remainingMs / Math.max(1, phaseDuration)) * 100),
   );
+  const attackMotion = !reducedEffects && usesAttackMotion(animatedAction);
+  const damagingTarget = (actorId: string): boolean =>
+    Boolean(
+      !reducedEffects &&
+        animatedAction?.results.some(
+          (result) =>
+            result.targetActorId === actorId &&
+            (result.hpDelta < 0 || result.shieldAbsorbed > 0 || result.dodged),
+        ),
+    );
   const ownWon = combat.winnerTeamId
     ? combat.winnerTeamId === teams.ownTeamId
     : teams.allies.some((member) => member.actorId === combat.winnerActorId);
@@ -349,62 +505,143 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
   const actionActor = animatedAction
     ? participants.get(animatedAction.actorId)
     : activeParticipant;
-  const actionTargetId = animatedAction?.targetActorId ?? animatedAction?.results[0]?.targetActorId;
-  const actionTarget = actionTargetId ? participants.get(actionTargetId) : selectedTarget;
-  const positionedActor = actionActor && battlefield.positions.get(actionActor.actorId)
-    ? { actorId: actionActor.actorId, position: battlefield.positions.get(actionActor.actorId)! }
-    : undefined;
-  const positionedPrimaryTarget = actionTarget && battlefield.positions.get(actionTarget.actorId)
-    ? { actorId: actionTarget.actorId, position: battlefield.positions.get(actionTarget.actorId)! }
-    : undefined;
+  const actionTargetId =
+    animatedAction?.targetActorId ?? animatedAction?.results[0]?.targetActorId;
+  const actionTarget = actionTargetId
+    ? participants.get(actionTargetId)
+    : selectedTarget;
+  const positionedActor =
+    actionActor && battlefield.positions.get(actionActor.actorId)
+      ? {
+          actorId: actionActor.actorId,
+          position: battlefield.positions.get(actionActor.actorId)!,
+        }
+      : undefined;
+  const positionedPrimaryTarget =
+    actionTarget && battlefield.positions.get(actionTarget.actorId)
+      ? {
+          actorId: actionTarget.actorId,
+          position: battlefield.positions.get(actionTarget.actorId)!,
+        }
+      : undefined;
   const positionedTargets = animatedAction
-    ? [...new Set(animatedAction.results.map((result) => result.targetActorId))].flatMap((actorId) => {
-        const position = battlefield.positions.get(actorId);
-        return position ? [{ actorId, position }] : [];
-      })
+    ? [...new Set(animatedAction.results.map((result) => result.targetActorId))].flatMap(
+        (actorId) => {
+          const position = battlefield.positions.get(actorId);
+          return position ? [{ actorId, position }] : [];
+        },
+      )
     : [];
 
-  const turnLabel = combat.status === 'ACTIVE'
-    ? isOwnTurn
-      ? t('combat.turn.yours')
-      : activeIsAlly
+  const turnLabel =
+    combat.status === 'ACTIVE'
+      ? waitingForPresentation
         ? locale === 'pl'
-          ? `Tura sojusznika: ${activeParticipant?.name ?? ''}`
-          : `Ally turn: ${activeParticipant?.name ?? ''}`
-        : locale === 'pl'
-          ? `Tura przeciwnika: ${activeParticipant?.name ?? ''}`
-          : `Enemy turn: ${activeParticipant?.name ?? ''}`
-    : ownWon
-      ? t('combat.result.victory')
-      : t('combat.result.defeat');
+          ? 'Przygotowanie akcji'
+          : 'Preparing action'
+        : combat.phase === 'REACTION' && combat.telegraph
+        ? locale === 'pl'
+          ? `Reakcja: ${combat.telegraph.label}`
+          : `Reaction: ${combat.telegraph.label}`
+        : isOwnDecision
+          ? t('combat.turn.yours')
+          : activeIsAlly
+            ? locale === 'pl'
+              ? `Tura sojusznika: ${activeParticipant?.name ?? ''}`
+              : `Ally turn: ${activeParticipant?.name ?? ''}`
+            : locale === 'pl'
+              ? `Tura przeciwnika: ${activeParticipant?.name ?? ''}`
+              : `Enemy turn: ${activeParticipant?.name ?? ''}`
+      : ownWon
+        ? t('combat.result.victory')
+        : t('combat.result.defeat');
 
   const arenaStyle = {
     '--turn-progress': `${turnPercent}%`,
     '--combat-accent': animatedAction?.visual.accentColor ?? '#f5d88a',
   } as React.CSSProperties;
+  const basicAction = findLegalAction('BASIC_ATTACK');
+  const tacticalActions = ownLegalActions.filter(
+    (action): action is CombatLegalActionPayload & {
+      action: Exclude<CombatCommandAction, 'BASIC_ATTACK' | 'SKILL'>;
+    } => action.action !== 'BASIC_ATTACK' && action.action !== 'SKILL',
+  );
+  const nextActor = combat.nextActorId
+    ? participants.get(combat.nextActorId)
+    : undefined;
+  const queue = combat.turnQueue ?? [];
+  const activeQueueIndex = combat.activeActorId
+    ? queue.indexOf(combat.activeActorId)
+    : -1;
+  const upcomingQueue = Array.from(
+    { length: Math.min(5, Math.max(0, queue.length - 1)) },
+    (_, offset) => queue[(activeQueueIndex + offset + 1 + queue.length) % queue.length],
+  )
+    .map((actorId) => participants.get(actorId))
+    .filter(
+      (entry): entry is CombatParticipantPayload =>
+        Boolean(entry && isCombatantAlive(entry)),
+    );
 
   return (
     <div className="combat-arena-root" style={arenaStyle}>
       <div className="combat-arena-backdrop" />
-      <div className="combat-atmosphere"><i /><i /><i /><i /></div>
+      <div className={`combat-atmosphere ${reducedEffects ? 'opacity-20' : ''}`}>
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
       <header className="combat-turn-banner">
         <span>{t('combat.round', { round: combat.turnNumber })}</span>
         <strong>{turnLabel}</strong>
+        {nextActor ? (
+          <small>{locale === 'pl' ? `Następny: ${nextActor.name}` : `Next: ${nextActor.name}`}</small>
+        ) : null}
+        {upcomingQueue.length > 0 ? (
+          <small aria-label={locale === 'pl' ? 'Kolejka tur' : 'Turn queue'}>
+            {locale === 'pl' ? 'Kolejka' : 'Queue'}: {' '}
+            {upcomingQueue.map((entry) => entry.name).join(' → ')}
+          </small>
+        ) : null}
         {combat.status === 'ACTIVE' ? (
           <>
             <small>{Math.ceil(remainingMs / 1_000)}s</small>
-            <div className="combat-turn-timer"><span /></div>
+            <div className="combat-turn-timer">
+              <span />
+            </div>
           </>
         ) : null}
+        <button
+          type="button"
+          className="rounded border border-amber-200/30 bg-black/40 px-2 py-1 text-[9px] text-amber-100"
+          aria-pressed={reducedEffects}
+          onClick={() => setReducedEffects((current) => !current)}
+        >
+          {locale === 'pl' ? 'Efekty' : 'Effects'}: {reducedEffects ? 'LOW' : 'FULL'}
+        </button>
       </header>
+
+      {combat.telegraph ? (
+        <div
+          className="absolute left-1/2 top-24 z-50 -translate-x-1/2 rounded border border-amber-300/60 bg-black/80 px-4 py-2 text-center text-xs text-amber-100"
+          role="status"
+        >
+          <strong>{combat.telegraph.label}</strong>
+          <span className="ml-2">
+            {locale === 'pl' ? 'okno reakcji' : 'reaction window'}{' '}
+            {Math.ceil(Math.max(0, combat.telegraph.resolvesAt - now) / 1_000)}s
+          </span>
+        </div>
+      ) : null}
 
       <div className="combat-stage-field">
         <TeamCaption side="left" members={teams.allies} locale={locale} />
         <TeamCaption side="right" members={teams.enemies} locale={locale} />
         <div className="combat-stage-divider" aria-hidden="true" />
 
-        {teams.allies.map((participant, index) => {
-          const position = battlefield.allySlots[index];
+        {teams.allies.map((participant) => {
+          const position = battlefield.positions.get(participant.actorId);
           if (!position) return null;
           return (
             <BattlefieldUnit
@@ -413,18 +650,25 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
               position={position}
               side="left"
               active={participant.actorId === combat.activeActorId}
-              selected={false}
-              targetable={false}
-              attacking={Boolean(attackMotion && animatedAction?.actorId === participant.actorId)}
+              selected={participant.actorId === selectedTarget?.actorId}
+              targetable={
+                combat.status === 'ACTIVE' &&
+                isCombatantAlive(participant) &&
+                legalTargetIds.has(participant.actorId)
+              }
+              attacking={Boolean(
+                attackMotion && animatedAction?.actorId === participant.actorId,
+              )}
               hit={damagingTarget(participant.actorId)}
               local={participant.actorId === teams.own.actorId}
-              onSelect={() => undefined}
+              telegraphed={combat.telegraph?.actorId === participant.actorId}
+              onSelect={() => setSelectedTargetId(participant.actorId)}
             />
           );
         })}
 
-        {teams.enemies.map((participant, index) => {
-          const position = battlefield.enemySlots[index];
+        {teams.enemies.map((participant) => {
+          const position = battlefield.positions.get(participant.actorId);
           if (!position) return null;
           return (
             <BattlefieldUnit
@@ -434,21 +678,30 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
               side="right"
               active={participant.actorId === combat.activeActorId}
               selected={participant.actorId === selectedTarget?.actorId}
-              targetable={combat.status === 'ACTIVE' && isCombatantAlive(participant)}
-              attacking={Boolean(attackMotion && animatedAction?.actorId === participant.actorId)}
+              targetable={
+                combat.status === 'ACTIVE' &&
+                isCombatantAlive(participant) &&
+                legalTargetIds.has(participant.actorId)
+              }
+              attacking={Boolean(
+                attackMotion && animatedAction?.actorId === participant.actorId,
+              )}
               hit={damagingTarget(participant.actorId)}
               local={false}
+              telegraphed={combat.telegraph?.actorId === participant.actorId}
               onSelect={() => setSelectedTargetId(participant.actorId)}
             />
           );
         })}
 
-        <CombatVfx
-          action={animatedAction}
-          actor={positionedActor}
-          primaryTarget={positionedPrimaryTarget}
-          targets={positionedTargets}
-        />
+        {!reducedEffects ? (
+          <CombatVfx
+            action={animatedAction}
+            actor={positionedActor}
+            primaryTarget={positionedPrimaryTarget}
+            targets={positionedTargets}
+          />
+        ) : null}
       </div>
 
       <CombatLog combat={combat} />
@@ -458,12 +711,45 @@ export function CombatArena({ combat, onChange, onClose }: CombatArenaProps): Re
           <button
             type="button"
             className="combat-basic-attack"
-            disabled={!isOwnTurn || busy || !selectedTarget}
+            disabled={!isOwnDecision || busy || !basicAction}
             onClick={() => perform('BASIC_ATTACK')}
+            title={
+              basicAction
+                ? `${locale === 'pl' ? 'Legalne cele' : 'Legal targets'}: ${basicAction.targetActorIds.length}`
+                : undefined
+            }
           >
-            <span>⚔</span><strong>{t('combat.action.basic')}</strong><kbd>0</kbd>
+            <span>⚔</span>
+            <strong>{t('combat.action.basic')}</strong>
+            <kbd>0</kbd>
           </button>
-          <ActionBar disabled={!isOwnTurn || busy} disabledLabel={t('combat.turn.wait')} />
+          <ActionBar
+            disabled={!isOwnDecision || busy}
+            disabledLabel={t('combat.turn.wait')}
+            legalTargetCounts={legalSkillTargetCounts}
+          />
+          <div className="flex max-w-[34rem] flex-wrap justify-center gap-1">
+            {tacticalActions.map((action) => {
+              const details = TACTICAL_LABELS[action.action];
+              return (
+                <button
+                  key={actionKey(action)}
+                  type="button"
+                  className="rounded border border-amber-200/40 bg-black/65 px-2 py-1 text-[10px] font-semibold text-amber-100 disabled:opacity-40"
+                  disabled={busy}
+                  onClick={() => perform(action.action)}
+                  title={`${details[locale]} · ${
+                    locale === 'pl' ? 'legalne cele' : 'legal targets'
+                  }: ${action.targetActorIds.length}`}
+                >
+                  <span className="mr-1" aria-hidden="true">
+                    {details.glyph}
+                  </span>
+                  {details[locale]}
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
             className="combat-forfeit-button"

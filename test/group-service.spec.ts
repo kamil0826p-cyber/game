@@ -13,6 +13,7 @@ function session(characterId: string, x = 0, y = 0): PlayerSession {
     realmId: 'realm-a',
     name: characterId,
     characterClass: 'WARRIOR',
+    gender: 'MALE',
     level: 5,
     experience: 0,
     silver: 0,

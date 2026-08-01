@@ -1,0 +1,7 @@
+-- Tactical combat targeting scopes used by the shared PvP/PvE engine.
+ALTER TYPE "SkillTargeting" ADD VALUE IF NOT EXISTS 'ALLY';
+ALTER TYPE "SkillTargeting" ADD VALUE IF NOT EXISTS 'ALL_ALLIES';
+ALTER TYPE "SkillTargeting" ADD VALUE IF NOT EXISTS 'ALL_ENEMIES';
+ALTER TYPE "SkillTargeting" ADD VALUE IF NOT EXISTS 'FRONT_ROW';
+ALTER TYPE "SkillTargeting" ADD VALUE IF NOT EXISTS 'BACK_ROW';
+ALTER TYPE "SkillTargeting" ADD VALUE IF NOT EXISTS 'ADJACENT';

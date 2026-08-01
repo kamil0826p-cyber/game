@@ -1,8 +1,22 @@
 import type { CharacterClass } from '../../common/domain/game.types.js';
 
-export type SkillTargeting = 'SELF' | 'ENEMY' | 'AREA';
+export type SkillTargeting =
+  | 'SELF'
+  | 'ALLY'
+  | 'ENEMY'
+  | 'ALL_ALLIES'
+  | 'ALL_ENEMIES'
+  | 'FRONT_ROW'
+  | 'BACK_ROW'
+  | 'ADJACENT'
+  /** @deprecated Use ALL_ENEMIES. Kept for existing content compatibility. */
+  | 'AREA';
 export type SkillUnlockState =
-  'UNLOCKED' | 'AVAILABLE' | 'LOCKED_LEVEL' | 'LOCKED_PREREQUISITE' | 'LOCKED_POINTS';
+  | 'UNLOCKED'
+  | 'AVAILABLE'
+  | 'LOCKED_LEVEL'
+  | 'LOCKED_PREREQUISITE'
+  | 'LOCKED_POINTS';
 
 export type SkillScalingStat = 'STRENGTH' | 'AGILITY' | 'INTELLIGENCE' | 'MAX_HP';
 export type SkillDamageType = 'PHYSICAL' | 'ARCANE' | 'FIRE' | 'FROST';
@@ -16,6 +30,7 @@ export type CombatEffectOperation =
       armorPenetration?: number;
       targetHpBelow?: number;
       bonusCoefficient?: number;
+      consumesStatus?: 'EXPOSED' | 'STAGGER' | 'BLEED';
     }
   | {
       type: 'APPLY_STATUS';
@@ -23,6 +38,7 @@ export type CombatEffectOperation =
       durationTurns: number;
       magnitude?: number;
       chance?: number;
+      hardControl?: boolean;
     }
   | {
       type: 'HEAL';
@@ -34,6 +50,14 @@ export type CombatEffectOperation =
       scaling: SkillScalingStat;
       coefficient: number;
       durationTurns: number;
+    }
+  | {
+      type: 'CLEANSE';
+      maximumStatuses?: number;
+    }
+  | {
+      type: 'TRANSFER_ENERGY';
+      amount: number;
     };
 
 export interface SkillVisualDefinition {

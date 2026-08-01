@@ -1,10 +1,18 @@
+import './combat.contracts.js';
 import type {
   CombatActionResolutionPayload,
   CombatFinishReason,
   CombatLifecycleStatus,
   CombatSnapshot,
 } from '../../contracts/socket.events.js';
-import type { SkillCatalogDefinition } from '../skills/skill.types.js';
+import type { SkillCatalogDefinition, SkillTargeting } from '../skills/skill.types.js';
+import type {
+  CombatFallbackAction,
+  CombatFormationLine,
+  CombatPhase,
+  CombatTacticalAction,
+} from './combat.contracts.js';
+import type { CombatTimingPolicy } from './combat.rules.js';
 
 export interface CombatRuntimeSkill {
   definition: SkillCatalogDefinition;
@@ -39,7 +47,14 @@ export interface CombatRuntimeActor {
   agility: number;
   intelligence: number;
   armor: number;
+  magicResistance: number;
+  formationSlot: number;
+  formationLine: CombatFormationLine;
+  fallbackAction: CombatFallbackAction;
   withdrawn: boolean;
+  disconnectedAt?: number;
+  controlDrStacks: number;
+  controlDrExpiresTurn: number;
   statuses: CombatRuntimeStatus[];
   skills: Map<string, CombatRuntimeSkill>;
 }
@@ -51,9 +66,29 @@ export interface CombatRuntimeTeam {
   actorIds: string[];
 }
 
+export interface CombatRuntimeTelegraph {
+  actorId: string;
+  skillKey: string;
+  label: string;
+  targetActorId?: string;
+  targetActorIds: string[];
+  startedAt: number;
+  resolvesAt: number;
+  reactionActorIds: string[];
+  reactedActorIds: string[];
+  interruptedByActorId?: string;
+  interruptible: boolean;
+}
+
+export interface CombatProcessedOperation {
+  fingerprint: string;
+  eventSequence: number;
+}
+
 export interface CombatRuntime {
   combatId: string;
   status: CombatLifecycleStatus;
+  phase: CombatPhase;
   zoneType: 'SAFE' | 'OUTLAW' | 'PVP';
   mapId: string;
   createdAt: number;
@@ -72,24 +107,55 @@ export interface CombatRuntime {
   teams: [CombatRuntimeTeam, CombatRuntimeTeam];
   actors: CombatRuntimeActor[];
   turnOrder: string[];
+  timingPolicy: CombatTimingPolicy;
+  telegraph?: CombatRuntimeTelegraph;
   events: CombatActionResolutionPayload[];
   nextSequence: number;
+  processedOperations: Map<string, CombatProcessedOperation>;
+  decisionDurationsMs: number[];
 }
 
 export interface CombatActionCommand {
-  action: 'BASIC_ATTACK' | 'SKILL';
+  action: 'BASIC_ATTACK' | 'SKILL' | CombatTacticalAction;
   skillKey?: string;
   targetActorId?: string;
+  operationId?: string;
+  requestId?: string;
+  expectedTurnNumber?: number;
+  contractVersion?: 2;
 }
 
-export interface CombatActorInput extends Omit<CombatRuntimeActor, 'teamId' | 'withdrawn' | 'statuses' | 'skills'> {
+export interface CombatActorInput extends Omit<
+  CombatRuntimeActor,
+  | 'teamId'
+  | 'withdrawn'
+  | 'statuses'
+  | 'skills'
+  | 'formationSlot'
+  | 'formationLine'
+  | 'magicResistance'
+  | 'controlDrStacks'
+  | 'controlDrExpiresTurn'
+  | 'fallbackAction'
+  | 'disconnectedAt'
+> {
   skills: readonly CombatRuntimeSkill[];
+  fallbackAction?: CombatFallbackAction;
+  magicResistance?: number;
 }
 
 export interface CombatTeamInput {
   anchorActorId: string;
   sourceGroupId?: string;
   actors: readonly CombatActorInput[];
+}
+
+export interface CombatLegalAction {
+  action: CombatActionCommand['action'];
+  skillKey?: string;
+  targeting: Exclude<SkillTargeting, 'AREA'>;
+  targetActorIds: string[];
+  reactionOnly?: boolean;
 }
 
 export interface CombatEngineResult {
