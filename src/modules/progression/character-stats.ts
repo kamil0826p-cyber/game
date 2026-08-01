@@ -80,7 +80,7 @@ export function normalizeStatVector(value: unknown): StatVector {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   return Object.fromEntries(STAT_KEYS.map((key) => {
     const raw = source[key];
-    return [key, Number.isFinite(raw) ? Math.trunc(Number(raw)) : 0];
+    return [key, typeof raw === 'number' && Number.isFinite(raw) ? Math.trunc(raw) : 0];
   })) as unknown as StatVector;
 }
 
