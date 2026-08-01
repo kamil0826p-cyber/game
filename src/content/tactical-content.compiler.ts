@@ -6,6 +6,8 @@ import {
   type CompiledContentPackage,
 } from './content-package.compiler.js';
 
+export const TACTICAL_CONTENT_VERSION = '2026.08.01.3';
+
 export async function compileCurrentTacticalContent(options: {
   realmSlug: string;
   realmName: string;
@@ -14,6 +16,7 @@ export async function compileCurrentTacticalContent(options: {
   const definitions = new Map(SKILL_CATALOG.map((skill) => [skill.key, skill]));
   const manifest = {
     ...compiled.manifest,
+    version: TACTICAL_CONTENT_VERSION,
     skills: compiled.manifest.skills.map((skill) => {
       const definition = definitions.get(skill.key);
       return {
