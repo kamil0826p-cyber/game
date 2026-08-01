@@ -12,6 +12,7 @@ import { installBuildcraftLocalization } from '../skills/buildcraftLocalization'
 import { GameSocketClient } from './GameSocketClient';
 import { installGroupSocketBridge } from './groupSocketBridge';
 import { installGuildSocketBridge } from './guildSocketBridge';
+import { installItemizationSocketBridge } from './itemizationSocketBridge';
 import { installMobSocketBridge } from './mobSocketBridge';
 import { installCharacterProgressionSocketBridge } from './progressionSocketBridge';
 
@@ -28,6 +29,7 @@ export function GameConnectionProvider({ user, children }: GameConnectionProvide
     installMobSocketBridge(clientRef.current);
     installGroupSocketBridge(clientRef.current);
     installCharacterProgressionSocketBridge(clientRef.current);
+    installItemizationSocketBridge(clientRef.current);
   }
   useEffect(() => {
     const client = clientRef.current!;
