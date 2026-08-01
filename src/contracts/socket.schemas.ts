@@ -10,6 +10,8 @@ const tradeId = z.string().uuid();
 const combatId = z.string().uuid();
 const characterId = z.string().uuid();
 const actorId = z.string().trim().min(1).max(128);
+const telegraphId = z.string().uuid();
+const expectedTurn = z.number().int().min(1).max(1_000_000).optional();
 const npcId = z.string().uuid();
 const inviteId = z.string().uuid();
 const outfitKey = z.string().trim().min(1).max(64).regex(/^[a-z0-9-]+$/);
@@ -53,9 +55,18 @@ export const skillUnlockSchema = z.object({ requestId, skillKey }).strict();
 export const combatGetActiveSchema = z.object({ requestId }).strict();
 export const combatRequestSchema = z.object({ requestId, targetCharacterId: characterId }).strict();
 export const combatRespondSchema = z.object({ requestId, combatId, accept: z.boolean() }).strict();
+
+const combatCommandBase = { requestId, combatId, expectedTurn } as const;
 export const combatActionSchema = z.discriminatedUnion('action', [
-  z.object({ requestId, combatId, action: z.literal('BASIC_ATTACK'), targetActorId: actorId.optional() }).strict(),
-  z.object({ requestId, combatId, action: z.literal('SKILL'), skillKey, targetActorId: actorId.optional() }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('BASIC_ATTACK'), targetActorId: actorId.optional() }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('SKILL'), skillKey, targetActorId: actorId.optional() }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('GUARD') }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('INTERCEPT'), targetActorId: actorId }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('INTERRUPT'), telegraphId }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('CLEANSE'), targetActorId: actorId.optional() }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('SWAP'), targetActorId: actorId }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('SUPPORT_ENERGY'), targetActorId: actorId }).strict(),
+  z.object({ ...combatCommandBase, action: z.literal('SKIP') }).strict(),
 ]);
 export const combatLeaveSchema = z.object({ requestId, combatId }).strict();
 export const guildGetSchema = z.object({ requestId }).strict();
