@@ -210,6 +210,7 @@ export function calculateCharacterStats(input: {
     level,
     choices: acceptedChoices,
     nodeRanks: nodeRanks(acceptedChoices),
+    nodes: PROGRESSION_NODES,
     points: {
       earned,
       spent: acceptedChoices.length,
