@@ -11,7 +11,6 @@ describe('Socket.IO namespace listener capacity', () => {
       getMaxListeners: vi.fn(() => limit),
       setMaxListeners: vi.fn((nextLimit: number) => {
         limit = nextLimit;
-        return emitter;
       }),
     };
 
@@ -19,7 +18,9 @@ describe('Socket.IO namespace listener capacity', () => {
 
     expect(limit).toBe(GAME_SOCKET_NAMESPACE_MAX_LISTENERS);
     expect(emitter.setMaxListeners).toHaveBeenCalledOnce();
-    expect(emitter.setMaxListeners).toHaveBeenCalledWith(GAME_SOCKET_NAMESPACE_MAX_LISTENERS);
+    expect(emitter.setMaxListeners).toHaveBeenCalledWith(
+      GAME_SOCKET_NAMESPACE_MAX_LISTENERS,
+    );
   });
 
   it('does not lower an explicitly larger listener limit', () => {
