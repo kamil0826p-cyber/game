@@ -16,6 +16,10 @@ export type TacticalCombatAction =
   | 'SWAP'
   | 'SUPPORT_ENERGY'
   | 'SKIP';
+export type CombatResolutionTacticalAction =
+  | TacticalCombatAction
+  | 'TELEGRAPH_DECLARED'
+  | 'TELEGRAPH_RESOLVED';
 export type CombatTelegraphCounter = 'INTERRUPT' | 'GUARD' | 'INTERCEPT' | 'CLEANSE';
 
 export interface CombatTurnPolicyPayload {
@@ -62,7 +66,7 @@ export type TacticalCombatSnapshot = Omit<CombatSnapshot, 'participants'> & {
 };
 
 export type TacticalCombatResolution = CombatActionResolutionPayload & {
-  tacticalAction?: TacticalCombatAction | 'TELEGRAPH_DECLARED' | 'TELEGRAPH_RESOLVED';
+  tacticalAction?: CombatResolutionTacticalAction;
   decisionTimeMs?: number;
   timedOut?: boolean;
   operationId?: string;
@@ -88,7 +92,7 @@ declare module './socket.events.js' {
   }
 
   interface CombatActionResolutionPayload {
-    tacticalAction?: TacticalCombatResolution['tacticalAction'];
+    tacticalAction?: CombatResolutionTacticalAction;
     decisionTimeMs?: number;
     timedOut?: boolean;
     operationId?: string;
