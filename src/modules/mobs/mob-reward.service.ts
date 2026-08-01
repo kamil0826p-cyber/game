@@ -48,6 +48,12 @@ export interface MobRewardSettlement {
   skippedLoot: SettledLoot[];
 }
 
+export interface EncounterRewardContext {
+  combatId: string;
+  operationId: string;
+  encounterKey: string;
+}
+
 @Injectable()
 export class MobRewardService {
   constructor(
@@ -56,8 +62,11 @@ export class MobRewardService {
     @Optional() private readonly quests?: QuestService,
   ) {}
 
-  async award(session: PlayerSession, mob: RuntimeMob): Promise<MobRewardSettlement> {
-    const rolled = rollMobLoot(mob.loot);
+  async award(
+    session: PlayerSession,
+    mob: RuntimeMob,
+    context?: EncounterRewardContext,
+  ): Promise<MobRewardSettlement> {
     const result = await this.prisma.$transaction(async (transaction) => {
       const owner = await transaction.character.findUnique({
         where: { id: session.characterId },
@@ -65,6 +74,30 @@ export class MobRewardService {
       });
       if (!owner || owner.userId !== session.userId) {
         throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+      }
+
+      if (context) {
+        const existing = await transaction.encounterRewardLedger.findUnique({
+          where: {
+            characterId_operationId: {
+              characterId: owner.id,
+              operationId: context.operationId,
+            },
+          },
+          select: { combatId: true, encounterKey: true, settlement: true },
+        });
+        if (existing) {
+          if (
+            existing.combatId !== context.combatId ||
+            existing.encounterKey !== context.encounterKey
+          ) {
+            throw new GameError(GAME_ERROR_CODES.INTERNAL_ERROR, 'errors.internal');
+          }
+          return {
+            duplicate: true as const,
+            settlement: this.readEncounterSettlement(existing.settlement),
+          };
+        }
       }
 
       const current = await this.characterProgression.recomputeInTransaction(
@@ -95,26 +128,67 @@ export class MobRewardService {
         transaction,
         owner.id,
       );
+      const rolled = rollMobLoot(mob.loot);
       const loot = await this.grantLoot(transaction, owner.id, rolled);
-      return { progression, skillPointsGained, updated, experienceAward, ...loot };
+      const settlement: MobRewardSettlement = {
+        experienceGained: experienceAward,
+        levelsGained: progression.levelsGained,
+        skillPointsGained,
+        nextLevelExperience: progression.nextLevelExperience,
+        loot: loot.granted,
+        skippedLoot: loot.skipped,
+      };
+
+      if (context) {
+        const storedSettlement = JSON.parse(
+          JSON.stringify(settlement),
+        ) as Prisma.InputJsonValue;
+        await transaction.encounterRewardLedger.create({
+          data: {
+            characterId: owner.id,
+            operationId: context.operationId,
+            combatId: context.combatId,
+            encounterKey: context.encounterKey,
+            settlement: storedSettlement,
+          },
+        });
+      }
+
+      return { duplicate: false as const, settlement, updated };
     });
 
-    Object.assign(session, result.updated);
-    session.stateRevision = Math.max(session.stateRevision + 1, result.updated.stateVersion);
-    session.persistedRevision = Math.max(session.persistedRevision, result.updated.stateVersion);
-    session.dirty = true;
-    await this.quests
-      ?.recordMobKill(session.characterId, mob.definitionKey)
-      .catch(() => undefined);
+    if (!result.duplicate) {
+      Object.assign(session, result.updated);
+      session.stateRevision = Math.max(session.stateRevision + 1, result.updated.stateVersion);
+      session.persistedRevision = Math.max(session.persistedRevision, result.updated.stateVersion);
+      session.dirty = true;
+      await this.quests
+        ?.recordMobKill(session.characterId, mob.definitionKey)
+        .catch(() => undefined);
+    }
 
-    return {
-      experienceGained: result.experienceAward,
-      levelsGained: result.progression.levelsGained,
-      skillPointsGained: result.skillPointsGained,
-      nextLevelExperience: result.progression.nextLevelExperience,
-      loot: result.granted,
-      skippedLoot: result.skipped,
-    };
+    return result.settlement;
+  }
+
+  private readEncounterSettlement(value: Prisma.JsonValue): MobRewardSettlement {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new GameError(GAME_ERROR_CODES.INTERNAL_ERROR, 'errors.internal');
+    }
+    const parsed = value as Partial<MobRewardSettlement>;
+    if (
+      !Number.isInteger(parsed.experienceGained) ||
+      !Number.isInteger(parsed.levelsGained) ||
+      !Number.isInteger(parsed.skillPointsGained) ||
+      !(
+        parsed.nextLevelExperience === null ||
+        Number.isInteger(parsed.nextLevelExperience)
+      ) ||
+      !Array.isArray(parsed.loot) ||
+      !Array.isArray(parsed.skippedLoot)
+    ) {
+      throw new GameError(GAME_ERROR_CODES.INTERNAL_ERROR, 'errors.internal');
+    }
+    return parsed as MobRewardSettlement;
   }
 
   private async grantLoot(

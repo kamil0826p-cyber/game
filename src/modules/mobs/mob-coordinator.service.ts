@@ -8,6 +8,15 @@ import { MapService } from '../maps/map.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
+import { buildClaimedEncounter } from './encounters/encounter.actor-factory.js';
+import { ENCOUNTER_CATALOG, encounterForRank } from './encounters/encounter.catalog.js';
+import {
+  encounterRewardOperationId,
+  evaluateEncounterEligibility,
+} from './encounters/encounter.runtime.js';
+import { scaleEncounter } from './encounters/encounter.scaling.js';
+import type { EncounterRuntimeState } from './encounters/encounter.types.js';
+import { assertEncounterCatalog } from './encounters/encounter.validator.js';
 import { MOB_RANKS, type MobLootEntry, type MobRank } from './mob.catalog.js';
 import { canReceiveMobExperience, splitMobExperience } from './mob-reward.rules.js';
 import { MobRewardService } from './mob-reward.service.js';
@@ -34,6 +43,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    assertEncounterCatalog(ENCOUNTER_CATALOG);
     const records = await this.prisma.mobDefinition.findMany({ orderBy: [{ mapId: 'asc' }, { key: 'asc' }] });
     for (const record of records) {
       const mob = this.toRuntimeMob(record);
@@ -48,7 +58,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       this.mobIdByActorId.set(this.actorId(mob.id), mob.id);
       map.collision[mob.y * map.width + mob.x] = 1;
     }
-    this.logger.log(`Loaded ${this.mobs.size} mob instances from the database.`);
+    this.logger.log(`Loaded ${this.mobs.size} mob instances and ${ENCOUNTER_CATALOG.length} encounter definitions.`);
   }
 
   onModuleDestroy(): void {
@@ -65,24 +75,16 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     return [...this.mobs.values()].some((mob) => mob.mapId === mapId && mob.x === x && mob.y === y && mob.state !== 'RESPAWNING');
   }
 
-  claim(mobId: string, session: PlayerSession): ClaimedMob {
+  claim(mobId: string, session: PlayerSession, partySize: number): ClaimedMob {
     const mob = this.requireMob(mobId);
     if (mob.state !== 'ALIVE') throw new GameError(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
     if (!isActorWithinInteractionRange(session, mob)) throw new GameError(GAME_ERROR_CODES.COMBAT_TOO_FAR, 'errors.combat.tooFar');
+    const definition = encounterForRank(mob.rank);
+    const encounter = scaleEncounter(definition, partySize);
     mob.state = 'IN_COMBAT';
     mob.engagedCharacterId = session.characterId;
     mob.respawnsAt = undefined;
-    return {
-      mob,
-      actor: {
-        actorId: this.actorId(mob.id), kind: 'MOB', name: mob.name,
-        characterClass: mob.characterClass, level: mob.level, outfitKey: mob.outfitKey,
-        renderScale: mob.renderScale, hp: mob.stats.maxHp, maxHp: mob.stats.maxHp,
-        energy: mob.stats.maxEnergy, maxEnergy: mob.stats.maxEnergy,
-        strength: mob.stats.strength, agility: mob.stats.agility,
-        intelligence: mob.stats.intelligence, armor: mob.stats.armor, skills: [],
-      },
-    };
+    return { mob, encounter: buildClaimedEncounter(mob, encounter) };
   }
 
   releaseClaim(mobId: string, characterId: string): void {
@@ -92,13 +94,10 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     mob.engagedCharacterId = undefined;
   }
 
-  async completeCombat(runtime: CombatRuntime): Promise<void> {
-    const mobActor = runtime.actors.find((actor) => actor.kind === 'MOB');
+  async completeCombat(runtime: CombatRuntime, encounterState: EncounterRuntimeState): Promise<void> {
     const playerActors = runtime.actors.filter((actor) => actor.kind === 'PLAYER' && actor.characterId);
-    if (!mobActor || playerActors.length === 0) return;
-    const mobId = this.mobIdByActorId.get(mobActor.actorId);
-    if (!mobId) return;
-    const mob = this.mobs.get(mobId);
+    if (playerActors.length === 0) return;
+    const mob = this.mobs.get(encounterState.rootMobId);
     if (!mob || mob.engagedCharacterId !== runtime.initiatorActorId) return;
 
     const playerTeamId = playerActors[0]!.teamId;
@@ -116,30 +115,51 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     this.broadcastDespawn(mob.mapId, { mobId: mob.id, respawnsAt: mob.respawnsAt });
     this.scheduleRespawn(mob);
 
-    const recipients = playerActors
-      .filter((actor) => !actor.withdrawn)
-      .flatMap((actor) => {
-        const session = this.world.getByCharacterId(actor.characterId!);
-        return session?.activeInWorld ? [session] : [];
+    const onlinePlayers = playerActors.flatMap((actor) => {
+      const session = this.world.getByCharacterId(actor.characterId!);
+      return session?.activeInWorld ? [{ actor, session }] : [];
+    });
+    for (const { actor, session } of onlinePlayers) {
+      const eligibility = evaluateEncounterEligibility(runtime, encounterState, actor.actorId);
+      if (eligibility.eligible) continue;
+      this.publisher.emit(session.socketId, 'notification', {
+        code: 'ENCOUNTER_REWARD_INELIGIBLE',
+        message: session.locale === 'pl'
+          ? `Brak nagrody za ${encounterState.encounter.definition.name}: ${this.eligibilityReasonPl(eligibility.reason)}.`
+          : `No reward for ${encounterState.encounter.definition.name}: ${eligibility.reason.toLowerCase().replaceAll('_', ' ')}.`,
       });
+    }
+    const recipients = onlinePlayers.filter(({ actor }) =>
+      evaluateEncounterEligibility(runtime, encounterState, actor.actorId).eligible,
+    );
     if (recipients.length === 0) return;
+
+    const totalExperience = Math.max(
+      0,
+      Math.round(mob.experience * encounterState.encounter.tier.rewardMultiplier),
+    );
     const experienceShares = splitMobExperience(
-      mob.experience,
-      recipients.map((session) => session.level),
+      totalExperience,
+      recipients.map(({ session }) => session.level),
       mob.level,
     );
+    const operationId = encounterRewardOperationId(runtime.combatId);
 
-    await Promise.all(recipients.map(async (session, index) => {
+    await Promise.all(recipients.map(async ({ session }, index) => {
       const experienceAllowed = canReceiveMobExperience(session.level, mob.level);
       const personalMob: RuntimeMob = {
         ...mob,
         experience: experienceShares[index] ?? 0,
       };
       try {
-        const settlement = await this.rewards.award(session, personalMob);
+        const settlement = await this.rewards.award(session, personalMob, {
+          combatId: runtime.combatId,
+          operationId,
+          encounterKey: encounterState.encounter.definition.key,
+        });
         const payload: MobRewardPayload = {
           mobId: mob.id,
-          mobName: mob.name,
+          mobName: encounterState.encounter.definition.name,
           experienceGained: settlement.experienceGained,
           levelsGained: settlement.levelsGained,
           skillPointsGained: settlement.skillPointsGained,
@@ -153,11 +173,11 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
           code: 'MOB_REWARD',
           message: session.locale === 'pl'
             ? experienceAllowed
-              ? `Pokonano ${mob.name}: +${settlement.experienceGained} doświadczenia. Łup jest osobisty.`
-              : `Pokonano ${mob.name}: brak doświadczenia, ponieważ różnica poziomów przekracza 10. Łup jest osobisty.`
+              ? `Ukończono ${encounterState.encounter.definition.name}: +${settlement.experienceGained} doświadczenia. Łup jest osobisty.`
+              : `Ukończono ${encounterState.encounter.definition.name}: brak doświadczenia, ponieważ różnica poziomów przekracza 10. Łup jest osobisty.`
             : experienceAllowed
-              ? `Defeated ${mob.name}: +${settlement.experienceGained} experience. Loot is personal.`
-              : `Defeated ${mob.name}: no experience because the level difference is greater than 10. Loot is personal.`,
+              ? `Completed ${encounterState.encounter.definition.name}: +${settlement.experienceGained} experience. Loot is personal.`
+              : `Completed ${encounterState.encounter.definition.name}: no experience because the level difference is greater than 10. Loot is personal.`,
         });
         if (settlement.levelsGained > 0) {
           this.publisher.emit(session.socketId, 'notification', {
@@ -176,13 +196,23 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
           });
         }
       } catch (error) {
-        this.logger.error(`Could not settle group rewards for ${session.characterId} after defeating ${mob.id}.`, error instanceof Error ? error.stack : undefined);
+        this.logger.error(`Could not settle encounter rewards for ${session.characterId} after ${runtime.combatId}.`, error instanceof Error ? error.stack : undefined);
         this.publisher.emit(session.socketId, 'notification', {
           code: GAME_ERROR_CODES.INTERNAL_ERROR,
           message: session.locale === 'pl' ? 'Wystąpił wewnętrzny błąd serwera.' : 'An internal server error occurred.',
         });
       }
     }));
+  }
+
+  private eligibilityReasonPl(reason: string): string {
+    switch (reason) {
+      case 'WITHDRAWN': return 'postać wycofała się z walki';
+      case 'AFK': return 'zbyt wiele tur zakończyło się bez aktywności';
+      case 'LATE_JOIN': return 'udział rozpoczął się zbyt późno';
+      case 'NO_CONTRIBUTION': return 'brak mierzalnego wkładu w walkę';
+      default: return 'niespełnione warunki udziału';
+    }
   }
 
   private scheduleRespawn(mob: RuntimeMob): void {

@@ -1,6 +1,6 @@
 import type { CharacterClass } from '../../common/domain/game.types.js';
-import type { CombatActorInput } from '../combat/combat.types.js';
 import type { MobLootEntry, MobRank } from './mob.catalog.js';
+import type { ClaimedEncounter } from './encounters/encounter.types.js';
 
 export type MobRuntimeState = 'ALIVE' | 'IN_COMBAT' | 'RESPAWNING';
 
@@ -34,5 +34,5 @@ export interface RuntimeMob {
 
 export interface ClaimedMob {
   mob: RuntimeMob;
-  actor: CombatActorInput;
+  encounter: ClaimedEncounter;
 }
