@@ -24,6 +24,23 @@ async function main(): Promise<void> {
   const command = process.argv[2];
   if (!command || !['validate', 'deploy', 'rollback'].includes(command)) usage();
 
+  if (command === 'validate') {
+    const compiled = compileContentManifest(await buildGameContentManifest());
+    console.log(
+      JSON.stringify(
+        {
+          valid: true,
+          hash: compiled.hash,
+          schemaVersion: compiled.manifest.schemaVersion,
+          logicalDiff: compiled.logicalDiff,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   try {
     if (command === 'rollback') {
@@ -48,25 +65,9 @@ async function main(): Promise<void> {
 
     const [manifest, active] = await Promise.all([
       buildGameContentManifest(),
-      readActiveContentManifest(prisma).catch(() => undefined),
+      readActiveContentManifest(prisma),
     ]);
     const compiled = compileContentManifest(manifest, active);
-    if (command === 'validate') {
-      console.log(
-        JSON.stringify(
-          {
-            valid: true,
-            hash: compiled.hash,
-            schemaVersion: compiled.manifest.schemaVersion,
-            logicalDiff: compiled.logicalDiff,
-          },
-          null,
-          2,
-        ),
-      );
-      return;
-    }
-
     const result = await deployContentPackage(prisma, compiled, {
       realmSlug,
       realmName,
