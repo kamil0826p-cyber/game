@@ -28,20 +28,20 @@ const classDescriptionKey = {
   ARCHER: 'class.archerDescription',
 } as const;
 
-const nodeCopy: Record<'en' | 'pl', Record<ProgressionNodeKey, { name: string; description: string }>> = {
+const nodeNames: Record<'en' | 'pl', Record<ProgressionNodeKey, string>> = {
   en: {
-    ENDURANCE: { name: 'Endurance', description: '+34 HP and +1 armor per rank' },
-    PRECISION: { name: 'Precision', description: '+1 strength and +2 agility per rank' },
-    RITUAL_KNOWLEDGE: { name: 'Ritual knowledge', description: '+16 energy and +2 intelligence per rank' },
-    MOBILITY: { name: 'Mobility', description: '+9 energy and +1 agility per rank' },
-    CONTROL: { name: 'Control', description: '+14 HP, +1 intelligence and +1 armor per rank' },
+    ENDURANCE: 'Endurance',
+    PRECISION: 'Precision',
+    RITUAL_KNOWLEDGE: 'Ritual knowledge',
+    MOBILITY: 'Mobility',
+    CONTROL: 'Control',
   },
   pl: {
-    ENDURANCE: { name: 'Wytrzymałość', description: '+34 PŻ i +1 pancerza na rangę' },
-    PRECISION: { name: 'Precyzja', description: '+1 siły i +2 zręczności na rangę' },
-    RITUAL_KNOWLEDGE: { name: 'Wiedza rytualna', description: '+16 energii i +2 inteligencji na rangę' },
-    MOBILITY: { name: 'Mobilność', description: '+9 energii i +1 zręczności na rangę' },
-    CONTROL: { name: 'Kontrola', description: '+14 PŻ, +1 inteligencji i +1 pancerza na rangę' },
+    ENDURANCE: 'Wytrzymałość',
+    PRECISION: 'Precyzja',
+    RITUAL_KNOWLEDGE: 'Wiedza rytualna',
+    MOBILITY: 'Mobilność',
+    CONTROL: 'Kontrola',
   },
 };
 
@@ -50,24 +50,39 @@ const labels = {
     subtitle: 'Canonical stats and milestone choices', loading: 'Loading stat sources…', stat: 'Stat', total: 'Total',
     sources: ['Base', 'Level', 'Choices', 'Legacy', 'Equipment', 'Effects'],
     stats: ['Max HP', 'Max energy', 'Strength', 'Agility', 'Intelligence', 'Armor'],
+    bonusStats: { maxHp: 'HP', maxEnergy: 'energy', strength: 'strength', agility: 'agility', intelligence: 'intelligence', armor: 'armor' },
     physical: 'Physical power', spell: 'Spell power', reduction: 'Damage reduction',
     choices: 'Milestone choices', available: 'available', earned: 'earned', next: 'next at level',
-    reset: 'Reset build', free: 'free', silver: 'silver',
-    cap: 'Displayed attributes are exact source sums. Combat power above 80 receives 50% value, armor above 60 receives 40%, and the derived values have hard caps.',
+    reset: 'Reset build', free: 'free', silver: 'silver', perRank: 'per rank',
   },
   pl: {
     subtitle: 'Kanoniczne statystyki i wybory rozwoju', loading: 'Wczytywanie źródeł statystyk…', stat: 'Statystyka', total: 'Suma',
     sources: ['Baza', 'Poziom', 'Wybory', 'Migracja', 'Ekwipunek', 'Efekty'],
     stats: ['Maks. PŻ', 'Maks. energia', 'Siła', 'Zręczność', 'Inteligencja', 'Pancerz'],
+    bonusStats: { maxHp: 'PŻ', maxEnergy: 'energii', strength: 'siły', agility: 'zręczności', intelligence: 'inteligencji', armor: 'pancerza' },
     physical: 'Moc fizyczna', spell: 'Moc magiczna', reduction: 'Redukcja obrażeń',
     choices: 'Wybory kamieni milowych', available: 'dostępne', earned: 'zdobyte', next: 'następny na poziomie',
-    reset: 'Zresetuj build', free: 'bezpłatnie', silver: 'srebra',
-    cap: 'Pokazane atrybuty są dokładną sumą źródeł. Moc bojowa powyżej 80 otrzymuje 50% wartości, pancerz powyżej 60 otrzymuje 40%, a wartości pochodne mają twarde limity.',
+    reset: 'Zresetuj build', free: 'bezpłatnie', silver: 'srebra', perRank: 'na rangę',
   },
 } as const;
 
 const statKeys: Array<keyof ProgressionStatVector> = ['maxHp', 'maxEnergy', 'strength', 'agility', 'intelligence', 'armor'];
 const sourceKeys: Array<keyof ProgressionSnapshot['sources']> = ['base', 'automaticProgression', 'milestoneChoices', 'legacyAdjustment', 'equipment', 'temporary'];
+
+function formatBonuses(vector: ProgressionStatVector, locale: 'en' | 'pl'): string {
+  const copy = labels[locale];
+  return statKeys
+    .filter((stat) => vector[stat] !== 0)
+    .map((stat) => `${vector[stat] > 0 ? '+' : ''}${vector[stat]} ${copy.bonusStats[stat]}`)
+    .join(', ');
+}
+
+function capExplanation(progression: ProgressionSnapshot, locale: 'en' | 'pl'): string {
+  const limits = progression.limits;
+  return locale === 'pl'
+    ? `Pokazane atrybuty są sumą autorytatywnych źródeł. Statystyki główne mają próg ${limits.primarySoftCap} i limit efektywny ${limits.primaryHardCap}; pancerz ma próg ${limits.armorSoftCap} i limit efektywny ${limits.armorHardCap}.`
+    : `Displayed attributes are the sum of authoritative sources. Primary stats have a ${limits.primarySoftCap} soft cap and ${limits.primaryHardCap} effective cap; armor has a ${limits.armorSoftCap} soft cap and ${limits.armorHardCap} effective cap.`;
+}
 
 export function CharacterModal({ character, onClose }: { character: SelfCharacterState; onClose: () => void }): React.JSX.Element {
   const { locale, t } = useI18n();
@@ -159,7 +174,7 @@ export function CharacterModal({ character, onClose }: { character: SelfCharacte
                 <div className="stat-tile"><span>{copy.spell}</span><strong>{progression.derived.spellPower}</strong></div>
                 <div className="stat-tile"><span>{copy.reduction}</span><strong>{(progression.derived.damageReductionBasisPoints / 100).toFixed(1)}%</strong></div>
               </div>
-              <p className="mt-3 text-xs leading-5 text-slate-400">{copy.cap}</p>
+              <p className="mt-3 text-xs leading-5 text-slate-400">{capExplanation(progression, locale)}</p>
 
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -181,17 +196,19 @@ export function CharacterModal({ character, onClose }: { character: SelfCharacte
               <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {PROGRESSION_NODE_KEYS.map((nodeKey) => {
                   const rank = progression.nodeRanks[nodeKey];
-                  const node = nodeCopy[locale][nodeKey];
+                  const definition = progression.nodes[nodeKey];
                   return (
                     <button
                       key={nodeKey}
                       type="button"
-                      disabled={busy || progression.points.available < 1 || rank >= 8}
+                      disabled={busy || progression.points.available < 1 || rank >= definition.maxRank}
                       onClick={() => void choose(nodeKey)}
                       className="rounded border border-amber-200/25 bg-slate-900/70 p-3 text-left transition hover:border-amber-200/60 disabled:cursor-not-allowed disabled:opacity-45"
                     >
-                      <span className="font-display text-lg text-amber-100">{node.name} · {rank}/8</span>
-                      <span className="mt-1 block text-xs leading-5 text-slate-400">{node.description}</span>
+                      <span className="font-display text-lg text-amber-100">{nodeNames[locale][nodeKey]} · {rank}/{definition.maxRank}</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-400">
+                        {formatBonuses(definition.bonusesPerRank, locale)} {copy.perRank}
+                      </span>
                     </button>
                   );
                 })}
