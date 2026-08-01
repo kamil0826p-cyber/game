@@ -102,7 +102,7 @@ export class MobRewardService {
     Object.assign(session, result.updated);
     session.stateRevision = Math.max(session.stateRevision + 1, result.updated.stateVersion);
     session.persistedRevision = Math.max(session.persistedRevision, result.updated.stateVersion);
-    session.dirty = false;
+    session.dirty = true;
     await this.quests
       ?.recordMobKill(session.characterId, mob.definitionKey)
       .catch(() => undefined);
