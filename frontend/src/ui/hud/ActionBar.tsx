@@ -14,6 +14,7 @@ export interface CombatSkillIntent {
 interface ActionBarProps {
   disabled?: boolean;
   disabledLabel?: string;
+  legalTargetCounts?: Readonly<Record<string, number>>;
 }
 
 const blockReasonLabelKey = {
@@ -30,6 +31,7 @@ const isEditable = (target: EventTarget | null): boolean =>
 export function ActionBar({
   disabled = false,
   disabledLabel,
+  legalTargetCounts,
 }: ActionBarProps = {}): React.JSX.Element {
   const { locale, t } = useI18n();
   const state = useGameState();
@@ -40,8 +42,11 @@ export function ActionBar({
   );
 
   const activate = (skill: SkillDefinitionPayload, index: number): void => {
+    const hasLegalTarget =
+      legalTargetCounts === undefined || (legalTargetCounts[skill.key] ?? 0) > 0;
     if (
       disabled ||
+      !hasLegalTarget ||
       !state.self ||
       getSkillUseBlockReason(skill, state.self.combatState, state.self.energy)
     ) {
@@ -92,24 +97,37 @@ export function ActionBar({
           state.self.combatState,
           state.self.energy,
         );
-        const reason =
-          disabled && !blockReason
+        const legalTargets = legalTargetCounts?.[skill.key];
+        const lacksLegalTarget = legalTargets !== undefined && legalTargets === 0;
+        const noTargetLabel = locale === 'pl' ? 'Brak legalnego celu' : 'No legal target';
+        const reason = lacksLegalTarget
+          ? noTargetLabel
+          : disabled && !blockReason
             ? (disabledLabel ?? t('hud.action.ready'))
             : blockReason
               ? t(blockReasonLabelKey[blockReason])
               : t('hud.action.ready');
+        const cooldownLabel = `${skill.cooldownTurnsRemaining}/${skill.cooldownTurns}`;
+        const targetLabel =
+          legalTargets === undefined
+            ? skill.targeting
+            : locale === 'pl'
+              ? `${skill.targeting} · cele ${legalTargets}`
+              : `${skill.targeting} · targets ${legalTargets}`;
 
         return (
           <span key={skill.key} className="hud-tooltip-anchor">
             <button
               type="button"
               aria-label={`${localized.name} (${index + 1}): ${reason}`}
-              disabled={disabled || blockReason !== undefined}
+              disabled={disabled || lacksLegalTarget || blockReason !== undefined}
               onClick={() => activate(skill, index)}
               className={[
                 'action-slot',
                 skill.rank < 1 ? 'action-slot-locked' : '',
-                blockReason && skill.rank > 0 ? 'action-slot-disabled' : '',
+                (blockReason || lacksLegalTarget) && skill.rank > 0
+                  ? 'action-slot-disabled'
+                  : '',
                 active === index ? 'action-slot-active' : '',
               ].join(' ')}
               style={{ '--skill-accent': skill.visual.accentColor } as React.CSSProperties}
@@ -120,6 +138,11 @@ export function ActionBar({
             <span className="hud-tooltip-bubble hud-tooltip-bubble-top" role="tooltip">
               <span>{localized.name}</span>
               <small>{reason}</small>
+              <small>
+                {locale === 'pl' ? 'Energia' : 'Energy'}: {skill.energyCost} ·{' '}
+                {locale === 'pl' ? 'Odnowienie' : 'Cooldown'}: {cooldownLabel}
+              </small>
+              <small>{targetLabel}</small>
               <kbd>{index + 1}</kbd>
             </span>
           </span>
