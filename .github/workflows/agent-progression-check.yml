@@ -1,9 +1,9 @@
 name: Agent progression check
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/canonical-character-progression
+      - main
 
 permissions:
   contents: read
