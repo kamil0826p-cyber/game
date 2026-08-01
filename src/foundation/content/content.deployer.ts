@@ -35,7 +35,9 @@ export interface ContentDeploymentResult {
 
 const asJson = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 
-async function lockContentState(transaction: Prisma.TransactionClient): Promise<ActiveReleaseRow | undefined> {
+async function lockContentState(
+  transaction: Prisma.TransactionClient,
+): Promise<ActiveReleaseRow | undefined> {
   await transaction.$executeRaw(Prisma.sql`
     INSERT INTO "ContentState" ("key", "updatedAt")
     VALUES ('global', CURRENT_TIMESTAMP)
@@ -49,6 +51,18 @@ async function lockContentState(transaction: Prisma.TransactionClient): Promise<
     FOR UPDATE OF state
   `);
   return rows[0]?.id ? rows[0] : undefined;
+}
+
+async function setDefinitionContentHash(
+  transaction: Prisma.TransactionClient,
+  table: 'Map' | 'ItemDefinition' | 'QuestDefinition' | 'NpcDefinition' | 'MobDefinition' | 'SkillDefinition',
+  id: string,
+  hash: string,
+): Promise<void> {
+  const tableName = Prisma.raw(`"${table}"`);
+  await transaction.$executeRaw(Prisma.sql`
+    UPDATE ${tableName} SET "contentHash" = ${hash} WHERE "id" = ${id}::uuid
+  `);
 }
 
 async function projectManifest(
@@ -90,12 +104,12 @@ async function projectManifest(
       },
     });
     mapIds.set(definition.key, map.id);
-    await transaction.$executeRaw(Prisma.sql`
-      UPDATE "Map" SET "contentHash" = ${hash} WHERE "id" = ${map.id}::uuid
-    `);
+    await setDefinitionContentHash(transaction, 'Map', map.id, hash);
   }
 
-  for (const mapId of mapIds.values()) await transaction.portal.deleteMany({ where: { sourceMapId: mapId } });
+  for (const mapId of mapIds.values()) {
+    await transaction.portal.deleteMany({ where: { sourceMapId: mapId } });
+  }
   if (manifest.portals.length > 0) {
     await transaction.portal.createMany({
       data: manifest.portals.map((portal) => ({
@@ -127,9 +141,7 @@ async function projectManifest(
         metadata: asJson(item.metadata),
       },
     });
-    await transaction.$executeRaw(Prisma.sql`
-      UPDATE "ItemDefinition" SET "contentHash" = ${hash} WHERE "id" = ${definition.id}::uuid
-    `);
+    await setDefinitionContentHash(transaction, 'ItemDefinition', definition.id, hash);
   }
 
   for (const quest of manifest.quests) {
@@ -151,16 +163,16 @@ async function projectManifest(
         rewards: asJson(quest.rewards),
       },
     });
-    await transaction.$executeRaw(Prisma.sql`
-      UPDATE "QuestDefinition" SET "contentHash" = ${hash} WHERE "id" = ${definition.id}::uuid
-    `);
+    await setDefinitionContentHash(transaction, 'QuestDefinition', definition.id, hash);
   }
 
   for (const npc of manifest.npcs) {
+    const mapId = mapIds.get(npc.mapKey);
+    if (!mapId) throw new Error(`Map ${npc.mapKey} was not projected for NPC ${npc.key}.`);
     const definition = await transaction.npcDefinition.upsert({
-      where: { mapId_key: { mapId: mapIds.get(npc.mapKey)!, key: npc.key } },
+      where: { mapId_key: { mapId, key: npc.key } },
       create: {
-        mapId: mapIds.get(npc.mapKey)!,
+        mapId,
         key: npc.key,
         name: npc.name,
         x: npc.x,
@@ -176,17 +188,19 @@ async function projectManifest(
         dialogue: asJson(npc.dialogue),
       },
     });
-    await transaction.$executeRaw(Prisma.sql`
-      UPDATE "NpcDefinition" SET "contentHash" = ${hash} WHERE "id" = ${definition.id}::uuid
-    `);
+    await setDefinitionContentHash(transaction, 'NpcDefinition', definition.id, hash);
   }
 
-  const lootByKey = new Map(manifest.lootTables.map((lootTable) => [lootTable.key, lootTable.entries]));
+  const lootByKey = new Map(
+    manifest.lootTables.map((lootTable) => [lootTable.key, lootTable.entries]),
+  );
   for (const mob of manifest.mobs) {
+    const mapId = mapIds.get(mob.mapKey);
+    if (!mapId) throw new Error(`Map ${mob.mapKey} was not projected for mob ${mob.key}.`);
     const definition = await transaction.mobDefinition.upsert({
-      where: { mapId_key: { mapId: mapIds.get(mob.mapKey)!, key: mob.key } },
+      where: { mapId_key: { mapId, key: mob.key } },
       create: {
-        mapId: mapIds.get(mob.mapKey)!,
+        mapId,
         key: mob.key,
         name: mob.name,
         x: mob.x,
@@ -208,9 +222,7 @@ async function projectManifest(
         respawnMs: mob.respawnMs,
       },
     });
-    await transaction.$executeRaw(Prisma.sql`
-      UPDATE "MobDefinition" SET "contentHash" = ${hash} WHERE "id" = ${definition.id}::uuid
-    `);
+    await setDefinitionContentHash(transaction, 'MobDefinition', definition.id, hash);
   }
 
   const skillIds = new Map<string, string>();
@@ -254,9 +266,7 @@ async function projectManifest(
       },
     });
     skillIds.set(skill.key, definition.id);
-    await transaction.$executeRaw(Prisma.sql`
-      UPDATE "SkillDefinition" SET "contentHash" = ${hash} WHERE "id" = ${definition.id}::uuid
-    `);
+    await setDefinitionContentHash(transaction, 'SkillDefinition', definition.id, hash);
   }
   if (skillIds.size > 0) {
     await transaction.skillPrerequisite.deleteMany({
@@ -268,20 +278,21 @@ async function projectManifest(
         prerequisiteSkillDefinitionId: skillIds.get(prerequisiteKey)!,
       })),
     );
-    if (prerequisites.length > 0) await transaction.skillPrerequisite.createMany({ data: prerequisites });
+    if (prerequisites.length > 0) {
+      await transaction.skillPrerequisite.createMany({ data: prerequisites });
+    }
   }
 
-  const managedMapIds = [...mapIds.values()];
-  if (managedMapIds.length > 0) {
+  for (const mapId of mapIds.values()) {
     await transaction.$executeRaw(Prisma.sql`
       DELETE FROM "NpcDefinition"
-      WHERE "mapId" IN (${Prisma.join(managedMapIds)}::uuid[])
+      WHERE "mapId" = ${mapId}::uuid
         AND "contentHash" IS NOT NULL
         AND "contentHash" <> ${hash}
     `);
     await transaction.$executeRaw(Prisma.sql`
       DELETE FROM "MobDefinition"
-      WHERE "mapId" IN (${Prisma.join(managedMapIds)}::uuid[])
+      WHERE "mapId" = ${mapId}::uuid
         AND "contentHash" IS NOT NULL
         AND "contentHash" <> ${hash}
     `);
@@ -304,7 +315,12 @@ async function storeDefinitions(
     for (const definition of manifest[section]) {
       await transaction.$executeRaw(Prisma.sql`
         INSERT INTO "ContentDefinition" ("releaseId", "section", "key", "body")
-        VALUES (${releaseId}::uuid, ${section}, ${definition.key}, CAST(${JSON.stringify(definition)} AS jsonb))
+        VALUES (
+          ${releaseId}::uuid,
+          ${section},
+          ${definition.key},
+          CAST(${JSON.stringify(definition)} AS jsonb)
+        )
       `);
     }
   }
@@ -378,7 +394,8 @@ export async function deployContentPackage(
     await storeDefinitions(transaction, release.id, compiled.manifest);
     await transaction.$executeRaw(Prisma.sql`
       UPDATE "ContentState"
-      SET "activeReleaseId" = ${release.id}::uuid, "updatedAt" = CURRENT_TIMESTAMP
+      SET "activeReleaseId" = ${release.id}::uuid,
+          "updatedAt" = CURRENT_TIMESTAMP
       WHERE "key" = 'global'
     `);
 
