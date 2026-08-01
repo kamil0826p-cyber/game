@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NODE_ENV: test
+      CONTENT_READINESS_CHECK: "false"
+      OUTBOX_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+      - name: Check formatting
+        run: npm run format:check
+      - name: Validate and generate Prisma client
+        run: npm run prisma:validate && npm run prisma:generate
+      - name: Validate and compile content package
+        run: |
+          npm run content:validate
+          npm run content:compile -- --output=artifacts/content/ci-manifest.json
+      - name: Typecheck backend
+        run: npm run typecheck
+      - name: Run backend unit tests
+        run: npm test
+      - name: Build backend
+        run: npm run build
+      - name: Typecheck frontend
+        run: npm run frontend:typecheck
+      - name: Run frontend unit tests
+        run: npm run frontend:test
+      - name: Build frontend
+        run: npm run frontend:build
+      - name: Audit production dependencies
+        run: npm run audit:prod
+      - name: Upload static diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-diagnostics-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            artifacts
+            ~/.npm/_logs
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: game
+          POSTGRES_PASSWORD: game
+          POSTGRES_DB: grid_mmorpg
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U game -d grid_mmorpg"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      DIRECT_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      GAME_REALM_SLUG: world-1
+      GAME_REALM_NAME: World 1
+      GAME_REALM_INSTANCE_ID: ci-primary
+      CONTENT_READINESS_CHECK: "false"
+      OUTBOX_ENABLED: "false"
+      RUN_DB_TESTS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate and generate Prisma client
+        run: npm run prisma:validate && npm run prisma:generate
+      - name: Apply migrations twice
+        run: |
+          npm run prisma:migrate:deploy
+          npm run prisma:migrate:deploy
+      - name: Seed versioned content twice
+        run: |
+          npm run prisma:seed
+          npm run prisma:seed
+      - name: Verify content deployment is a no-op
+        run: npm run content:dry-run
+      - name: Run PostgreSQL integration tests
+        run: npm run test:integration
+      - name: Collect database diagnostics
+        if: failure()
+        run: |
+          mkdir -p artifacts/ci
+          npm run content:dry-run > artifacts/ci/content-dry-run.txt 2>&1 || true
+          npm run analytics -- queue > artifacts/ci/analytics-queue.txt 2>&1 || true
+      - name: Upload database diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-diagnostics-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            artifacts
+            ~/.npm/_logs

@@ -11,6 +11,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { ZodError, type ZodType } from 'zod';
+import { AnalyticsTrackingService } from '../../analytics/analytics-tracking.service.js';
 import { FirebaseSocketAuthMiddleware } from '../../auth/firebase-socket-auth.middleware.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type {
@@ -37,6 +38,7 @@ import {
   type ViewportUpdatePayload,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import { CombatService } from '../combat/combat.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import { VisibilityService } from '../world/visibility.service.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
@@ -87,6 +89,8 @@ export class GameGateway
     private readonly publisher: WorldEventsPublisher,
     private readonly localization: LocalizationService,
     private readonly authMiddleware: FirebaseSocketAuthMiddleware,
+    private readonly combats: CombatService,
+    private readonly analytics: AnalyticsTrackingService,
   ) {}
 
   afterInit(namespace: GameNamespace): void {
@@ -99,6 +103,7 @@ export class GameGateway
     try {
       this.assertAcceptingConnections();
       await this.lifecycle.initializeConnection(client);
+      void this.analytics.sessionStarted(client);
     } catch (error) {
       client.emit('notification', this.toSocketError(error, client));
       client.disconnect(true);
@@ -107,6 +112,12 @@ export class GameGateway
 
   async handleDisconnect(client: GameSocket): Promise<void> {
     try {
+      const session = this.worldState.getBySocketId(client.id);
+      if (session?.activeInWorld) {
+        const combat = await this.combats.getActive(session.userId, session.characterId);
+        if (combat) void this.analytics.combatDisconnected(session, combat);
+      }
+      void this.analytics.sessionEnded(client, session);
       await this.lifecycle.disconnect(client);
     } catch (error) {
       this.logger.error(
@@ -140,7 +151,17 @@ export class GameGateway
   ): Promise<SocketAck<WorldSpawnPayload>> {
     try {
       this.assertAcceptingConnections();
-      return { ok: true, data: await this.lifecycle.enterWorld(client) };
+      const data = await this.lifecycle.enterWorld(client);
+      const session = this.worldState.getBySocketId(client.id);
+      if (session) {
+        void this.analytics.regionEntered(session, 'WORLD_ENTRY');
+        void this.analytics.onboardingCheckpoint({
+          session,
+          journeyVersion: 1,
+          checkpointKey: 'world-entered',
+        });
+      }
+      return { ok: true, data };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }

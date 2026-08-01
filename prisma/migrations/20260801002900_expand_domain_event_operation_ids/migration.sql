@@ -1,0 +1,2 @@
+ALTER TABLE "DomainEvent"
+  ALTER COLUMN "operationId" TYPE VARCHAR(256);

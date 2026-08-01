@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { AnalyticsTrackingService } from '../../analytics/analytics-tracking.service.js';
 import { DIRECTION_DELTAS, type Direction } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { GameConfigService } from '../../config/game-config.service.js';
@@ -31,6 +32,7 @@ export class MovementService {
     private readonly publisher: WorldEventsPublisher,
     private readonly localization: LocalizationService,
     private readonly persistence: PlayerPersistenceService,
+    private readonly analytics: AnalyticsTrackingService,
   ) {}
 
   async performStep(
@@ -197,6 +199,7 @@ export class MovementService {
         nearbyPlayers,
         serverTime: committedAt,
       });
+      void this.analytics.regionEntered(session, 'PORTAL', sourceMap.id);
       const snapshot = this.persistence.capture(session);
       void this.persistence
         .persistSnapshot(snapshot, 'portal')

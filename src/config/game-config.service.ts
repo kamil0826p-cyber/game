@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import { CURRENT_CONTENT_VERSION } from '../content/current-content.js';
 
 const booleanFromEnvironment = (defaultValue: boolean) =>
   z.preprocess((value: unknown) => {
@@ -17,12 +18,19 @@ const integerFromEnvironment = (defaultValue: number, minimum: number, maximum: 
     return Number(value);
   }, z.number().int().min(minimum).max(maximum));
 
+const optionalString = z.preprocess((value: unknown) => {
+  if (value === undefined || value === null || String(value).trim() === '') return undefined;
+  return String(value).trim();
+}, z.string().optional());
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: integerFromEnvironment(3000, 1, 65535),
   DATABASE_URL: z.string().min(1),
   GAME_REALM_SLUG: z.string().min(1).max(64).default('world-1'),
   GAME_REALM_INSTANCE_ID: z.string().min(1).max(128).default('world-1-primary'),
+  GAME_CONTENT_VERSION: z.string().min(1).max(64).default(CURRENT_CONTENT_VERSION),
+  CONTENT_READINESS_CHECK: booleanFromEnvironment(process.env.NODE_ENV !== 'test'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
 
   MOVE_STEP_MS: integerFromEnvironment(200, 100, 2000),
@@ -38,6 +46,25 @@ const environmentSchema = z.object({
   SOCKET_MAX_PAYLOAD_BYTES: integerFromEnvironment(65_536, 1024, 1_048_576),
   SOCKET_PING_INTERVAL_MS: integerFromEnvironment(25_000, 5000, 120_000),
   SOCKET_PING_TIMEOUT_MS: integerFromEnvironment(20_000, 5000, 120_000),
+
+  OUTBOX_ENABLED: booleanFromEnvironment(true),
+  OUTBOX_POLL_INTERVAL_MS: integerFromEnvironment(1000, 100, 60_000),
+  OUTBOX_BATCH_SIZE: integerFromEnvironment(50, 1, 500),
+  OUTBOX_MAX_ATTEMPTS: integerFromEnvironment(10, 1, 100),
+
+  ANALYTICS_ENABLED: booleanFromEnvironment(true),
+  ANALYTICS_PROVIDER: z.enum(['disabled', 'stdout', 'http']).default('disabled'),
+  ANALYTICS_HTTP_ENDPOINT: optionalString,
+  ANALYTICS_HTTP_AUTHORIZATION: optionalString,
+  ANALYTICS_HTTP_TIMEOUT_MS: integerFromEnvironment(5000, 100, 60_000),
+  ANALYTICS_INGEST_INTERVAL_MS: integerFromEnvironment(1000, 100, 60_000),
+  ANALYTICS_INGEST_BATCH_SIZE: integerFromEnvironment(100, 1, 1000),
+  ANALYTICS_DISPATCH_INTERVAL_MS: integerFromEnvironment(1000, 100, 60_000),
+  ANALYTICS_DISPATCH_BATCH_SIZE: integerFromEnvironment(100, 1, 1000),
+  ANALYTICS_QUEUE_CAPACITY: integerFromEnvironment(100_000, 100, 10_000_000),
+  ANALYTICS_MAX_ATTEMPTS: integerFromEnvironment(12, 1, 100),
+  ANALYTICS_RETENTION_DAYS: integerFromEnvironment(180, 1, 3650),
+  ANALYTICS_SAMPLE_BASIS_POINTS: integerFromEnvironment(10_000, 0, 10_000),
 
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
@@ -59,6 +86,9 @@ export class GameConfigService {
 
     if (this.environment.FOV_HALF_WIDTH > this.environment.MAX_FOV_HALF_WIDTH) throw new Error('FOV_HALF_WIDTH cannot exceed MAX_FOV_HALF_WIDTH.');
     if (this.environment.FOV_HALF_HEIGHT > this.environment.MAX_FOV_HALF_HEIGHT) throw new Error('FOV_HALF_HEIGHT cannot exceed MAX_FOV_HALF_HEIGHT.');
+    if (this.environment.ANALYTICS_PROVIDER === 'http' && !this.environment.ANALYTICS_HTTP_ENDPOINT) {
+      throw new Error('ANALYTICS_HTTP_ENDPOINT is required when ANALYTICS_PROVIDER=http.');
+    }
   }
 
   get values(): Readonly<GameEnvironment> {

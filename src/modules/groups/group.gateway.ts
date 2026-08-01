@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
 import { ZodError, type ZodType } from 'zod';
+import { AnalyticsTrackingService } from '../../analytics/analytics-tracking.service.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GroupSnapshot } from '../../contracts/group.events.js';
 import {
@@ -24,6 +25,7 @@ export class GroupGateway {
     private readonly groups: GroupService,
     private readonly worldState: WorldStateService,
     private readonly localization: LocalizationService,
+    private readonly analytics: AnalyticsTrackingService,
   ) {}
 
   @SubscribeMessage('group:get')
@@ -49,9 +51,22 @@ export class GroupGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<GroupSnapshot>> {
-    return this.handle(client, groupRespondSchema, raw, (session, payload) =>
-      this.groups.respond(session, payload.inviteId, payload.accept),
-    );
+    return this.handle(client, groupRespondSchema, raw, async (session, payload) => {
+      const snapshot = await this.groups.respond(session, payload.inviteId, payload.accept);
+      if (payload.accept && snapshot.group) {
+        for (const member of snapshot.group.members) {
+          const memberSession = this.worldState.getByCharacterId(member.characterId);
+          if (memberSession?.activeInWorld) {
+            void this.analytics.groupJoined(
+              memberSession,
+              snapshot.group.id,
+              snapshot.group.members.length,
+            );
+          }
+        }
+      }
+      return snapshot;
+    });
   }
 
   @SubscribeMessage('group:leave')
