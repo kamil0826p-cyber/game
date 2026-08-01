@@ -12,9 +12,9 @@ const connectionString =
   process.env.DATABASE_URL ?? 'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public';
 const realmSlug = process.env.GAME_REALM_SLUG ?? 'world-1';
 
-function runSeed(scriptName: string): void {
+function runSeed(scriptName: string, ...arguments_: string[]): void {
   const scriptPath = resolve(currentDirectory, scriptName);
-  const result = spawnSync(process.execPath, [tsxCli, scriptPath], {
+  const result = spawnSync(process.execPath, [tsxCli, scriptPath, ...arguments_], {
     cwd: repositoryRoot,
     env: process.env,
     stdio: 'inherit',
@@ -37,15 +37,20 @@ async function verifyQuestContent(): Promise<void> {
     });
     if (!map) throw new Error('Seed verification failed: Greenfields does not exist.');
 
-    const [quest, npc] = await Promise.all([
+    const [quest, npc, activeContent] = await Promise.all([
       prisma.questDefinition.findUnique({ where: { key: 'rabbit-fur-for-mira' } }),
       prisma.npcDefinition.findUnique({
         where: { mapId_key: { mapId: map.id, key: 'mira-tanner' } },
+      }),
+      prisma.activeContentVersion.findUnique({
+        where: { id: 'active' },
+        include: { contentVersion: true },
       }),
     ]);
 
     if (!quest) throw new Error('Seed verification failed: rabbit-fur-for-mira quest does not exist.');
     if (!npc) throw new Error('Seed verification failed: Mira quest NPC does not exist.');
+    if (!activeContent) throw new Error('Seed verification failed: no active content version exists.');
     if (npc.outfitKey !== 'npc-quest-mira') {
       throw new Error(`Seed verification failed: Mira has unexpected outfit ${npc.outfitKey}.`);
     }
@@ -56,7 +61,7 @@ async function verifyQuestContent(): Promise<void> {
     }
 
     console.log(
-      `Verified quest NPC ${npc.name} (${npc.key}) on Greenfields at ${npc.x},${npc.y}, connected to ${quest.key}.`,
+      `Verified quest NPC ${npc.name} (${npc.key}) on Greenfields at ${npc.x},${npc.y}, connected to ${quest.key}; active content ${activeContent.contentVersion.hash}.`,
     );
   } finally {
     await prisma.$disconnect();
@@ -64,8 +69,10 @@ async function verifyQuestContent(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  runSeed('seed-foundation.ts', 'validate');
   runSeed('seed.ts');
   runSeed('seed-quests.ts');
+  runSeed('seed-foundation.ts', 'deploy');
   await verifyQuestContent();
 }
 

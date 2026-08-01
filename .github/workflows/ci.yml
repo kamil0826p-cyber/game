@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'agent/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Static, unit and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Clean install backend
+        run: npm ci
+      - name: Clean install frontend
+        run: npm --prefix frontend ci
+      - name: Prettier check changed source files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA=$(git merge-base HEAD origin/main)
+          fi
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$GITHUB_SHA" -- \
+            '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.json' '*.md' '*.yml' '*.yaml' \
+            > /tmp/prettier-files.txt
+          if [ -s /tmp/prettier-files.txt ]; then
+            xargs -d '\n' npx prettier --check < /tmp/prettier-files.txt
+          fi
+      - name: Prisma validate and generate
+        run: |
+          npm run prisma:validate
+          npm run prisma:generate
+      - name: Backend typecheck
+        run: npm run typecheck
+      - name: Backend unit tests
+        run: npm test
+      - name: Backend build
+        run: npm run build
+      - name: Frontend typecheck
+        run: npm run frontend:typecheck
+      - name: Frontend unit tests
+        run: npm run frontend:test
+      - name: Frontend build
+        run: npm run frontend:build
+      - name: Backend production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Frontend production dependency audit
+        run: npm --prefix frontend audit --omit=dev --audit-level=high
+      - name: Capture static failure diagnostics
+        if: failure()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          mkdir -p ci-artifacts
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA=$(git merge-base HEAD origin/main)
+          fi
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$GITHUB_SHA" -- \
+            '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.json' '*.md' '*.yml' '*.yaml' \
+            > /tmp/prettier-files.txt
+          if [ -s /tmp/prettier-files.txt ]; then
+            xargs -d '\n' npx prettier --write < /tmp/prettier-files.txt || true
+          fi
+          git diff -- . ':!src/generated' > ci-artifacts/prettier.patch || true
+          npm run typecheck > ci-artifacts/typecheck.txt 2>&1 || true
+          npm test > ci-artifacts/tests.txt 2>&1 || true
+      - name: Upload static failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-failure-${{ github.run_id }}
+          path: ci-artifacts
+          if-no-files-found: warn
+          retention-days: 14
+
+  postgres:
+    name: PostgreSQL migration, seed and integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      DIRECT_URL: postgresql://game:game@localhost:5432/grid_mmorpg?schema=public
+      ANALYTICS_PROVIDER: disabled
+      OUTBOX_WORKER_ENABLED: 'false'
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: game
+          POSTGRES_PASSWORD: game
+          POSTGRES_DB: grid_mmorpg
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U game -d grid_mmorpg"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Clean install backend
+        run: npm ci
+      - name: Prisma generate
+        run: npm run prisma:generate
+      - name: Migrate empty database
+        run: npm run prisma:migrate:deploy
+      - name: Verify migration replay
+        run: npm run prisma:migrate:deploy
+      - name: Seed content
+        run: npm run prisma:seed
+      - name: Verify idempotent seed replay
+        run: npm run prisma:seed
+      - name: PostgreSQL integration tests
+        run: npm run test:postgres
+      - name: Capture failure diagnostics
+        if: failure()
+        run: |
+          mkdir -p ci-artifacts
+          {
+            echo '== Node =='
+            node --version
+            echo '== npm =='
+            npm --version
+            echo '== migrations =='
+            npx prisma migrate status || true
+            echo '== content versions =='
+            psql "$DATABASE_URL" -c 'SELECT "hash", "status", "createdAt" FROM "ContentVersion" ORDER BY "createdAt";' || true
+            echo '== outbox =='
+            psql "$DATABASE_URL" -c 'SELECT "status", COUNT(*) FROM "EventOutbox" GROUP BY "status" ORDER BY "status";' || true
+            echo '== dead letters =='
+            psql "$DATABASE_URL" -c 'SELECT "eventId", "attempts", "error" FROM "EventDeadLetter" ORDER BY "createdAt" DESC LIMIT 50;' || true
+          } > ci-artifacts/postgres-diagnostics.txt 2>&1
+          pg_dump "$DATABASE_URL" --schema-only > ci-artifacts/schema.sql 2> ci-artifacts/pg-dump-error.txt || true
+      - name: Upload PostgreSQL failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-failure-${{ github.run_id }}
+          path: ci-artifacts
+          if-no-files-found: warn
+          retention-days: 14

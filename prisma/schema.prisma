@@ -115,6 +115,28 @@ enum CurrencyDirection {
   DEBIT
 }
 
+enum ContentVersionStatus {
+  ACTIVE
+  SUPERSEDED
+  ROLLED_BACK
+  FAILED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  DEAD_LETTER
+}
+
+enum FeatureFlagScope {
+  ACCOUNT
+  CHARACTER
+  REALM
+  GROUP
+  GUILD
+}
+
 model Realm {
   id           String   @id @default(uuid()) @db.Uuid
   slug         String   @unique @db.VarChar(64)
@@ -335,15 +357,16 @@ model ItemDefinition {
 }
 
 model InventoryItem {
-  id               String         @id @default(uuid()) @db.Uuid
-  characterId      String         @db.Uuid
-  itemDefinitionId String         @db.Uuid
-  quantity         Int            @default(1)
-  slotIndex        Int
-  equippedSlot     EquipmentSlot?
-  instanceData     Json           @default("{}") @db.JsonB
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                    String         @id @default(uuid()) @db.Uuid
+  characterId           String         @db.Uuid
+  itemDefinitionId      String         @db.Uuid
+  quantity              Int            @default(1)
+  slotIndex             Int
+  equippedSlot          EquipmentSlot?
+  instanceData          Json           @default("{}") @db.JsonB
+  definitionVersionHash String?        @db.VarChar(64)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   character       Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
   itemDefinition  ItemDefinition   @relation(fields: [itemDefinitionId], references: [id], onDelete: Restrict)
@@ -351,6 +374,7 @@ model InventoryItem {
 
   @@unique([characterId, slotIndex])
   @@index([characterId, equippedSlot])
+  @@index([definitionVersionHash])
 }
 
 model QuestDefinition {
@@ -368,20 +392,22 @@ model QuestDefinition {
 }
 
 model CharacterQuest {
-  id                String              @id @default(uuid()) @db.Uuid
-  characterId       String              @db.Uuid
-  questDefinitionId String              @db.Uuid
-  status            QuestProgressStatus @default(NOT_STARTED)
-  progress          Json                @default("{}") @db.JsonB
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id                    String              @id @default(uuid()) @db.Uuid
+  characterId           String              @db.Uuid
+  questDefinitionId     String              @db.Uuid
+  status                QuestProgressStatus @default(NOT_STARTED)
+  progress              Json                @default("{}") @db.JsonB
+  definitionVersionHash String?              @db.VarChar(64)
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   character       Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
   questDefinition QuestDefinition @relation(fields: [questDefinitionId], references: [id], onDelete: Restrict)
 
   @@unique([characterId, questDefinitionId])
+  @@index([definitionVersionHash])
 }
 
 model NpcDefinition {
@@ -530,4 +556,150 @@ model TradeOfferItem {
 
   @@unique([tradeSessionId, inventoryItemId])
   @@index([offeredByCharacterId])
+}
+
+model ContentVersion {
+  id            String               @id @default(uuid()) @db.Uuid
+  hash          String               @unique @db.VarChar(64)
+  schemaVersion Int
+  status        ContentVersionStatus @default(ACTIVE)
+  manifest      Json                 @db.JsonB
+  logicalDiff   Json                 @default("{}") @db.JsonB
+  activatedAt   DateTime?
+  rolledBackAt  DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  snapshots ContentDefinitionSnapshot[]
+  activeFor ActiveContentVersion?
+
+  @@index([status, createdAt])
+}
+
+model ActiveContentVersion {
+  id               String   @id @default("active") @db.VarChar(32)
+  contentVersionId String   @unique @db.Uuid
+  updatedAt        DateTime @updatedAt
+
+  contentVersion ContentVersion @relation(fields: [contentVersionId], references: [id], onDelete: Restrict)
+}
+
+model ContentDefinitionSnapshot {
+  id               String   @id @default(uuid()) @db.Uuid
+  contentVersionId String   @db.Uuid
+  category         String   @db.VarChar(32)
+  key              String   @db.VarChar(256)
+  payload          Json     @db.JsonB
+  payloadHash      String   @db.VarChar(64)
+  createdAt        DateTime @default(now())
+
+  contentVersion ContentVersion @relation(fields: [contentVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([contentVersionId, category, key])
+  @@index([category, key])
+  @@index([payloadHash])
+}
+
+model DomainEvent {
+  id                 String   @id @db.Uuid
+  type               String   @db.VarChar(128)
+  version            Int
+  occurredAt         DateTime
+  realmId            String?  @db.Uuid
+  mapId              String?  @db.Uuid
+  characterId        String?  @db.Uuid
+  accountId          String?  @db.Uuid
+  sessionId          String?  @db.VarChar(128)
+  operationId        String?  @db.VarChar(128)
+  correlationId      String?  @db.VarChar(128)
+  contentVersionHash String?  @db.VarChar(64)
+  clientVersion      String?  @db.VarChar(64)
+  payload            Json     @db.JsonB
+  critical           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  outbox EventOutbox?
+
+  @@index([type, occurredAt])
+  @@index([characterId, occurredAt])
+  @@index([operationId])
+  @@index([contentVersionHash])
+}
+
+model EventOutbox {
+  id          String       @id @default(uuid()) @db.Uuid
+  eventId     String       @unique @db.Uuid
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  availableAt DateTime     @default(now())
+  lockedAt    DateTime?
+  lockedBy    String?      @db.VarChar(128)
+  lastError   String?      @db.Text
+  deliveredAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  event      DomainEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  deadLetter EventDeadLetter?
+
+  @@index([status, availableAt, createdAt])
+  @@index([lockedAt])
+}
+
+model EventInbox {
+  id          String   @id @default(uuid()) @db.Uuid
+  consumer    String   @db.VarChar(128)
+  eventId     String   @db.Uuid
+  processedAt DateTime @default(now())
+
+  @@unique([consumer, eventId])
+  @@index([eventId])
+}
+
+model EventDeadLetter {
+  id        String   @id @default(uuid()) @db.Uuid
+  outboxId  String   @unique @db.Uuid
+  eventId   String   @db.Uuid
+  attempts  Int
+  error     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outbox EventOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([createdAt])
+}
+
+model FeatureFlag {
+  id                String           @id @default(uuid()) @db.Uuid
+  key               String           @db.VarChar(128)
+  version           Int
+  scope             FeatureFlagScope
+  enabled           Boolean          @default(true)
+  rolloutPercentage Float            @default(0)
+  salt              String           @db.VarChar(128)
+  variants          Json             @default("[]") @db.JsonB
+  disabledAt        DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  assignments FeatureFlagAssignment[]
+
+  @@unique([key, version])
+  @@index([key, enabled])
+}
+
+model FeatureFlagAssignment {
+  id            String   @id @default(uuid()) @db.Uuid
+  featureFlagId String   @db.Uuid
+  scopeId       String   @db.VarChar(128)
+  variant       String   @db.VarChar(64)
+  bucket        Int
+  assignedAt    DateTime @default(now())
+
+  featureFlag FeatureFlag @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+
+  @@unique([featureFlagId, scopeId])
+  @@index([scopeId])
 }

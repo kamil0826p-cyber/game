@@ -14,12 +14,17 @@
     "typecheck": "npm run prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "npm run prisma:generate && vitest run",
     "test:watch": "npm run prisma:generate && vitest",
+    "test:postgres": "npm run prisma:generate && RUN_POSTGRES_TESTS=1 vitest run test/integration",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "prisma:prepare": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run prisma:seed",
+    "content:validate": "tsx prisma/seed-foundation.ts validate",
+    "content:rollback": "tsx prisma/seed-foundation.ts",
+    "report:foundation": "tsx prisma/foundation-report.ts",
+    "balance:simulate": "tsx prisma/balance-simulate.ts",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "frontend:install": "npm --prefix frontend install",
@@ -30,9 +35,33 @@
     "check:all": "npm run typecheck && npm test && npm run frontend:typecheck && npm run frontend:test && npm run frontend:build"
   },
   "dependencies": {
-    "@nestjs/common": "11.1.28", "@nestjs/core": "11.1.28", "@nestjs/platform-express": "11.1.28", "@nestjs/platform-socket.io": "11.1.28", "@nestjs/websockets": "11.1.28", "@prisma/adapter-pg": "7.9.1", "@prisma/client": "7.9.1", "@socket.io/redis-adapter": "^8.3.0", "dotenv": "^17.2.1", "firebase-admin": "14.2.0", "helmet": "^8.1.0", "pg": "^8.16.3", "redis": "^5.8.2", "reflect-metadata": "^0.2.2", "rxjs": "^7.8.2", "socket.io": "^4.8.1", "zod": "^4.1.12"
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-express": "11.1.28",
+    "@nestjs/platform-socket.io": "11.1.28",
+    "@nestjs/websockets": "11.1.28",
+    "@prisma/adapter-pg": "7.9.1",
+    "@prisma/client": "7.9.1",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "dotenv": "^17.2.1",
+    "firebase-admin": "14.2.0",
+    "helmet": "^8.1.0",
+    "pg": "^8.16.3",
+    "redis": "^5.8.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@nestjs/cli": "11.0.24", "@nestjs/testing": "11.1.28", "@types/node": "^22.15.30", "@types/pg": "^8.15.5", "prettier": "^3.6.2", "prisma": "7.9.1", "tsx": "^4.20.3", "typescript": "^5.9.2", "vitest": "^3.2.4"
+    "@nestjs/cli": "11.0.24",
+    "@nestjs/testing": "11.1.28",
+    "@types/node": "^22.15.30",
+    "@types/pg": "^8.15.5",
+    "prettier": "^3.6.2",
+    "prisma": "7.9.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   }
 }
