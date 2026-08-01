@@ -125,6 +125,7 @@ export interface EncounterContribution {
   joinedTurn: number;
   actions: number;
   timedOutTurns: number;
+  pendingTimeoutActions: number;
   damage: number;
   healing: number;
   protection: number;
