@@ -4,6 +4,7 @@ import {
   combatEffectPointForActor,
   getCombatVfxFamily,
   isSelfCastCombatAction,
+  usesCombatProjectile,
   type CombatStagePosition,
 } from '../../game/combat/combatPresentation';
 
@@ -35,7 +36,9 @@ function FloatingResult({
   action: CombatActionResolutionPayload;
   target: PositionedCombatant;
 }): React.JSX.Element | null {
-  const result = action.results.find((candidate) => candidate.targetActorId === target.actorId);
+  const result = action.results.find(
+    (candidate) => candidate.targetActorId === target.actorId,
+  );
   if (!result) return null;
   const damage = actionDamageFor(action, target.actorId);
   const healing = result.hpDelta > 0 ? result.hpDelta : 0;
@@ -69,6 +72,7 @@ export function CombatVfx({
 }: CombatVfxProps): React.JSX.Element | null {
   if (!action || !actor) return null;
   const support = isSelfCastCombatAction(action);
+  const projectile = usesCombatProjectile(action);
   const family = getCombatVfxFamily(action);
   const target = primaryTarget ?? targets[0] ?? actor;
   const actorPoint = effectPoint(actor);
@@ -113,27 +117,42 @@ export function CombatVfx({
         </div>
       ) : (
         <>
-          <div className="combat-dynamic-cast-rune" style={effectPointStyle(actor)} />
-          <div className="combat-dynamic-projectile" style={projectileStyle}>
-            <i />
-            <i />
-            <i />
-          </div>
+          <div
+            className="combat-dynamic-cast-rune"
+            style={effectPointStyle(actor)}
+          />
+          {projectile ? (
+            <div className="combat-dynamic-projectile" style={projectileStyle}>
+              <i />
+              <i />
+              <i />
+            </div>
+          ) : null}
           {targets.map((combatant) => (
             <div key={combatant.actorId}>
-              <div className="combat-dynamic-impact-burst" style={effectPointStyle(combatant)}>
+              <div
+                className="combat-dynamic-impact-burst"
+                style={effectPointStyle(combatant)}
+              >
                 <i />
                 <i />
                 <i />
                 <i />
               </div>
-              <div className="combat-dynamic-shockwave" style={effectPointStyle(combatant)} />
+              <div
+                className="combat-dynamic-shockwave"
+                style={effectPointStyle(combatant)}
+              />
             </div>
           ))}
         </>
       )}
       {targets.map((combatant) => (
-        <FloatingResult key={combatant.actorId} action={action} target={combatant} />
+        <FloatingResult
+          key={combatant.actorId}
+          action={action}
+          target={combatant}
+        />
       ))}
     </div>
   );
