@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { CombatSnapshot, GameSocket } from '../contracts/socket.events.js';
+import type { TacticalCombatAction } from '../contracts/tactical-combat.events.js';
 import { DomainEventService } from '../domain-events/domain-event.service.js';
 import type { DomainEventInput } from '../domain-events/domain-event.types.js';
 import type { PlayerSession } from '../modules/world/player-session.types.js';
@@ -27,6 +28,10 @@ function participantFacts(snapshot: CombatSnapshot): Array<Record<string, unknow
     level: participant.level,
     hp: participant.hp,
     maxHp: participant.maxHp,
+    formationSlot: participant.formationSlot,
+    formationLine: participant.formationLine,
+    guarding: participant.guarding ?? false,
+    protectedByActorId: participant.protectedByActorId,
   }));
 }
 
@@ -83,7 +88,11 @@ export class AnalyticsTrackingService {
     });
   }
 
-  regionEntered(session: PlayerSession, source: 'WORLD_ENTRY' | 'PORTAL', sourceMapId?: string): Promise<void> {
+  regionEntered(
+    session: PlayerSession,
+    source: 'WORLD_ENTRY' | 'PORTAL',
+    sourceMapId?: string,
+  ): Promise<void> {
     return this.bestEffort({
       operationId: `region-enter:${session.connectionId}:${session.stateRevision}:${session.mapId}`,
       type: 'RegionEntered',
@@ -136,6 +145,8 @@ export class AnalyticsTrackingService {
         startedAt,
         zoneType: snapshot.zoneType,
         mode: combatMode(snapshot),
+        contractVersion: snapshot.contractVersion,
+        turnPolicy: snapshot.turnPolicy,
         ...(difficultyLevel !== undefined ? { difficultyLevel } : {}),
         participants: participantFacts(snapshot),
       },
@@ -145,14 +156,21 @@ export class AnalyticsTrackingService {
   combatActionAccepted(
     session: PlayerSession,
     snapshot: CombatSnapshot,
-    command: { action: 'BASIC_ATTACK' | 'SKILL'; skillKey?: string; targetActorId?: string },
+    command: {
+      action: 'BASIC_ATTACK' | 'SKILL' | TacticalCombatAction;
+      skillKey?: string;
+      targetActorId?: string;
+      telegraphId?: string;
+    },
   ): Promise<void> {
     const resolution = [...snapshot.recentActions].reverse().find((candidate) =>
       candidate.actorId === session.characterId &&
-      candidate.action === command.action &&
+      (candidate.action === command.action || candidate.tacticalAction === command.action) &&
       (command.action !== 'SKILL' || candidate.skillKey === command.skillKey));
     if (!resolution) {
-      this.logger.warn(`Accepted combat action for ${snapshot.combatId} had no matching server resolution.`);
+      this.logger.warn(
+        `Accepted combat action for ${snapshot.combatId} had no matching server resolution.`,
+      );
       return Promise.resolve();
     }
     return this.bestEffort({
@@ -169,16 +187,26 @@ export class AnalyticsTrackingService {
         combatId: snapshot.combatId,
         sequence: resolution.sequence,
         turnNumber: snapshot.turnNumber,
-        action: resolution.action,
+        phase: snapshot.phase ?? 'TURN',
+        action: resolution.tacticalAction ?? resolution.action,
         ...(resolution.skillKey ? { skillKey: resolution.skillKey } : {}),
         ...(resolution.targetActorId ? { targetActorId: resolution.targetActorId } : {}),
+        ...(resolution.reactionToTelegraphId
+          ? { reactionToTelegraphId: resolution.reactionToTelegraphId }
+          : {}),
+        decisionTimeMs: resolution.decisionTimeMs ?? 0,
+        timedOut: resolution.timedOut ?? false,
         results: resolution.results.map((result) => ({
           targetActorId: result.targetActorId,
           hpDelta: result.hpDelta,
           energyDelta: result.energyDelta,
           shieldAbsorbed: result.shieldAbsorbed,
           dodged: result.dodged,
+          redirectedFromActorId: result.redirectedFromActorId,
+          reactionChangedOutcome: result.reactionChangedOutcome ?? false,
           statusesApplied: result.statusesApplied.map((status) => status.key),
+          statusesCleansed: result.statusesCleansed ?? [],
+          statusResisted: result.statusResisted,
         })),
       },
     });
@@ -207,6 +235,8 @@ export class AnalyticsTrackingService {
         participantCount: snapshot.participants.length,
         zoneType: snapshot.zoneType,
         mode: combatMode(snapshot),
+        contractVersion: snapshot.contractVersion,
+        lastSequence: snapshot.lastSequence,
         ...(difficultyLevel !== undefined ? { difficultyLevel } : {}),
         participants: participantFacts(snapshot),
       },
@@ -226,6 +256,9 @@ export class AnalyticsTrackingService {
         sessionId: session.socketId,
         combatId: snapshot.combatId,
         turnNumber: snapshot.turnNumber,
+        phase: snapshot.phase,
+        lastSequence: snapshot.lastSequence,
+        telegraphId: snapshot.telegraph?.id,
       },
     });
   }
@@ -260,7 +293,9 @@ export class AnalyticsTrackingService {
       await this.events.appendInTransaction(input);
     } catch (error) {
       this.logger.warn(
-        `Analytics fact ${input.type} could not be appended; gameplay remains authoritative. ${error instanceof Error ? error.message : String(error)}`,
+        `Analytics fact ${input.type} could not be appended; gameplay remains authoritative. ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     }
   }
