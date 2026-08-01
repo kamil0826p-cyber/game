@@ -241,6 +241,9 @@ export class ItemInventoryService {
     if (!item || item.equippedSlot || item.quantity < input.quantity) {
       throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
     }
+    const instanceData = item.instanceData === null
+      ? {}
+      : (item.instanceData as Prisma.InputJsonValue);
     if (input.quantity === item.quantity) {
       await transaction.inventoryItem.delete({ where: { id: item.id } });
     } else {
@@ -249,7 +252,7 @@ export class ItemInventoryService {
         data: { quantity: { decrement: input.quantity } },
       });
     }
-    return item;
+    return { ...item, instanceData };
   }
 
   async claim(
@@ -323,7 +326,7 @@ export class ItemInventoryService {
       inventoryItemId?: string;
       quantity?: number;
       silverDelta?: number;
-      metadata?: Prisma.InputJsonValue;
+      metadata?: unknown;
     },
   ): Promise<void> {
     await transaction.itemEconomyEvent.create({
@@ -335,9 +338,13 @@ export class ItemInventoryService {
         inventoryItemId: input.inventoryItemId,
         quantity: input.quantity ?? 0,
         silverDelta: input.silverDelta ?? 0,
-        metadata: input.metadata ?? {},
+        metadata: this.json(input.metadata ?? {}),
       },
     });
+  }
+
+  private json(value: unknown): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
   }
 
   private eventOperation(operationId: string, suffix: string): string {
