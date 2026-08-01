@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  type OnModuleDestroy,
+} from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { isActorWithinInteractionRange } from '../../common/rules/actor-interaction.js';
 import type {
@@ -8,10 +13,15 @@ import type {
   GroupMemberPayload,
   GroupSnapshot,
 } from '../../contracts/group.events.js';
+import { DomainEventService } from '../../foundation/events/domain-event.service.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
-import { GROUP_INVITE_TTL_MS, GROUP_MAX_MEMBERS, isGroupFull } from './group.rules.js';
+import {
+  GROUP_INVITE_TTL_MS,
+  GROUP_MAX_MEMBERS,
+  isGroupFull,
+} from './group.rules.js';
 
 interface StoredGroupMember {
   characterId: string;
@@ -41,6 +51,7 @@ interface GroupInviteRecord {
 
 @Injectable()
 export class GroupService implements OnModuleDestroy {
+  private readonly logger = new Logger(GroupService.name);
   private readonly groups = new Map<string, GroupRecord>();
   private readonly groupIdByCharacter = new Map<string, string>();
   private readonly invites = new Map<string, GroupInviteRecord>();
@@ -48,6 +59,7 @@ export class GroupService implements OnModuleDestroy {
   constructor(
     private readonly world: WorldStateService,
     private readonly publisher: WorldEventsPublisher,
+    @Optional() private readonly domainEvents?: DomainEventService,
   ) {}
 
   getSnapshot(session: PlayerSession): GroupSnapshot {
@@ -63,7 +75,10 @@ export class GroupService implements OnModuleDestroy {
 
     const actorGroup = this.groupForCharacter(actor.characterId);
     if (actorGroup && actorGroup.adminCharacterId !== actor.characterId) {
-      throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_FORBIDDEN,
+        'errors.group.forbidden',
+      );
     }
 
     const target = this.world.getByCharacterId(targetCharacterId);
@@ -82,7 +97,10 @@ export class GroupService implements OnModuleDestroy {
       throw new GameError(GAME_ERROR_CODES.GROUP_TOO_FAR, 'errors.group.tooFar');
     }
     if (this.groupIdByCharacter.has(targetCharacterId)) {
-      throw new GameError(GAME_ERROR_CODES.GROUP_TARGET_MEMBER, 'errors.group.targetMember');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_TARGET_MEMBER,
+        'errors.group.targetMember',
+      );
     }
     if (actorGroup && isGroupFull(actorGroup.members.size)) {
       throw new GameError(GAME_ERROR_CODES.GROUP_FULL, 'errors.group.full');
@@ -95,7 +113,10 @@ export class GroupService implements OnModuleDestroy {
           (actorGroup ? invite.sourceGroupId === actorGroup.id : false)),
     );
     if (duplicate) {
-      throw new GameError(GAME_ERROR_CODES.GROUP_INVITE_EXISTS, 'errors.group.inviteExists');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_INVITE_EXISTS,
+        'errors.group.inviteExists',
+      );
     }
 
     const invite: GroupInviteRecord = {
@@ -111,15 +132,25 @@ export class GroupService implements OnModuleDestroy {
     return this.snapshotFor(actor.characterId);
   }
 
-  respond(target: PlayerSession, inviteId: string, accept: boolean): GroupSnapshot {
+  respond(
+    target: PlayerSession,
+    inviteId: string,
+    accept: boolean,
+  ): GroupSnapshot {
     this.pruneExpiredInvites();
     const invite = this.invites.get(inviteId);
     if (!invite || invite.targetCharacterId !== target.characterId) {
-      throw new GameError(GAME_ERROR_CODES.GROUP_INVITE_NOT_FOUND, 'errors.group.inviteNotFound');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_INVITE_NOT_FOUND,
+        'errors.group.inviteNotFound',
+      );
     }
     if (invite.expiresAt <= Date.now()) {
       this.invites.delete(invite.id);
-      throw new GameError(GAME_ERROR_CODES.GROUP_INVITE_EXPIRED, 'errors.group.inviteExpired');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_INVITE_EXPIRED,
+        'errors.group.inviteExpired',
+      );
     }
 
     if (!accept) {
@@ -129,7 +160,10 @@ export class GroupService implements OnModuleDestroy {
     }
     if (this.groupIdByCharacter.has(target.characterId)) {
       this.invites.delete(invite.id);
-      throw new GameError(GAME_ERROR_CODES.GROUP_ALREADY_MEMBER, 'errors.group.alreadyMember');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_ALREADY_MEMBER,
+        'errors.group.alreadyMember',
+      );
     }
 
     const inviter = this.world.getByCharacterId(invite.inviterCharacterId);
@@ -146,7 +180,8 @@ export class GroupService implements OnModuleDestroy {
     }
 
     let group = this.groupForCharacter(inviter.characterId);
-    const invitationStillOwnedByAdmin = group?.adminCharacterId === inviter.characterId;
+    const invitationStillOwnedByAdmin =
+      group?.adminCharacterId === inviter.characterId;
     if (
       (invite.sourceGroupId &&
         (group?.id !== invite.sourceGroupId || !invitationStillOwnedByAdmin)) ||
@@ -167,6 +202,10 @@ export class GroupService implements OnModuleDestroy {
     group.members.set(target.characterId, this.storeMember(target));
     this.groupIdByCharacter.set(target.characterId, group.id);
     this.removeInvitesForTarget(target.characterId);
+    this.emitGroupEvent('group.member.joined', target, group, {
+      memberCharacterId: target.characterId,
+      invitedByCharacterId: inviter.characterId,
+    });
     this.publishGroup(group);
     return this.snapshotFor(target.characterId);
   }
@@ -175,10 +214,16 @@ export class GroupService implements OnModuleDestroy {
     this.pruneExpiredInvites();
     const group = this.groupForCharacter(actor.characterId);
     if (!group) {
-      throw new GameError(GAME_ERROR_CODES.GROUP_REQUIRED, 'errors.group.required');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_REQUIRED,
+        'errors.group.required',
+      );
     }
     if (group.adminCharacterId !== actor.characterId) {
-      throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_FORBIDDEN,
+        'errors.group.forbidden',
+      );
     }
     if (targetCharacterId === actor.characterId) {
       throw new GameError(
@@ -198,11 +243,20 @@ export class GroupService implements OnModuleDestroy {
     this.groupIdByCharacter.delete(targetCharacterId);
     this.removeInvitesFrom(targetCharacterId);
     this.removeInvitesForTarget(targetCharacterId);
+    this.emitGroupEvent('group.member.left', actor, group, {
+      memberCharacterId: targetCharacterId,
+      reason: 'KICKED',
+    });
 
     if (group.members.size <= 1) {
-      for (const characterId of group.members.keys()) this.groupIdByCharacter.delete(characterId);
+      for (const characterId of group.members.keys()) {
+        this.groupIdByCharacter.delete(characterId);
+      }
       this.groups.delete(group.id);
       this.removeInvitesForGroup(group.id);
+      this.emitGroupEvent('group.disbanded', actor, group, {
+        reason: 'INSUFFICIENT_MEMBERS',
+      });
     }
 
     this.publishTo(previousMemberIds);
@@ -213,7 +267,10 @@ export class GroupService implements OnModuleDestroy {
     this.pruneExpiredInvites();
     const group = this.groupForCharacter(actor.characterId);
     if (!group) {
-      throw new GameError(GAME_ERROR_CODES.GROUP_REQUIRED, 'errors.group.required');
+      throw new GameError(
+        GAME_ERROR_CODES.GROUP_REQUIRED,
+        'errors.group.required',
+      );
     }
 
     const previousMemberIds = [...group.members.keys()];
@@ -222,11 +279,20 @@ export class GroupService implements OnModuleDestroy {
     this.groupIdByCharacter.delete(actor.characterId);
     this.removeInvitesFrom(actor.characterId);
     if (adminLeaving) this.removeInvitesForGroup(group.id);
+    this.emitGroupEvent('group.member.left', actor, group, {
+      memberCharacterId: actor.characterId,
+      reason: 'LEFT',
+    });
 
     if (group.members.size <= 1) {
-      for (const characterId of group.members.keys()) this.groupIdByCharacter.delete(characterId);
+      for (const characterId of group.members.keys()) {
+        this.groupIdByCharacter.delete(characterId);
+      }
       this.groups.delete(group.id);
       this.removeInvitesForGroup(group.id);
+      this.emitGroupEvent('group.disbanded', actor, group, {
+        reason: 'INSUFFICIENT_MEMBERS',
+      });
       this.publishTo(previousMemberIds);
       return this.snapshotFor(actor.characterId);
     }
@@ -257,6 +323,9 @@ export class GroupService implements OnModuleDestroy {
     };
     this.groups.set(group.id, group);
     this.groupIdByCharacter.set(admin.characterId, group.id);
+    this.emitGroupEvent('group.created', admin, group, {
+      memberCharacterId: admin.characterId,
+    });
     return group;
   }
 
@@ -266,7 +335,10 @@ export class GroupService implements OnModuleDestroy {
     return {
       group: group ? this.groupPayload(group) : null,
       invites: [...this.invites.values()]
-        .filter((invite) => invite.targetCharacterId === characterId && invite.expiresAt > now)
+        .filter(
+          (invite) =>
+            invite.targetCharacterId === characterId && invite.expiresAt > now,
+        )
         .sort((left, right) => right.expiresAt - left.expiresAt)
         .map((invite) => this.invitePayload(invite)),
     };
@@ -289,7 +361,10 @@ export class GroupService implements OnModuleDestroy {
     };
   }
 
-  private memberPayload(stored: StoredGroupMember, adminCharacterId: string): GroupMemberPayload {
+  private memberPayload(
+    stored: StoredGroupMember,
+    adminCharacterId: string,
+  ): GroupMemberPayload {
     const live = this.world.getByCharacterId(stored.characterId);
     const source = live?.activeInWorld ? this.storeMember(live) : stored;
     if (live?.activeInWorld) {
@@ -342,9 +417,53 @@ export class GroupService implements OnModuleDestroy {
     for (const characterId of new Set(characterIds)) {
       const session = this.world.getByCharacterId(characterId);
       if (session?.activeInWorld) {
-        this.publisher.emit(session.socketId, 'group:updated', this.snapshotFor(characterId));
+        this.publisher.emit(
+          session.socketId,
+          'group:updated',
+          this.snapshotFor(characterId),
+        );
       }
     }
+  }
+
+  private emitGroupEvent(
+    eventType:
+      | 'group.created'
+      | 'group.member.joined'
+      | 'group.member.left'
+      | 'group.disbanded',
+    actor: PlayerSession,
+    group: GroupRecord,
+    payload: Record<string, unknown>,
+  ): void {
+    if (!this.domainEvents) return;
+    void this.domainEvents
+      .emit({
+        eventType,
+        eventVersion: 1,
+        realmId: actor.realmId,
+        mapId: actor.mapId,
+        characterId: actor.characterId,
+        accountId: actor.userId,
+        sessionId: actor.connectionId,
+        operationId: `${eventType}:${group.id}:${String(
+          payload.memberCharacterId ?? actor.characterId,
+        )}`,
+        correlationId: group.id,
+        payload: {
+          groupId: group.id,
+          adminCharacterId: group.adminCharacterId,
+          memberCount: group.members.size,
+          ...payload,
+        },
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Group telemetry ${eventType} failed without blocking gameplay: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
   }
 
   private pruneExpiredInvites(): void {
@@ -356,13 +475,17 @@ export class GroupService implements OnModuleDestroy {
 
   private removeInvitesForTarget(characterId: string): void {
     for (const [inviteId, invite] of this.invites) {
-      if (invite.targetCharacterId === characterId) this.invites.delete(inviteId);
+      if (invite.targetCharacterId === characterId) {
+        this.invites.delete(inviteId);
+      }
     }
   }
 
   private removeInvitesFrom(characterId: string): void {
     for (const [inviteId, invite] of this.invites) {
-      if (invite.inviterCharacterId === characterId) this.invites.delete(inviteId);
+      if (invite.inviterCharacterId === characterId) {
+        this.invites.delete(inviteId);
+      }
     }
   }
 
