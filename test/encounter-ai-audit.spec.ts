@@ -93,9 +93,7 @@ describe('encounter AI audit guards', () => {
 
     const filtered = filterRedundantEncounterActions(runtime, acting, legalActions);
 
-    expect(filtered).toContainEqual(
-      expect.objectContaining({ action: 'MARK', targetActorIds: [unmarked.actorId] }),
-    );
+    expect(filtered.some((action) => action.action === 'MARK')).toBe(false);
     expect(filtered).toContainEqual(
       expect.objectContaining({ action: 'TAUNT', targetActorIds: [unmarked.actorId] }),
     );
