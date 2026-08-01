@@ -73,7 +73,7 @@ export function planEncounterAction(
       weight: Math.max(0, template.ai.actionWeights[action.action] ?? defaultWeight(action)),
     }))
     .filter((entry) => entry.weight > 0);
-  const selected = pickWeighted(weighted, random) ?? legalActions[0];
+  const selected = pickWeighted(weighted, random)?.action ?? legalActions[0];
   return selected
     ? commandFor(runtime, actor, state, selected, template, random, 'weighted legal action')
     : undefined;
