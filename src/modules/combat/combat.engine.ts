@@ -7,6 +7,7 @@ import type {
   CombatParticipantPayload,
   CombatSnapshot,
 } from '../../contracts/socket.events.js';
+import { applyPrimaryDiminishingReturns } from '../progression/character-stats.js';
 import type {
   CombatEffectOperation,
   SkillCatalogDefinition,
@@ -94,7 +95,10 @@ export class CombatEngine {
     runtime.expiresAt = undefined;
     runtime.turnNumber = 1;
     runtime.turnOrder = [...runtime.actors]
-      .map((actor) => ({ actorId: actor.actorId, initiative: actor.agility + this.random() }))
+      .map((actor) => ({
+        actorId: actor.actorId,
+        initiative: applyPrimaryDiminishingReturns(actor.agility) + this.random(),
+      }))
       .sort((left, right) => right.initiative - left.initiative || left.actorId.localeCompare(right.actorId))
       .map((entry) => entry.actorId);
     runtime.activeActorId = runtime.turnOrder[0];
@@ -553,17 +557,17 @@ export class CombatEngine {
 
   private primaryPower(actor: CombatRuntimeActor): number {
     switch (actor.characterClass) {
-      case 'MAGE': return actor.intelligence;
-      case 'WARRIOR': return actor.strength;
-      case 'ARCHER': return actor.agility;
+      case 'MAGE': return applyPrimaryDiminishingReturns(actor.intelligence);
+      case 'WARRIOR': return applyPrimaryDiminishingReturns(actor.strength);
+      case 'ARCHER': return applyPrimaryDiminishingReturns(actor.agility);
     }
   }
 
   private scalingValue(actor: CombatRuntimeActor, scaling: SkillScalingStat): number {
     switch (scaling) {
-      case 'STRENGTH': return actor.strength;
-      case 'AGILITY': return actor.agility;
-      case 'INTELLIGENCE': return actor.intelligence;
+      case 'STRENGTH': return applyPrimaryDiminishingReturns(actor.strength);
+      case 'AGILITY': return applyPrimaryDiminishingReturns(actor.agility);
+      case 'INTELLIGENCE': return applyPrimaryDiminishingReturns(actor.intelligence);
       case 'MAX_HP': return actor.maxHp;
     }
   }
