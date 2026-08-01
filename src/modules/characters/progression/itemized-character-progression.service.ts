@@ -71,12 +71,12 @@ export class ItemizedCharacterProgressionService extends CharacterProgressionSer
       },
     });
     if (!character) return base;
-    const progression = this.parseProgressionData(character.progressionData);
+    const progression = this.parseItemizedProgressionData(character.progressionData);
     const calculated = calculateCharacterStats({
       characterClass: base.characterClass,
       level: base.level,
       milestoneRanks: progression.milestones,
-      equipment: this.equipmentBonuses(character.inventoryItems),
+      equipment: this.itemizedEquipmentBonuses(character.inventoryItems),
       permanent: progression.permanent,
       temporary: progression.temporary,
       legacyAdjustment: progression.legacyAdjustment,
@@ -156,12 +156,12 @@ export class ItemizedCharacterProgressionService extends CharacterProgressionSer
       },
     });
     if (!character) return base;
-    const progression = this.parseProgressionData(character.progressionData);
+    const progression = this.parseItemizedProgressionData(character.progressionData);
     const calculated = calculateCharacterStats({
       characterClass: character.class,
       level: character.level,
       milestoneRanks: progression.milestones,
-      equipment: this.equipmentBonuses(character.inventoryItems),
+      equipment: this.itemizedEquipmentBonuses(character.inventoryItems),
       permanent: progression.permanent,
       temporary: progression.temporary,
       legacyAdjustment: progression.legacyAdjustment,
@@ -228,8 +228,8 @@ export class ItemizedCharacterProgressionService extends CharacterProgressionSer
     };
   }
 
-  private equipmentBonuses(
-    items: readonly Array<{
+  private itemizedEquipmentBonuses(
+    items: ReadonlyArray<{
       instanceData: Prisma.JsonValue;
       itemDefinition: { key: string; metadata: Prisma.JsonValue };
     }>,
@@ -251,7 +251,7 @@ export class ItemizedCharacterProgressionService extends CharacterProgressionSer
     return result;
   }
 
-  private parseProgressionData(value: Prisma.JsonValue): {
+  private parseItemizedProgressionData(value: Prisma.JsonValue): {
     milestones: MilestoneRanks;
     legacyAdjustment: ProgressionStatVector;
     permanent: ProgressionStatVector;
@@ -270,13 +270,13 @@ export class ItemizedCharacterProgressionService extends CharacterProgressionSer
     }
     return {
       milestones,
-      legacyAdjustment: this.parseStats(raw.legacyAdjustment),
-      permanent: this.parseStats(raw.permanent),
-      temporary: this.parseStats(raw.temporary),
+      legacyAdjustment: this.parseItemizedStats(raw.legacyAdjustment),
+      permanent: this.parseItemizedStats(raw.permanent),
+      temporary: this.parseItemizedStats(raw.temporary),
     };
   }
 
-  private parseStats(value: unknown): ProgressionStatVector {
+  private parseItemizedStats(value: unknown): ProgressionStatVector {
     const raw = value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
