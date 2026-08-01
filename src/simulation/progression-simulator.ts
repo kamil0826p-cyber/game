@@ -1,10 +1,14 @@
 import { CombatEngine } from '../modules/combat/combat.engine.js';
 import type { CombatActorInput, CombatRuntime } from '../modules/combat/combat.types.js';
 import {
+  PROGRESSION_NODES,
   calculateCharacterStats,
   progressionPointsForLevel,
 } from '../modules/progression/character-stats.js';
-import type { ProgressionNodeKey } from '../modules/progression/progression.types.js';
+import {
+  PROGRESSION_NODE_KEYS,
+  type ProgressionNodeKey,
+} from '../modules/progression/progression.types.js';
 import { createDeterministicRandom } from './balance-simulator.js';
 
 export interface ProgressionSimulationCase {
@@ -29,8 +33,18 @@ export interface ProgressionSimulationResult extends ProgressionSimulationCase {
   controlled: boolean;
 }
 
-function choices(level: number, node: ProgressionNodeKey): ProgressionNodeKey[] {
-  return Array.from({ length: progressionPointsForLevel(level) }, () => node);
+function choices(level: number, primaryNode: ProgressionNodeKey): ProgressionNodeKey[] {
+  let remaining = progressionPointsForLevel(level);
+  const result: ProgressionNodeKey[] = [];
+  const priority = [primaryNode, ...PROGRESSION_NODE_KEYS.filter((key) => key !== primaryNode)];
+  for (const node of priority) {
+    const ranks = Math.min(remaining, PROGRESSION_NODES[node].maxRank);
+    result.push(...Array.from({ length: ranks }, () => node));
+    remaining -= ranks;
+    if (remaining === 0) break;
+  }
+  if (remaining > 0) throw new Error(`Progression nodes cannot spend ${remaining} point(s) at level ${level}.`);
+  return result;
 }
 
 function actor(
