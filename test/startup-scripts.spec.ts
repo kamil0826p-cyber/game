@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 interface PackageManifest {
@@ -8,6 +8,13 @@ interface PackageManifest {
 
 function readPackageManifest(): PackageManifest {
   return JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as PackageManifest;
+}
+
+function migrationSqlFiles(): string[] {
+  const migrationsRoot = resolve(process.cwd(), 'prisma/migrations');
+  return readdirSync(migrationsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(migrationsRoot, entry.name, 'migration.sql'));
 }
 
 describe('backend startup scripts', () => {
@@ -35,9 +42,38 @@ describe('backend startup scripts', () => {
     expect(prismaConfig).toContain("seed: 'tsx prisma/content.cli.ts deploy --author=prisma-seed'");
   });
 
+  it('enables the Prisma external tables preview required by the configured tables', () => {
+    const prismaConfig = readFileSync(resolve(process.cwd(), 'prisma.config.ts'), 'utf8');
+
+    expect(prismaConfig).toMatch(/experimental:\s*\{\s*externalTables:\s*true/u);
+    expect(prismaConfig).toContain('tables:');
+    expect(prismaConfig).toContain('external:');
+  });
+
   it('keeps Prisma and tsx available when NODE_ENV is production', () => {
     const npmConfig = readFileSync(resolve(process.cwd(), '.npmrc'), 'utf8');
 
     expect(npmConfig.split(/\r?\n/u)).toContain('include=dev');
+  });
+
+  it('does not contain malformed CREATE TRIGER statements in migrations', () => {
+    const migrations = migrationSqlFiles();
+
+    expect(migrations.length).toBeGreaterThan(0);
+    for (const migration of migrations) {
+      const sql = readFileSync(migration, 'utf8');
+      expect(sql, migration).not.toMatch(/\bCREATE\s+TRIGER\b/iu);
+    }
+
+    const foundationMigration = readFileSync(
+      resolve(
+        process.cwd(),
+        'prisma/migrations/20260731211500_complete_foundation/migration.sql',
+      ),
+      'utf8',
+    );
+    expect(foundationMigration).toContain(
+      'CREATE TRIGGER "TradeSession_completed_domain_event_trigger"',
+    );
   });
 });
