@@ -5,7 +5,11 @@ import type { ItemRarity, ItemStatBonuses } from '../../contracts/socket.events.
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { CharacterProgressionService } from '../characters/progression/character-progression.service.js';
-import { INVENTORY_CAPACITY } from '../items/item.service.js';
+import { ItemInventoryService } from '../items/item-inventory.service.js';
+import {
+  createItemInstanceSnapshot,
+  parseItemDefinitionMetadata,
+} from '../items/itemization.rules.js';
 import { QuestService } from '../quests/quest.service.js';
 import { skillPointsGainedBetweenLevels } from '../skills/skill.rules.js';
 import type { PlayerSession } from '../world/player-session.types.js';
@@ -46,6 +50,7 @@ export interface MobRewardSettlement {
   nextLevelExperience: number | null;
   loot: SettledLoot[];
   skippedLoot: SettledLoot[];
+  claimQueuedLoot: SettledLoot[];
 }
 
 export interface EncounterRewardContext {
@@ -59,6 +64,7 @@ export class MobRewardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly characterProgression: CharacterProgressionService,
+    private readonly inventory: ItemInventoryService,
     @Optional() private readonly quests?: QuestService,
   ) {}
 
@@ -129,14 +135,22 @@ export class MobRewardService {
         owner.id,
       );
       const rolled = rollMobLoot(mob.loot);
-      const loot = await this.grantLoot(transaction, owner.id, rolled);
+      const rewardOperationId = context?.operationId ?? `mob:${mob.id}:${owner.id}`;
+      const loot = await this.grantLoot(
+        transaction,
+        owner.id,
+        rolled,
+        rewardOperationId,
+        mob.definitionKey,
+      );
       const settlement: MobRewardSettlement = {
         experienceGained: experienceAward,
         levelsGained: progression.levelsGained,
         skillPointsGained,
         nextLevelExperience: progression.nextLevelExperience,
         loot: loot.granted,
-        skippedLoot: loot.skipped,
+        skippedLoot: [],
+        claimQueuedLoot: loot.claimed,
       };
 
       if (context) {
@@ -184,85 +198,77 @@ export class MobRewardService {
         Number.isInteger(parsed.nextLevelExperience)
       ) ||
       !Array.isArray(parsed.loot) ||
-      !Array.isArray(parsed.skippedLoot)
+      !Array.isArray(parsed.skippedLoot) ||
+      !(parsed.claimQueuedLoot === undefined || Array.isArray(parsed.claimQueuedLoot))
     ) {
       throw new GameError(GAME_ERROR_CODES.INTERNAL_ERROR, 'errors.internal');
     }
-    return parsed as MobRewardSettlement;
+    return {
+      ...(parsed as Omit<MobRewardSettlement, 'claimQueuedLoot'>),
+      claimQueuedLoot: parsed.claimQueuedLoot ?? [],
+    };
   }
 
   private async grantLoot(
     transaction: Prisma.TransactionClient,
     characterId: string,
     rewards: readonly AwardedLoot[],
-  ): Promise<{ granted: SettledLoot[]; skipped: SettledLoot[] }> {
-    if (rewards.length === 0) return { granted: [], skipped: [] };
+    operationId: string,
+    encounterKey: string,
+  ): Promise<{ granted: SettledLoot[]; claimed: SettledLoot[] }> {
+    if (rewards.length === 0) return { granted: [], claimed: [] };
     const definitions = await transaction.itemDefinition.findMany({
       where: { key: { in: rewards.map((reward) => reward.itemKey) } },
     });
     const definitionsByKey = new Map(
       definitions.map((definition) => [definition.key, definition]),
     );
-    const items = await transaction.inventoryItem.findMany({
-      where: { characterId },
-      orderBy: { slotIndex: 'asc' },
-    });
-    const occupied = new Set(items.map((item) => item.slotIndex));
     const granted: SettledLoot[] = [];
-    const skipped: SettledLoot[] = [];
+    const claimed: SettledLoot[] = [];
 
     for (const reward of rewards) {
       const definition = definitionsByKey.get(reward.itemKey);
       if (!definition) continue;
-      let remaining = reward.quantity;
+      const metadata = parseItemDefinitionMetadata(definition.metadata);
+      const batches = metadata.category === 'EQUIPMENT'
+        ? Array.from({ length: reward.quantity }, () => 1)
+        : [reward.quantity];
       let grantedQuantity = 0;
-      const stacks = items.filter(
-        (item) =>
-          item.itemDefinitionId === definition.id &&
-          item.equippedSlot === null &&
-          item.quantity < definition.stackLimit,
-      );
-      for (const stack of stacks) {
-        if (remaining <= 0) break;
-        const moved = Math.min(
-          remaining,
-          definition.stackLimit - stack.quantity,
-        );
-        if (moved <= 0) continue;
-        await transaction.inventoryItem.update({
-          where: { id: stack.id },
-          data: { quantity: { increment: moved } },
-        });
-        stack.quantity += moved;
-        remaining -= moved;
-        grantedQuantity += moved;
-      }
-      for (
-        let slotIndex = 0;
-        slotIndex < INVENTORY_CAPACITY && remaining > 0;
-        slotIndex += 1
-      ) {
-        if (occupied.has(slotIndex)) continue;
-        const quantity = Math.min(remaining, definition.stackLimit);
-        const created = await transaction.inventoryItem.create({
-          data: {
-            characterId,
-            itemDefinitionId: definition.id,
-            quantity,
-            slotIndex,
+      let claimedQuantity = 0;
+      for (let index = 0; index < batches.length; index += 1) {
+        const quantity = batches[index]!;
+        const snapshot = createItemInstanceSnapshot({
+          definitionKey: definition.key,
+          metadata,
+          seed: `${operationId}:${definition.key}:${index}`,
+          origin: {
+            source: 'LOOT',
+            sourceKey: encounterKey,
+            operationId: `${operationId}:${definition.key}:${index}`,
+            contentVersion: 1,
+            generatedAt: new Date().toISOString(),
+            encounterKey,
           },
         });
-        items.push(created);
-        occupied.add(slotIndex);
-        remaining -= quantity;
-        grantedQuantity += quantity;
+        const result = await this.inventory.grant(transaction, {
+          characterId,
+          definition,
+          quantity,
+          snapshot,
+          operationId: `${operationId}:${definition.key}:${index}`,
+          reason: `ENCOUNTER:${encounterKey}`,
+        });
+        grantedQuantity += result.grantedQuantity;
+        claimedQuantity += result.claimedQuantity;
       }
       if (grantedQuantity > 0) {
         granted.push(this.toSettledLoot(definition, grantedQuantity));
       }
-      if (remaining > 0) skipped.push(this.toSettledLoot(definition, remaining));
+      if (claimedQuantity > 0) {
+        claimed.push(this.toSettledLoot(definition, claimedQuantity));
+      }
     }
-    return { granted, skipped };
+    return { granted, claimed };
   }
 
   private toSettledLoot(
@@ -275,29 +281,21 @@ export class MobRewardService {
     },
     quantity: number,
   ): SettledLoot {
-    const metadata = definition.metadata as unknown as RewardItemMetadata;
-    const rarity = ['COMMON', 'ARTIFACT', 'MYTHIC'].includes(
-      String(metadata.rarity),
-    )
-      ? (metadata.rarity as ItemRarity)
-      : 'COMMON';
-    const minimumLevel = Number.isInteger(metadata.minimumLevel)
-      ? Math.max(1, Number(metadata.minimumLevel))
-      : 1;
+    const metadata = parseItemDefinitionMetadata(definition.metadata);
+    const rewardMetadata = definition.metadata as unknown as RewardItemMetadata;
     return {
       itemKey: definition.key,
       name: definition.name,
       description: definition.description,
-      rarity,
-      icon:
-        typeof metadata.icon === 'string' && metadata.icon ? metadata.icon : '?',
+      rarity: metadata.rarity,
+      icon: metadata.icon,
       quantity,
       stackLimit: definition.stackLimit,
       equipmentSlot: metadata.equipmentSlot,
       requiredClass: metadata.requiredClass,
-      minimumLevel,
+      minimumLevel: metadata.minimumLevel ?? 1,
       statBonuses: metadata.statBonuses ?? {},
-      effect: metadata.effect,
+      effect: rewardMetadata.effect,
     };
   }
 }
