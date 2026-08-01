@@ -368,7 +368,7 @@ model ItemDefinition {
   name        String   @db.VarChar(120)
   description String   @db.Text
   stackLimit  Int      @default(1)
-  metadata     Json     @default("{}") @db.JsonB
+  metadata    Json     @default("{}") @db.JsonB
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -398,7 +398,7 @@ model QuestDefinition {
   id           String   @id @default(uuid()) @db.Uuid
   key          String   @unique @db.VarChar(96)
   name         String   @db.VarChar(160)
-  description String   @db.Text
+  description  String   @db.Text
   minimumLevel Int      @default(1)
   steps        Json     @default("[]") @db.JsonB
   rewards      Json     @default("{}") @db.JsonB
@@ -472,7 +472,7 @@ model Guild {
   tag         String   @db.VarChar(5)
   description String   @default("") @db.VarChar(280)
   level       Int      @default(1)
-  experience Int      @default(0)
+  experience  Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
