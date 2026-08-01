@@ -1,5 +1,6 @@
 import { COMBAT_TEAM_LIMIT } from '../../combat/combat.rules.js';
 import { SKILL_CATALOG } from '../../skills/skill.catalog.js';
+import { MOB_RANKS } from '../mob.catalog.js';
 import type { EncounterDefinition } from './encounter.types.js';
 import { ENCOUNTER_PARTY_THRESHOLDS } from './encounter.types.js';
 
@@ -40,11 +41,17 @@ export function validateEncounterDefinition(
   if (actorKeys.size !== definition.actors.length) {
     errors.push(`${prefix}: actor keys must be unique.`);
   }
+  if (definition.initialActorKeys.length !== 1) {
+    errors.push(`${prefix}: exactly one root actor must represent the claimed world spawn.`);
+  }
   for (const actorKey of definition.initialActorKeys) {
     if (!actorKeys.has(actorKey)) errors.push(`${prefix}: missing initial actor ${actorKey}.`);
   }
 
   for (const actor of definition.actors) {
+    if (actor.role !== actor.ai.role) {
+      errors.push(`${prefix}: ${actor.key} has inconsistent actor and AI roles.`);
+    }
     if (actor.statScale <= 0 || !Number.isFinite(actor.statScale)) {
       errors.push(`${prefix}: ${actor.key} has an invalid stat scale.`);
     }
@@ -69,6 +76,14 @@ export function validateEncounterDefinition(
       }
     }
   }
+  for (const telegraph of definition.telegraphs) {
+    if (!skillByKey.has(telegraph.skillKey)) {
+      errors.push(`${prefix}: telegraph references missing skill ${telegraph.skillKey}.`);
+    }
+    if (!definition.actors.some((actor) => actor.skillKeys.includes(telegraph.skillKey))) {
+      errors.push(`${prefix}: telegraph ${telegraph.skillKey} is not available to any encounter actor.`);
+    }
+  }
 
   const thresholds = definition.scaling.map((tier) => tier.minPartySize);
   if (
@@ -83,6 +98,11 @@ export function validateEncounterDefinition(
     }
     if (new Set(tier.actorKeys).size !== tier.actorKeys.length) {
       errors.push(`${prefix}: tier ${tier.minPartySize} contains duplicate actors.`);
+    }
+    for (const rootActorKey of definition.initialActorKeys) {
+      if (!tier.actorKeys.includes(rootActorKey)) {
+        errors.push(`${prefix}: tier ${tier.minPartySize} must include root actor ${rootActorKey}.`);
+      }
     }
     for (const actorKey of tier.actorKeys) {
       if (!actorKeys.has(actorKey)) {
@@ -167,12 +187,24 @@ export function validateEncounterDefinition(
 
 export function assertEncounterCatalog(definitions: readonly EncounterDefinition[]): void {
   const versions = new Set<string>();
+  const rankOwners = new Map<string, string>();
   const errors: string[] = [];
   for (const definition of definitions) {
     const identity = `${definition.key}@${definition.version}`;
     if (versions.has(identity)) errors.push(`Duplicate encounter version ${identity}.`);
     versions.add(identity);
+    for (const rank of definition.ranks) {
+      const existing = rankOwners.get(rank);
+      if (existing && existing !== definition.key) {
+        errors.push(`Mob rank ${rank} is assigned to both ${existing} and ${definition.key}.`);
+      } else {
+        rankOwners.set(rank, definition.key);
+      }
+    }
     errors.push(...validateEncounterDefinition(definition).errors);
+  }
+  for (const rank of MOB_RANKS) {
+    if (!rankOwners.has(rank)) errors.push(`Mob rank ${rank} has no encounter definition.`);
   }
   if (errors.length > 0) throw new Error(`INVALID_ENCOUNTER_CATALOG\n${errors.join('\n')}`);
 }
