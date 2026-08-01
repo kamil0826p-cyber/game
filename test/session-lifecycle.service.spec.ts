@@ -3,6 +3,7 @@ import type { AuthContext } from '../src/auth/auth-context.interface.js';
 import type { PersistedCharacterState } from '../src/common/domain/game.types.js';
 import type { GameConfigService } from '../src/config/game-config.service.js';
 import type { GameSocket } from '../src/contracts/socket.events.js';
+import type { DomainEventService } from '../src/foundation/events/domain-event.service.js';
 import type { LocalizationService } from '../src/i18n/localization.service.js';
 import type { CharacterService } from '../src/modules/characters/character.service.js';
 import type { CombatService } from '../src/modules/combat/combat.service.js';
@@ -34,6 +35,9 @@ const skillService = {
 const combatService = {
   handleDisconnect: vi.fn(async () => undefined),
 } as unknown as CombatService;
+const domainEventService = {
+  emit: vi.fn(async () => 'session-event-id'),
+} as unknown as DomainEventService;
 
 const characterState = (
   overrides: Partial<PersistedCharacterState> = {},
@@ -118,6 +122,7 @@ describe('SessionLifecycleService', () => {
       new SessionClaimExecutor(),
       skillService,
       combatService,
+      domainEventService,
     );
 
     const initialization = service.initializeConnection(client);
@@ -238,6 +243,7 @@ describe('SessionLifecycleService', () => {
       new SessionClaimExecutor(),
       skillService,
       combatService,
+      domainEventService,
     );
 
     await service.initializeConnection(client);
@@ -361,6 +367,7 @@ describe('SessionLifecycleService', () => {
       new SessionClaimExecutor(),
       skillService,
       combatService,
+      domainEventService,
     );
     const createClient = (id: string) =>
       ({
