@@ -24,6 +24,8 @@ export default defineConfig({
       'public.AnalyticsDelivery',
       'public.AnalyticsExperiment',
       'public.AnalyticsExperimentAssignment',
+      'public.CharacterProgressionAudit',
+      'public.CharacterProgressionMigrationBackup',
     ],
   },
 });

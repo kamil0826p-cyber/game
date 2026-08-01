@@ -1,8 +1,12 @@
 import type { InventorySnapshot } from '../../contracts/socket.events.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
+import { Prisma } from '../../generated/prisma/client.js';
+import type { ProgressionService } from '../progression/progression.service.js';
 import { ItemServiceBase } from './item-service.base.js';
 
 export class ItemEquipmentService extends ItemServiceBase {
+  protected progression!: ProgressionService;
+
   async move(userId: string, characterId: string, itemId: string, targetSlotIndex: number): Promise<InventorySnapshot> {
     this.assertSlot(targetSlotIndex);
     await this.prisma.$transaction(async (tx) => {
@@ -41,28 +45,31 @@ export class ItemEquipmentService extends ItemServiceBase {
 
   async equip(userId: string, characterId: string, itemId: string): Promise<InventorySnapshot> {
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${'progression:' + characterId}))`);
       const item = await this.requireOwnedItem(tx, userId, characterId, itemId);
       const metadata = this.metadata(this.itemView(item).metadata);
       if (metadata.category !== 'EQUIPMENT' || !metadata.equipmentSlot) this.invalidItem();
       if (metadata.requiredClass && metadata.requiredClass !== item.character.class) this.invalidItem();
-      if ((metadata.minimumLevel ?? 1) > item.character.level) this.invalidItem();
-      const base = await this.baseStatsBeforeEquipmentChange(tx, characterId);
+      if ((metadata.minimumLevel ?? 1) > item.character.level) {
+        throw new GameError(GAME_ERROR_CODES.ITEM_LEVEL_REQUIRED, 'errors.items.levelRequired');
+      }
       await tx.inventoryItem.updateMany({
         where: { characterId, equippedSlot: metadata.equipmentSlot, NOT: { id: item.id } },
         data: { equippedSlot: null },
       });
       await tx.inventoryItem.update({ where: { id: item.id }, data: { equippedSlot: metadata.equipmentSlot } });
-      await this.applyEffectiveStats(tx, characterId, base);
+      await this.progression.recalculateInTransaction(tx, characterId, 'CLAMP');
     });
     return this.snapshot(userId, characterId, true);
   }
 
   async unequip(userId: string, characterId: string, itemId: string): Promise<InventorySnapshot> {
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${'progression:' + characterId}))`);
       const item = await this.requireOwnedItem(tx, userId, characterId, itemId);
-      const base = await this.baseStatsBeforeEquipmentChange(tx, characterId);
+      if (!item.equippedSlot) return;
       await tx.inventoryItem.update({ where: { id: item.id }, data: { equippedSlot: null } });
-      await this.applyEffectiveStats(tx, characterId, base);
+      await this.progression.recalculateInTransaction(tx, characterId, 'CLAMP');
     });
     return this.snapshot(userId, characterId, true);
   }
@@ -95,5 +102,4 @@ export class ItemEquipmentService extends ItemServiceBase {
     });
     return this.snapshot(userId, characterId, true);
   }
-
 }

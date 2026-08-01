@@ -1,26 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '../../auth/auth-context.interface.js';
 import type {
-  CharacterClass,
   PersistedCharacterState,
 } from '../../common/domain/game.types.js';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { baseStatsForClass } from '../progression/character-stats.js';
 import { RealmService } from '../realm/realm.service.js';
 import { getDefaultOutfit, isOutfitUnlocked } from './outfit.catalog.js';
 import type {
   CreateCharacterInput,
   FirebaseUserRecord,
-  StartingCharacterTemplate,
 } from './character.types.js';
 
 export const MAX_CHARACTERS_PER_REALM = 5;
-
-const STARTING_TEMPLATES: Readonly<Record<CharacterClass, StartingCharacterTemplate>> = {
-  MAGE: { hp: 75, maxHp: 75, energy: 120, maxEnergy: 120, strength: 4, agility: 7, intelligence: 14, armor: 2 },
-  WARRIOR: { hp: 130, maxHp: 130, energy: 70, maxEnergy: 70, strength: 14, agility: 7, intelligence: 3, armor: 8 },
-  ARCHER: { hp: 95, maxHp: 95, energy: 95, maxEnergy: 95, strength: 7, agility: 14, intelligence: 5, armor: 4 },
-};
 
 interface CharacterRow {
   id: string;
@@ -101,7 +94,7 @@ export class CharacterService {
 
   async createCharacter(userId: string, input: CreateCharacterInput): Promise<PersistedCharacterState> {
     const realm = await this.realmService.getCurrentRealm();
-    const template = STARTING_TEMPLATES[input.characterClass];
+    const baseStats = baseStatsForClass(input.characterClass);
     const defaultOutfit = getDefaultOutfit(input.characterClass).key;
     const requestedOutfit = input.outfitKey ?? defaultOutfit;
     const outfitKey = isOutfitUnlocked(input.characterClass, 1, requestedOutfit)
@@ -147,14 +140,14 @@ export class CharacterService {
             y: map.spawnY,
             direction: 'SOUTH',
             combatState: 'IDLE',
-            hp: template.hp,
-            maxHp: template.maxHp,
-            energy: template.energy,
-            maxEnergy: template.maxEnergy,
-            strength: template.strength,
-            agility: template.agility,
-            intelligence: template.intelligence,
-            armor: template.armor,
+            hp: baseStats.maxHp,
+            maxHp: baseStats.maxHp,
+            energy: baseStats.maxEnergy,
+            maxEnergy: baseStats.maxEnergy,
+            strength: baseStats.strength,
+            agility: baseStats.agility,
+            intelligence: baseStats.intelligence,
+            armor: baseStats.armor,
             silver: 0,
             gold: 0,
           },
