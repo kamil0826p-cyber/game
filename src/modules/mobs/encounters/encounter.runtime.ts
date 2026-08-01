@@ -136,6 +136,7 @@ export function recordEncounterTimeout(
 ): void {
   const contribution = ensureContribution(state, actorId, currentTurn);
   contribution.timedOutTurns += 1;
+  contribution.pendingTimeoutActions += 1;
 }
 
 export function evaluateEncounterEligibility(
@@ -390,6 +391,12 @@ function ingestContributions(runtime: CombatRuntime, state: EncounterRuntimeStat
       continue;
     }
     const contribution = ensureContribution(state, source.actorId, runtime.turnNumber);
+    const timeoutFallback = contribution.pendingTimeoutActions > 0;
+    if (timeoutFallback) {
+      contribution.pendingTimeoutActions -= 1;
+      state.processedEventSequence = Math.max(state.processedEventSequence, event.sequence);
+      continue;
+    }
     if (!['STATUS_TICK', 'TURN_SKIPPED'].includes(event.action)) contribution.actions += 1;
     for (const result of event.results) {
       const target = runtime.actors.find((actor) => actor.actorId === result.targetActorId);
@@ -435,6 +442,7 @@ function emptyContribution(actorId: string, joinedTurn: number): EncounterContri
     joinedTurn,
     actions: 0,
     timedOutTurns: 0,
+    pendingTimeoutActions: 0,
     damage: 0,
     healing: 0,
     protection: 0,
