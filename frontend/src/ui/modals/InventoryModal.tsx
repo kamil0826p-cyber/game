@@ -40,6 +40,22 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
   const startDrag = (event: React.DragEvent, item: InventoryItemPayload) => event.dataTransfer.setData('text/item-id', item.id);
   const droppedItem = (event: React.DragEvent) => inventory?.items.find((item) => item.id === event.dataTransfer.getData('text/item-id'));
   const destroyInventoryItem = (itemId: string): Promise<InventorySnapshot> => connection.destroyInventoryItem(itemId, 1);
+  const confirmCurse = (item: InventoryItemPayload): boolean => {
+    const curse = item.itemization?.curse;
+    if (!item.itemization?.requiresEquipConfirmation || !curse) return true;
+    return window.confirm(
+      locale === 'pl'
+        ? `Przeklęty przedmiot: ${curse.name}\n\n${curse.description}\n\n${curse.preview}\n\nKoszt jest aktywny przez cały czas, gdy przedmiot jest założony. Założyć przedmiot?`
+        : `Cursed item: ${curse.name}\n\n${curse.description}\n\n${curse.preview}\n\nThe cost remains active while the item is equipped. Equip the item?`,
+    );
+  };
+  const equipItem = (item: InventoryItemPayload): void => {
+    if (!canEquip(item) || !confirmCurse(item)) return;
+    const confirmationHash = item.itemization?.requiresEquipConfirmation
+      ? item.itemization.equipConfirmationHash
+      : undefined;
+    void mutate(() => connection.equipInventoryItem(item.id, confirmationHash));
+  };
 
   return (
     <Modal title={t('modal.inventory.title')} subtitle={locale === 'pl' ? 'Najedź po statystyki, kliknij po akcje.' : 'Hover for stats, click for actions.'} icon="▦" onClose={onClose} widthClass="max-w-4xl">
@@ -60,7 +76,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                 onDrop={(event) => {
                   event.preventDefault();
                   const dropped = droppedItem(event);
-                  if (dropped?.equipmentSlot === slot && canEquip(dropped)) void mutate(() => connection.equipInventoryItem(dropped.id));
+                  if (dropped?.equipmentSlot === slot) equipItem(dropped);
                 }}
                 onClick={() => item && setSelectedId(item.id)}
                 className={`equipment-slot min-h-20 ${item ? rarityClasses(item.rarity) : ''} ${selectedId === item?.id ? 'ring-2 ring-amber-300' : ''}`}
@@ -90,7 +106,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
           <div className="flex items-center gap-3"><ItemIcon definitionKey={selected.definitionKey} fallback={selected.icon} className="h-10 w-10" /><div><strong className="block">{selected.name}</strong><span className={`text-[11px] ${selected.minimumLevel > level ? 'text-red-300' : 'text-slate-400'}`}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymagany poziom' : 'Required level'}: ${selected.minimumLevel}` : locale === 'pl' ? 'Dostępne akcje' : 'Available actions'}</span></div></div>
           <div className="flex flex-wrap gap-2">
             {selected.usable ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.useInventoryItem(selected.id))}>{locale === 'pl' ? 'Użyj' : 'Use'}</button> : null}
-            {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy || !canEquip(selected)} onClick={() => void mutate(() => connection.equipInventoryItem(selected.id))}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymaga Lv.' : 'Requires Lv.'} ${selected.minimumLevel}` : locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
+            {selected.equipmentSlot && !selected.equippedSlot ? <button className="hud-utility-button" disabled={busy || !canEquip(selected)} onClick={() => equipItem(selected)}>{selected.minimumLevel > level ? `${locale === 'pl' ? 'Wymaga Lv.' : 'Requires Lv.'} ${selected.minimumLevel}` : selected.itemization?.requiresEquipConfirmation ? locale === 'pl' ? 'Załóż przeklęty' : 'Equip cursed' : locale === 'pl' ? 'Załóż' : 'Equip'}</button> : null}
             {selected.equippedSlot ? <button className="hud-utility-button" disabled={busy} onClick={() => void mutate(() => connection.unequipInventoryItem(selected.id))}>{locale === 'pl' ? 'Zdejmij' : 'Unequip'}</button> : null}
             <button className="hud-utility-button" disabled={busy || Boolean(selected.equippedSlot)} onClick={() => void mutate(() => destroyInventoryItem(selected.id))}>{locale === 'pl' ? 'Zniszcz 1' : 'Destroy 1'}</button>
           </div>
