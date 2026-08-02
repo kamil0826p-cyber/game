@@ -101,6 +101,13 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     };
   }, []);
 
+  useEffect(() => {
+    if (context && !state.players[context.player.characterId]) setContext(undefined);
+  }, [context, state.players]);
+
+  const currentContextPlayer = (): PublicPlayerState | undefined =>
+    context ? state.players[context.player.characterId] : undefined;
+
   const closeTrade = async (): Promise<void> => {
     const current = trade;
     setContext(undefined);
@@ -136,8 +143,10 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
   };
 
   const startTrade = async (): Promise<void> => {
-    if (!context || !state.self || busy) return;
-    if (!canTradeWithPlayer(state.self, context.player)) {
+    if (!state.self || busy) return;
+    const player = currentContextPlayer();
+    if (!player) return;
+    if (!canTradeWithPlayer(state.self, player)) {
       gameStore.addNotification({
         code: 'TRADE_TOO_FAR',
         message:
@@ -150,7 +159,7 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     }
     setBusy(true);
     try {
-      const next = await connection.requestTrade(context.player.characterId);
+      const next = await connection.requestTrade(player.characterId);
       setTrade(next);
       setContext(undefined);
       gameStore.setActiveModal('trade');
@@ -162,12 +171,41 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
   };
 
   const startCombat = async (): Promise<void> => {
-    if (!context || !state.self || !state.map || busy) return;
+    if (!state.self || !state.map || busy) return;
+    const player = currentContextPlayer();
+    if (!player) return;
+    const sameGroup = Boolean(
+      groupSnapshot.group?.members.some(
+        (member) => member.characterId === player.characterId,
+      ),
+    );
+    if (sameGroup) {
+      gameStore.addNotification({
+        code: 'COMBAT_GROUP_MEMBER',
+        message:
+          locale === 'pl'
+            ? 'Nie możesz zaatakować członka własnej grupy.'
+            : 'You cannot attack a member of your own group.',
+      });
+      setContext(undefined);
+      return;
+    }
     const availability = getPlayerCombatAvailability(
       state.self,
-      context.player,
+      player,
       state.map.zoneType,
     );
+    if (availability === 'SAFE_ZONE') {
+      gameStore.addNotification({
+        code: 'COMBAT_SAFE_ZONE',
+        message:
+          locale === 'pl'
+            ? 'Na bezpiecznej mapie nie można atakować innych graczy.'
+            : 'Players cannot be attacked in a safe zone.',
+      });
+      setContext(undefined);
+      return;
+    }
     if (availability === 'TOO_FAR' || availability === 'SELF') {
       gameStore.addNotification({
         code: 'COMBAT_TOO_FAR',
@@ -181,20 +219,22 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     }
     setBusy(true);
     try {
-      const next = await connection.requestCombat(context.player.characterId);
+      const next = await connection.requestCombat(player.characterId);
       setCombat(next);
       setContext(undefined);
       gameStore.setActiveModal('combat');
     } catch {
-      // SAFE and all other eligibility decisions are authoritative on the server.
+      // All final eligibility decisions remain authoritative on the server.
     } finally {
       setBusy(false);
     }
   };
 
   const inviteToGroup = async (): Promise<void> => {
-    if (!context || !state.self || busy) return;
-    if (!canInteractWithPlayer(state.self, context.player)) {
+    if (!state.self || busy) return;
+    const player = currentContextPlayer();
+    if (!player) return;
+    if (!canInteractWithPlayer(state.self, player)) {
       gameStore.addNotification({
         code: 'GROUP_TOO_FAR',
         message:
@@ -207,13 +247,13 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     }
     setBusy(true);
     try {
-      await connection.inviteToGroup(context.player.characterId);
+      await connection.inviteToGroup(player.characterId);
       gameStore.addNotification({
         code: 'GROUP_INVITE_SENT',
         message:
           locale === 'pl'
-            ? `Zaproszenie do grupy wysłano do ${context.player.name}.`
-            : `Group invitation sent to ${context.player.name}.`,
+            ? `Zaproszenie do grupy wysłano do ${player.name}.`
+            : `Group invitation sent to ${player.name}.`,
       });
       setContext(undefined);
     } catch {
@@ -263,16 +303,18 @@ export function PlayerInteractionLayer(): React.JSX.Element | null {
     return <TradeModal trade={trade} onChange={setTrade} onClose={() => void closeTrade()} />;
   if (!context) return null;
 
+  const player = state.players[context.player.characterId];
+  if (!player) return null;
   const groupInvitationAllowed = canInviteToGroup(
     groupSnapshot.group,
     state.self?.characterId,
-    context.player.characterId,
+    player.characterId,
   );
 
   return (
     <ActorContextMenu
-      title={context.player.name}
-      subtitle={`Lv. ${context.player.level}`}
+      title={player.name}
+      subtitle={`Lv. ${player.level}`}
       x={context.x}
       y={context.y}
       actions={[
