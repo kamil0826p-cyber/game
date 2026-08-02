@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENCOUNTER_CATALOG } from '../src/modules/mobs/encounters/encounter.catalog.js';
 import {
+  encounterForMob,
   selectLatestEncounterForKey,
 } from '../src/modules/mobs/encounters/encounter.registry.js';
 import type { EncounterDefinition } from '../src/modules/mobs/encounters/encounter.types.js';
@@ -40,5 +41,12 @@ describe('encounter catalog audit', () => {
     };
 
     expect(() => assertEncounterCatalog([...ENCOUNTER_CATALOG, alternative])).not.toThrow();
+  });
+
+  it('resolves a mob encounter by explicit key and checks rank compatibility', () => {
+    expect(encounterForMob('brood-hunt', 'SPAWN').key).toBe('brood-hunt');
+    expect(() => encounterForMob('brood-hunt', 'ANCIENT')).toThrow(
+      'Encounter brood-hunt does not support mob rank ANCIENT.',
+    );
   });
 });
