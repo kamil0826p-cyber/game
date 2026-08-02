@@ -38,6 +38,7 @@ export interface ExpeditionCatalogView {
   minimumPartySize: number;
   maximumPartySize: number;
   recommendedPartySize: number;
+  minimumCharacterLevel: number;
   preparationCost: {
     silver: number;
     items: Array<{ itemKey: string; quantity: number }>;
