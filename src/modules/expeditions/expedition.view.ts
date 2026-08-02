@@ -15,6 +15,7 @@ export interface ExpeditionCatalogView {
   minimumPartySize: number;
   maximumPartySize: number;
   recommendedPartySize: number;
+  minimumCharacterLevel: number;
   preparationCost: ExpeditionDefinition['preparationCost'];
   riskProfiles: ExpeditionDefinition['riskProfiles'];
   difficultyProfiles: ExpeditionDefinition['difficultyProfiles'];
@@ -109,6 +110,24 @@ function sumItems(stacks: readonly ExpeditionLootStack[]): number {
   return stacks.reduce((sum, stack) => sum + (stack.itemKey ? stack.quantity ?? 1 : 0), 0);
 }
 
+function requiredMinimumCharacterLevel(condition: NarrativeCondition): number {
+  if (condition.type === 'LEVEL_AT_LEAST') return condition.level;
+  if (condition.type === 'ALL') {
+    return condition.conditions.reduce(
+      (minimum, child) => Math.max(minimum, requiredMinimumCharacterLevel(child)),
+      1,
+    );
+  }
+  return 1;
+}
+
+function minimumCharacterLevel(definition: ExpeditionDefinition): number {
+  return definition.entryConditions.reduce(
+    (minimum, condition) => Math.max(minimum, requiredMinimumCharacterLevel(condition)),
+    1,
+  );
+}
+
 function finalReport(run: ExpeditionRunSnapshot): ExpeditionFinalReport | undefined {
   if (!['EXTRACTED', 'FAILED', 'ABANDONED', 'COMPLETED'].includes(run.status)) return undefined;
   const contributionByCharacter = new Map(
@@ -181,6 +200,7 @@ export function compileExpeditionCatalogView(
     minimumPartySize: definition.minimumPartySize,
     maximumPartySize: definition.maximumPartySize,
     recommendedPartySize: definition.recommendedPartySize,
+    minimumCharacterLevel: minimumCharacterLevel(definition),
     preparationCost: structuredClone(definition.preparationCost),
     riskProfiles: structuredClone(definition.riskProfiles),
     difficultyProfiles: structuredClone(definition.difficultyProfiles),
