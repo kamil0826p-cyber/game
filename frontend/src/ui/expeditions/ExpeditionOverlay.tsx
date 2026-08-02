@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   ExpeditionCatalogView,
   ExpeditionDifficulty,
@@ -7,6 +8,7 @@ import type {
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
 import { useGroupState } from '../../game/state/groupStore';
+import { Modal } from '../modals/Modal';
 
 function lootLabel(stack: ExpeditionPublicView['pendingLoot'][number]): string {
   if (stack.silver) return `${stack.silver} srebra`;
@@ -71,6 +73,17 @@ export function ExpeditionOverlay(): React.JSX.Element {
       return next;
     });
   }, [groupState.group?.id, game.self?.characterId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [open]);
 
   const definition = useMemo(
     () => catalog.find((entry) => entry.key === definitionKey) ?? catalog[0],
@@ -144,20 +157,16 @@ export function ExpeditionOverlay(): React.JSX.Element {
         </span>
       </button>
 
-      {open ? (
-        <section className="fantasy-panel fixed bottom-4 right-4 top-32 z-40 w-[min(520px,calc(100vw-2rem))] overflow-y-auto border border-amber-300/40 bg-slate-950/95 p-5 text-slate-100 shadow-2xl">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-amber-300">Wyprawy 1–10</p>
-              <h2 className="font-display text-2xl text-amber-100">
-                {run?.definition.name ?? definition?.name ?? 'Przygotowanie'}
-              </h2>
-            </div>
-            <button type="button" className="retro-button px-3 py-1" onClick={() => setOpen(false)}>×</button>
-          </div>
-
+      {open ? createPortal(
+        <Modal
+          title="Wyprawy"
+          subtitle={run?.definition.name ?? definition?.name ?? 'Przygotowanie drużyny 1–10'}
+          icon="⌖"
+          onClose={() => setOpen(false)}
+          widthClass="max-w-4xl"
+        >
           {!run ? (
-            <div className="mt-5 space-y-4">
+            <div className="space-y-4">
               <label className="block text-sm">
                 <span className="mb-1 block text-slate-300">Definicja</span>
                 <select
@@ -265,7 +274,7 @@ export function ExpeditionOverlay(): React.JSX.Element {
                     Kup ubezpieczenie za {risk.insuranceCostSilver} srebra
                   </label>
                   <label className="mt-2 flex items-start gap-2 text-amber-100">
-                    <input type="checkbox" checked={riskAccepted} onChange={(event) => setRiskAccepted(event.checked)} />
+                    <input type="checkbox" checked={riskAccepted} onChange={(event) => setRiskAccepted(event.target.checked)} />
                     Akceptuję jawny profil ryzyka i blokadę składu, ról, formacji, loadoutu, trudności i ubezpieczenia po utworzeniu lobby.
                   </label>
                 </div>
@@ -276,7 +285,7 @@ export function ExpeditionOverlay(): React.JSX.Element {
               </button>
             </div>
           ) : (
-            <div className="mt-5 space-y-5">
+            <div className="space-y-5">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded border border-amber-300/20 bg-slate-900/70 p-3"><span className="text-slate-400">Status</span><div className="font-semibold text-amber-100">{run.status}</div></div>
                 <div className="rounded border border-amber-300/20 bg-slate-900/70 p-3"><span className="text-slate-400">Grupa</span><div className="font-semibold">{run.party.length}/10</div></div>
@@ -396,7 +405,8 @@ export function ExpeditionOverlay(): React.JSX.Element {
               {(run.status === 'ACTIVE' || run.status === 'PREPARING') && isLeader ? <button type="button" className="retro-button w-full border-rose-300/50 bg-rose-500/10 py-2 text-rose-100" disabled={busy} onClick={() => void act(() => client.abandonExpedition({ runId: run.runId, expectedRevision: run.revision }))}>Porzuć wyprawę według zaakceptowanego ryzyka</button> : null}
             </div>
           )}
-        </section>
+        </Modal>,
+        document.body,
       ) : null}
     </>
   );
