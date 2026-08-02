@@ -62,6 +62,9 @@ const ritualSchema: ZodType<ExpeditionMutationInput & { choiceKey: string }> = z
   expectedRevision: z.number().int().nonnegative(),
   choiceKey: z.string().min(1).max(96),
 }).strict();
+const expeditionReasonMessageKeys: Readonly<Record<string, string>> = {
+  EXPEDITION_ENTRY_CONDITIONS_FAILED: 'errors.expeditions.entryRequirements',
+};
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class ExpeditionGateway {
@@ -188,9 +191,15 @@ export class ExpeditionGateway {
   ): SocketErrorPayload {
     const locale = client.data.locale ?? 'en';
     if (error instanceof GameError) {
+      const reason = typeof error.details?.reason === 'string'
+        ? error.details.reason
+        : undefined;
+      const messageKey = reason
+        ? expeditionReasonMessageKeys[reason] ?? error.messageKey
+        : error.messageKey;
       return {
         code: error.code,
-        message: this.localization.translate(error.messageKey, locale),
+        message: this.localization.translate(messageKey, locale),
         details: error.details,
       };
     }
