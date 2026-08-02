@@ -102,6 +102,12 @@ enum GuildInviteStatus {
   EXPIRED
 }
 
+enum GuildTreasuryTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  UPGRADE_PURCHASE
+}
+
 enum TradeStatus {
   REQUESTED
   OPEN
@@ -485,20 +491,28 @@ model MobDefinition {
 }
 
 model Guild {
-  id          String   @id @default(uuid()) @db.Uuid
-  realmId     String   @db.Uuid
-  name        String   @db.VarChar(32)
-  nameKey     String   @db.VarChar(32)
-  tag         String   @db.VarChar(5)
-  description String   @default("") @db.VarChar(280)
-  level       Int      @default(1)
-  experience  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                         String   @id @default(uuid()) @db.Uuid
+  realmId                    String   @db.Uuid
+  name                       String   @db.VarChar(32)
+  nameKey                    String   @db.VarChar(32)
+  tag                        String   @db.VarChar(5)
+  description                String   @default("") @db.VarChar(280)
+  level                      Int      @default(1)
+  experience                 Int      @default(0)
+  treasurySilver             Int      @default(0)
+  experienceUpgradeLevel     Int      @default(0)
+  totalSilverDeposited       Int      @default(0)
+  totalSilverWithdrawn       Int      @default(0)
+  totalSilverSpentOnUpgrades Int      @default(0)
+  mobKills                   Int      @default(0)
+  bonusExperienceGranted     Int      @default(0)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
-  realm   Realm         @relation(fields: [realmId], references: [id], onDelete: Cascade)
-  members GuildMember[]
-  invites GuildInvite[]
+  realm                Realm                      @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  members              GuildMember[]
+  invites              GuildInvite[]
+  treasuryTransactions GuildTreasuryTransaction[]
 
   @@unique([realmId, nameKey])
   @@unique([realmId, tag])
@@ -506,17 +520,41 @@ model Guild {
 }
 
 model GuildMember {
-  id          String    @id @default(uuid()) @db.Uuid
-  guildId     String    @db.Uuid
-  characterId String    @unique @db.Uuid
-  role        GuildRole @default(MEMBER)
-  joinedAt    DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                    String    @id @default(uuid()) @db.Uuid
+  guildId               String    @db.Uuid
+  characterId           String    @unique @db.Uuid
+  role                  GuildRole @default(MEMBER)
+  contributedSilver     Int       @default(0)
+  mobKills              Int       @default(0)
+  bonusExperienceEarned Int       @default(0)
+  lastContributionAt    DateTime?
+  joinedAt              DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   guild     Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@index([guildId, role, joinedAt])
+  @@index([guildId, contributedSilver])
+}
+
+model GuildTreasuryTransaction {
+  id               String                       @id @default(uuid()) @db.Uuid
+  guildId          String                       @db.Uuid
+  operationId      String                       @db.VarChar(96)
+  actorCharacterId String                       @db.Uuid
+  actorName        String                       @db.VarChar(24)
+  type             GuildTreasuryTransactionType
+  amount           Int
+  balanceAfter     Int
+  upgradeLevel     Int?
+  createdAt        DateTime                     @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, operationId])
+  @@index([guildId, createdAt])
+  @@index([actorCharacterId, createdAt])
 }
 
 model GuildInvite {
@@ -662,18 +700,18 @@ model ItemCraftOrder {
 }
 
 model ItemMarketListing {
-  id               String                  @id @default(uuid()) @db.Uuid
-  sellerCharacterId String                 @db.Uuid
-  buyerCharacterId  String?                @db.Uuid
-  itemDefinitionId  String                 @db.Uuid
+  id                 String                  @id @default(uuid()) @db.Uuid
+  sellerCharacterId  String                  @db.Uuid
+  buyerCharacterId   String?                 @db.Uuid
+  itemDefinitionId   String                  @db.Uuid
   quantity           Int
-  instanceData       Json                   @default("{}") @db.JsonB
+  instanceData       Json                    @default("{}") @db.JsonB
   priceSilver        Int
   listingFeeSilver   Int
   status             ItemMarketListingStatus @default(ACTIVE)
-  operationId        String                 @db.VarChar(128)
+  operationId        String                  @db.VarChar(128)
   expiresAt          DateTime
-  createdAt          DateTime               @default(now())
+  createdAt          DateTime                @default(now())
   closedAt           DateTime?
 
   @@unique([sellerCharacterId, operationId])
