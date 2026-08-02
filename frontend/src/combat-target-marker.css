@@ -1,0 +1,21 @@
+/* Keep the selected-target chevron above the visible sprite instead of on its head.
+ * Mob previews draw inside a shared canvas, so smaller render scales need their own
+ * vertical anchor while player sprites can stay above the full-height outfit. */
+.combat-stage-unit-selected .combat-stage-actor::after {
+  top: -1.15rem;
+}
+
+.combat-stage-unit-selected
+  .combat-stage-actor:has(.combat-stage-outfit[aria-label^='mob-'])::after {
+  top: 0;
+}
+
+.combat-stage-unit-selected
+  .combat-stage-actor:has(.combat-stage-outfit[aria-label^='mob-spawn-rabbit '])::after {
+  top: clamp(1.4rem, 20%, 2.15rem);
+}
+
+.combat-stage-unit-selected
+  .combat-stage-actor:has(.combat-stage-outfit[aria-label^='mob-executioner-scorpion '])::after {
+  top: -0.45rem;
+}
