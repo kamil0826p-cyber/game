@@ -29,8 +29,14 @@ describe('combat target resolution', () => {
     });
   });
 
-  it('automatically resolves a sole legal target', () => {
+  it('does not silently replace an invalid selection even when only one explicit target exists', () => {
     expect(resolveCombatActionTarget(action('ENEMY', ['enemy-a']), 'ally-a')).toEqual({
+      ready: false,
+    });
+  });
+
+  it('automatically resolves a sole explicit target when nothing is selected', () => {
+    expect(resolveCombatActionTarget(action('ENEMY', ['enemy-a']), undefined)).toEqual({
       ready: true,
       targetActorId: 'enemy-a',
     });
