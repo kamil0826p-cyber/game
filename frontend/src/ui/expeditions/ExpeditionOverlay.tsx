@@ -91,6 +91,21 @@ export function ExpeditionOverlay(): React.JSX.Element {
   );
   const risk = definition?.riskProfiles.find((entry) => entry.key === riskKey)
     ?? definition?.riskProfiles[0];
+  const minimumCharacterLevel = definition?.minimumCharacterLevel ?? 1;
+  const underleveledMembers = prospectiveMembers.filter(
+    (member) => member.level < minimumCharacterLevel,
+  );
+  const partySizeInvalid = Boolean(
+    definition &&
+    (
+      prospectiveMembers.length < definition.minimumPartySize ||
+      prospectiveMembers.length > definition.maximumPartySize
+    ),
+  );
+  const rolesReady = prospectiveMembers.length > 0 && prospectiveMembers.every(
+    (member) => Boolean(roles[member.characterId]),
+  );
+  const preparationBlocked = underleveledMembers.length > 0 || partySizeInvalid || !rolesReady;
   const isLeader = Boolean(run && game.self?.characterId === run.preparation.leaderCharacterId);
   const ritualPending = Boolean(
     run?.ritualChoices.length &&
@@ -110,7 +125,7 @@ export function ExpeditionOverlay(): React.JSX.Element {
   };
 
   const prepare = (): Promise<void> => {
-    if (!definition || !risk || !riskAccepted) return Promise.resolve();
+    if (!definition || !risk || !riskAccepted || preparationBlocked) return Promise.resolve();
     return act(() => client.prepareExpedition({
       definitionKey: definition.key,
       definitionVersion: definition.version,
@@ -219,7 +234,7 @@ export function ExpeditionOverlay(): React.JSX.Element {
                     const selected = roles[member.characterId];
                     return (
                       <div key={member.characterId} className="grid grid-cols-[1fr_120px_100px] items-center gap-2 text-xs">
-                        <span>{member.name} • {member.characterClass}</span>
+                        <span>{member.name} • {member.characterClass} • poziom {member.level}</span>
                         <select
                           className="border border-amber-300/30 bg-slate-900 p-1"
                           value={selected?.roleKey ?? 'scout'}
@@ -265,10 +280,21 @@ export function ExpeditionOverlay(): React.JSX.Element {
               {definition && risk ? (
                 <div className="rounded border border-rose-300/30 bg-rose-950/20 p-3 text-sm leading-6">
                   <p><strong>Grupa:</strong> {definition.minimumPartySize}–{definition.maximumPartySize}, rekomendowane {definition.recommendedPartySize}</p>
+                  <p><strong>Poziom wejścia:</strong> minimum {minimumCharacterLevel} dla każdej postaci</p>
                   <p><strong>Koszt:</strong> {definition.preparationCost.silver} srebra + {insurance ? risk.insuranceCostSilver : 0} ubezpieczenia</p>
                   <p><strong>Porażka:</strong> utrata {Math.max(0, risk.pendingLootLossPercent - (insurance ? risk.insurancePendingLootLossReductionPercent : 0))}% niezabezpieczonego łupu</p>
                   <p><strong>Checkpoint:</strong> zabezpiecza {risk.checkpointSecurityPercent}% pending loot</p>
                   <p><strong>Rotacja:</strong> {definition.rotationPolicy.cadence.toLowerCase()}, okno {definition.rotationPolicy.broadWindowDays} dni; core rewards pozostają dostępne</p>
+                  {underleveledMembers.length > 0 ? (
+                    <p className="mt-2 rounded border border-rose-300/40 bg-rose-950/40 px-2 py-1 text-rose-100">
+                      Nie można utworzyć lobby: {underleveledMembers.map((member) => `${member.name} (${member.level})`).join(', ')} {underleveledMembers.length === 1 ? 'ma' : 'mają'} za niski poziom. Wymagany poziom: {minimumCharacterLevel}.
+                    </p>
+                  ) : null}
+                  {partySizeInvalid ? (
+                    <p className="mt-2 rounded border border-rose-300/40 bg-rose-950/40 px-2 py-1 text-rose-100">
+                      Nieprawidłowy rozmiar grupy: {prospectiveMembers.length}. Ta wyprawa wymaga od {definition.minimumPartySize} do {definition.maximumPartySize} postaci.
+                    </p>
+                  ) : null}
                   <label className="mt-2 flex items-start gap-2">
                     <input type="checkbox" checked={insurance} onChange={(event) => { setInsurance(event.target.checked); setRiskAccepted(false); }} />
                     Kup ubezpieczenie za {risk.insuranceCostSilver} srebra
@@ -280,8 +306,12 @@ export function ExpeditionOverlay(): React.JSX.Element {
                 </div>
               ) : null}
 
-              <button type="button" className="retro-button w-full border-amber-300/70 bg-amber-500/20 py-2 text-amber-100 disabled:opacity-40" disabled={!riskAccepted || busy || !definition || !risk} onClick={() => void prepare()}>
-                Utwórz lobby wyprawy
+              <button type="button" className="retro-button w-full border-amber-300/70 bg-amber-500/20 py-2 text-amber-100 disabled:opacity-40" disabled={!riskAccepted || busy || !definition || !risk || preparationBlocked} onClick={() => void prepare()}>
+                {underleveledMembers.length > 0
+                  ? `Wymagany poziom ${minimumCharacterLevel}`
+                  : partySizeInvalid
+                    ? `Wymagana grupa ${definition?.minimumPartySize ?? 1}–${definition?.maximumPartySize ?? 10}`
+                    : 'Utwórz lobby wyprawy'}
               </button>
             </div>
           ) : (
