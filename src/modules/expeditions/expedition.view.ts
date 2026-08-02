@@ -102,6 +102,52 @@ export interface ExpeditionPublicView {
   finalReport?: ExpeditionFinalReport;
 }
 
+const MODIFIER_LABELS: Readonly<Record<string, string>> = {
+  NO_PERMANENT_GEAR_LOSS: 'Brak trwałej utraty wyposażenia',
+  FROZEN_PARTY_AFTER_START: 'Skład drużyny zablokowany po rozpoczęciu',
+  CHECKPOINTED_STATE: 'Stan zapisywany w punktach kontrolnych',
+  SCOUTED_BRANCHES: 'Rozpoznane odnogi trasy',
+  ONE_RITUAL_COUNTER: 'Jedna rytualna kontra',
+  PARTIAL_ROUTE_INTEL: 'Częściowe informacje o trasie',
+  STARTING_THREAT: 'Podwyższone zagrożenie początkowe',
+  NEMESIS_VARIANT: 'Wariant nemezis',
+  RITUAL_STABILITY_DRAIN: 'Spadek stabilności rytuału',
+  EXTRA_STARTING_THREAT: 'Dodatkowe zagrożenie początkowe',
+};
+
+const ROTATION_LABELS: Readonly<Record<string, string>> = {
+  'ashen-wind': 'Popielny Wiatr',
+  'silent-bells': 'Milczące Dzwony',
+  'broken-moon': 'Pęknięty Księżyc',
+};
+
+const CONSEQUENCE_LABELS: Readonly<Record<string, string>> = {
+  'ash-burn': 'Popielne oparzenie',
+  'frayed-nerves': 'Nadszarpnięte nerwy',
+  'ritual-scar': 'Blizna rytualna',
+};
+
+function modifierLabel(modifier: string): string {
+  if (modifier.startsWith('ROTATION:')) {
+    const key = modifier.slice('ROTATION:'.length);
+    return `Rotacja: ${ROTATION_LABELS[key] ?? key}`;
+  }
+  return MODIFIER_LABELS[modifier] ?? modifier;
+}
+
+function consequenceLabel(key: string): string {
+  return CONSEQUENCE_LABELS[key] ?? key;
+}
+
+function localizedConsequences(
+  consequences: ExpeditionRunSnapshot['consequences'],
+): ExpeditionRunSnapshot['consequences'] {
+  return consequences.map((consequence) => ({
+    ...consequence,
+    key: consequenceLabel(consequence.key),
+  }));
+}
+
 function sumSilver(stacks: readonly ExpeditionLootStack[]): number {
   return stacks.reduce((sum, stack) => sum + (stack.silver ?? 0), 0);
 }
@@ -185,7 +231,7 @@ function finalReport(run: ExpeditionRunSnapshot): ExpeditionFinalReport | undefi
       pendingItemQuantity: sumItems(run.pendingLoot),
     },
     contributions: [...contributionByCharacter.values()],
-    consequences: structuredClone(run.consequences),
+    consequences: localizedConsequences(run.consequences),
   };
 }
 
@@ -282,10 +328,10 @@ export function compileExpeditionView(
       minimum: resource.minimum,
       maximum: resource.maximum,
     })),
-    activeModifiers: [...run.activeModifiers],
+    activeModifiers: run.activeModifiers.map(modifierLabel),
     pendingLoot: structuredClone(run.pendingLoot),
     securedLoot: structuredClone(run.securedLoot),
-    consequences: structuredClone(run.consequences),
+    consequences: localizedConsequences(run.consequences),
     ...(run.pendingEncounter ? { pendingEncounter: structuredClone(run.pendingEncounter) } : {}),
     visitedNodeKeys: [...run.visitedNodeKeys],
     canExtract: run.status === 'ACTIVE' && node.type === 'EXTRACTION',
