@@ -1,0 +1,62 @@
+.equipment-slot-selected {
+  border-color: rgba(248, 221, 154, 0.96);
+  box-shadow:
+    inset 0 0 0 3px rgba(5, 3, 2, 0.42),
+    inset 0 0 22px rgba(0, 0, 0, 0.52),
+    0 0 0 2px rgba(218, 170, 76, 0.2),
+    0 0 24px rgba(218, 170, 76, 0.28);
+}
+
+.inventory-equipped-mark,
+.inventory-level-lock {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  min-width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid rgba(8, 5, 3, 0.82);
+  background: rgba(7, 4, 2, 0.88);
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 2px #000;
+}
+
+.inventory-equipped-mark {
+  top: 3px;
+  left: 3px;
+  color: #8de6b2;
+  font-size: 0.5rem;
+}
+
+.inventory-level-lock {
+  top: 3px;
+  right: 3px;
+  color: #f0a39e;
+  font-size: 0.45rem;
+}
+
+.inventory-redesign .border-sky-500\/70 {
+  border-color: rgba(75, 180, 224, 0.76);
+}
+
+.inventory-redesign .border-red-500\/70 {
+  border-color: rgba(210, 69, 64, 0.82);
+}
+
+.inventory-redesign .border-slate-500\/60 {
+  border-color: rgba(151, 137, 112, 0.58);
+}
+
+.inventory-redesign .text-sky-300 {
+  color: #92d7ee;
+}
+
+.inventory-redesign .text-red-300 {
+  color: #eea09a;
+}
+
+.inventory-redesign .text-slate-200 {
+  color: #d8c8a8;
+}
