@@ -50,6 +50,7 @@ const player = (actorId: string): CombatActorInput => ({
 const mob: RuntimeMob = {
   id: '00000000-0000-4000-8000-000000000207',
   definitionKey: 'test-executioner',
+  encounterKey: 'execution-circle',
   name: 'Testowy Kat',
   rank: 'EXECUTIONER',
   mapId: 'map-a',
