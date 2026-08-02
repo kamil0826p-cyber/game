@@ -18,8 +18,11 @@ export function resolveCombatActionTarget(
 ): CombatTargetResolution {
   if (action.targetActorIds.length === 0) return { ready: false };
 
-  if (selectedTargetId && action.targetActorIds.includes(selectedTargetId)) {
-    return { ready: true, targetActorId: selectedTargetId };
+  if (selectedTargetId) {
+    if (action.targetActorIds.includes(selectedTargetId)) {
+      return { ready: true, targetActorId: selectedTargetId };
+    }
+    if (!IMPLICIT_TARGETING.has(action.targeting)) return { ready: false };
   }
 
   if (IMPLICIT_TARGETING.has(action.targeting) || action.targetActorIds.length === 1) {
