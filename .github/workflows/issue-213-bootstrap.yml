@@ -1,0 +1,40 @@
+name: Materialize issue 213 implementation
+
+on:
+  push:
+    branches:
+      - agent/issue-213-social-systems
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Materialize reviewed implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .issue213/part-*.b64 | base64 --decode | tar -xzf - -C .
+          rm -rf .issue213
+          rm -f .github/workflows/issue-213-bootstrap.yml
+          test -f src/modules/social/social.service.ts
+          test -f test/social-framework.spec.ts
+          test -f prisma/social.prisma
+          test "$(find src/modules/social -maxdepth 1 -type f | wc -l)" -ge 6
+          git diff --check
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add social finder, guild projects and mentoring"
+          git push origin HEAD:${GITHUB_REF_NAME}
