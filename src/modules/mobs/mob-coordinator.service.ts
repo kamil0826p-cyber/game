@@ -187,7 +187,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
             code: 'LEVEL_UP',
             message: session.locale === 'pl'
               ? `Awans! Twoja postać osiągnęła ${session.level} poziom.`
-              : `Level up! Your character reached ${session.level}.`,
+              : `Level up! Your character reached level ${session.level}.`,
           });
         }
         if (settlement.skippedLoot.length > 0) {
