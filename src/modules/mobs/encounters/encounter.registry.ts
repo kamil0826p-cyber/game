@@ -1,3 +1,4 @@
+import type { MobRank } from '../mob.catalog.js';
 import { ENCOUNTER_CATALOG } from './encounter.catalog.js';
 import type { EncounterDefinition } from './encounter.types.js';
 
@@ -16,4 +17,15 @@ export function selectLatestEncounterForKey(
 
 export function encounterForKey(encounterKey: string): EncounterDefinition {
   return selectLatestEncounterForKey(ENCOUNTER_CATALOG, encounterKey);
+}
+
+export function encounterForMob(
+  encounterKey: string,
+  rank: MobRank,
+): EncounterDefinition {
+  const encounter = encounterForKey(encounterKey);
+  if (!encounter.ranks.includes(rank)) {
+    throw new Error(`Encounter ${encounterKey} does not support mob rank ${rank}.`);
+  }
+  return encounter;
 }
