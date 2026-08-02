@@ -7,6 +7,7 @@ export type MobRuntimeState = 'ALIVE' | 'IN_COMBAT' | 'RESPAWNING';
 export interface RuntimeMob {
   id: string;
   definitionKey: string;
+  encounterKey: string;
   name: string;
   rank: MobRank;
   mapId: string;
