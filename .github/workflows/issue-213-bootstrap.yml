@@ -38,3 +38,5 @@ jobs:
           git add -A
           git commit -m "feat: add social finder, guild projects and mentoring"
           git push origin HEAD:${GITHUB_REF_NAME}
+
+# Trigger materialization after the workflow already exists on the branch.
