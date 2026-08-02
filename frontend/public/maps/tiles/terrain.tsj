@@ -1,10 +1,10 @@
 {
   "columns": 2,
-  "image": "../../assets/tiles/village-terrain.svg",
+  "image": "../../assets/tiles/dark-forest-terrain.svg",
   "imageheight": 32,
   "imagewidth": 64,
   "margin": 0,
-  "name": "village-terrain",
+  "name": "dark-forest-terrain",
   "spacing": 0,
   "tilecount": 2,
   "tileheight": 32,

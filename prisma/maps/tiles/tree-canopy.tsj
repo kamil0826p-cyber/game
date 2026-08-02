@@ -1,6 +1,6 @@
 {
   "columns": 0,
-  "name": "pine-canopy",
+  "name": "black-pine-canopy",
   "tilecount": 1,
   "tileheight": 32,
   "tileoffset": { "x": -42, "y": -26 },
@@ -11,7 +11,7 @@
   "tiles": [
     {
       "id": 0,
-      "image": "../../../frontend/public/assets/tiles/pine-canopy.svg",
+      "image": "../../../frontend/public/assets/tiles/black-pine-canopy.svg",
       "imageheight": 109,
       "imagewidth": 116
     }
