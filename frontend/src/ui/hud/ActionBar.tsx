@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SkillBuildSnapshot } from '../../contracts/skillBuild';
 import type { SkillDefinitionPayload } from '../../contracts/socket';
 import type { CombatLegalActionPayload } from '../../contracts/tacticalCombat';
@@ -41,6 +41,7 @@ export function ActionBar({
   const { locale, t } = useI18n();
   const state = useGameState();
   const [active, setActive] = useState<number>();
+  const intentLocked = useRef(false);
   const build = state.skillTree as SkillBuildSnapshot | undefined;
   const slots = useMemo(() => {
     const activeKeys = new Set(
@@ -69,6 +70,7 @@ export function ActionBar({
       legalActionsBySkill !== undefined &&
       !isCombatActionTargetReady(legalAction, selectedTargetId);
     if (
+      intentLocked.current ||
       disabled ||
       combatTargetBlocked ||
       !state.self ||
@@ -76,21 +78,22 @@ export function ActionBar({
     ) {
       return;
     }
+    intentLocked.current = true;
     setActive(index);
     window.dispatchEvent(
       new CustomEvent<CombatSkillIntent>(COMBAT_SKILL_INTENT_EVENT, {
         detail: { skillKey: skill.key },
       }),
     );
-    window.setTimeout(
-      () => setActive((current) => (current === index ? undefined : current)),
-      180,
-    );
+    window.setTimeout(() => {
+      intentLocked.current = false;
+      setActive((current) => (current === index ? undefined : current));
+    }, 180);
   };
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
-      if (isEditable(event.target)) return;
+      if (event.repeat || isEditable(event.target)) return;
       const index = Number(event.key) - 1;
       const skill = slots[index];
       if (skill) activate(skill, index);
