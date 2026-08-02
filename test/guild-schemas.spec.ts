@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  guildBuyExperienceUpgradeSchema,
   guildChatSchema,
   guildCreateSchema,
+  guildDepositSchema,
   guildInviteSchema,
   guildSetRoleSchema,
+  guildWithdrawSchema,
 } from '../src/contracts/socket.schemas.js';
 
 const requestId = 'guild-test-1';
@@ -25,6 +28,16 @@ describe('guild socket schemas', () => {
     expect(() => guildInviteSchema.parse({ requestId, characterName: '' })).toThrow();
     expect(guildSetRoleSchema.parse({ requestId, targetCharacterId: characterId, role: 'OFFICER' }).role).toBe('OFFICER');
     expect(() => guildSetRoleSchema.parse({ requestId, targetCharacterId: characterId, role: 'LEADER' })).toThrow();
+  });
+
+  it('validates treasury operations as positive integers and keeps them strict', () => {
+    expect(guildDepositSchema.parse({ requestId, amount: 50_000 }).amount).toBe(50_000);
+    expect(guildWithdrawSchema.parse({ requestId, amount: 1 }).amount).toBe(1);
+    expect(() => guildDepositSchema.parse({ requestId, amount: 0 })).toThrow();
+    expect(() => guildWithdrawSchema.parse({ requestId, amount: 1.5 })).toThrow();
+    expect(() => guildDepositSchema.parse({ requestId, amount: 2_000_000_001 })).toThrow();
+    expect(() => guildDepositSchema.parse({ requestId, amount: 10, currency: 'GOLD' })).toThrow();
+    expect(guildBuyExperienceUpgradeSchema.parse({ requestId })).toEqual({ requestId });
   });
 
   it('keeps guild chat small and strict', () => {

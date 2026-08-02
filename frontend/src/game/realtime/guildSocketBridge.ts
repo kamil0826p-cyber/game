@@ -32,6 +32,9 @@ declare module './GameSocketClient' {
     inviteToGuild(characterName: string): Promise<GuildSnapshot>;
     respondGuildInvite(inviteId: string, accept: boolean): Promise<GuildSnapshot>;
     updateGuildDescription(description: string): Promise<GuildSnapshot>;
+    depositGuildSilver(amount: number): Promise<GuildSnapshot>;
+    withdrawGuildSilver(amount: number): Promise<GuildSnapshot>;
+    buyGuildExperienceUpgrade(): Promise<GuildSnapshot>;
     setGuildRole(targetCharacterId: string, role: Exclude<GuildRole, 'LEADER'>): Promise<GuildSnapshot>;
     kickGuildMember(targetCharacterId: string): Promise<GuildSnapshot>;
     leaveGuild(): Promise<GuildSnapshot>;
@@ -143,6 +146,12 @@ export function installGuildSocketBridge(client: GameSocketClient): void {
     socket.emit('guild:respond', { requestId: createRequestId('guild-respond'), inviteId, accept }, ack));
   client.updateGuildDescription = (description) => command((socket, ack) =>
     socket.emit('guild:updateDescription', { requestId: createRequestId('guild-description'), description }, ack));
+  client.depositGuildSilver = (amount) => command((socket, ack) =>
+    socket.emit('guild:depositSilver', { requestId: createRequestId('guild-deposit'), amount }, ack));
+  client.withdrawGuildSilver = (amount) => command((socket, ack) =>
+    socket.emit('guild:withdrawSilver', { requestId: createRequestId('guild-withdraw'), amount }, ack));
+  client.buyGuildExperienceUpgrade = () => command((socket, ack) =>
+    socket.emit('guild:buyExperienceUpgrade', { requestId: createRequestId('guild-upgrade') }, ack));
   client.setGuildRole = (targetCharacterId, role) => command((socket, ack) =>
     socket.emit('guild:setRole', { requestId: createRequestId('guild-role'), targetCharacterId, role }, ack));
   client.kickGuildMember = (targetCharacterId) => command((socket, ack) =>

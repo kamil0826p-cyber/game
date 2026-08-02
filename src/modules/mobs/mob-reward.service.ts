@@ -5,6 +5,7 @@ import type { ItemRarity, ItemStatBonuses } from '../../contracts/socket.events.
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { CharacterProgressionService } from '../characters/progression/character-progression.service.js';
+import { calculateGuildExperienceReward } from '../guilds/guild.rules.js';
 import { ItemInventoryService } from '../items/item-inventory.service.js';
 import {
   createItemInstanceSnapshot,
@@ -110,13 +111,24 @@ export class MobRewardService {
         transaction,
         owner.id,
       );
-      const experienceAward = canReceiveMobExperience(current.level, mob.level)
+      const guildMembership = await transaction.guildMember.findUnique({
+        where: { characterId: owner.id },
+        select: {
+          guildId: true,
+          guild: { select: { experienceUpgradeLevel: true } },
+        },
+      });
+      const baseExperienceAward = canReceiveMobExperience(current.level, mob.level)
         ? mob.experience
         : 0;
+      const experienceReward = calculateGuildExperienceReward(
+        baseExperienceAward,
+        guildMembership?.guild.experienceUpgradeLevel ?? 0,
+      );
       const progression = applyExperience(
         current.level,
         current.experience,
-        experienceAward,
+        experienceReward.totalExperience,
       );
       const skillPointsGained = skillPointsGainedBetweenLevels(
         current.level,
@@ -130,6 +142,22 @@ export class MobRewardService {
           experience: progression.experience,
         },
       });
+      if (guildMembership) {
+        await transaction.guildMember.update({
+          where: { characterId: owner.id },
+          data: {
+            mobKills: { increment: 1 },
+            bonusExperienceEarned: { increment: experienceReward.bonusExperience },
+          },
+        });
+        await transaction.guild.update({
+          where: { id: guildMembership.guildId },
+          data: {
+            mobKills: { increment: 1 },
+            bonusExperienceGranted: { increment: experienceReward.bonusExperience },
+          },
+        });
+      }
       const updated = await this.characterProgression.recomputeInTransaction(
         transaction,
         owner.id,
@@ -144,7 +172,7 @@ export class MobRewardService {
         mob.definitionKey,
       );
       const settlement: MobRewardSettlement = {
-        experienceGained: experienceAward,
+        experienceGained: experienceReward.totalExperience,
         levelsGained: progression.levelsGained,
         skillPointsGained,
         nextLevelExperience: progression.nextLevelExperience,

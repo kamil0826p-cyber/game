@@ -9,13 +9,18 @@ import { WorldStateService } from '../world/world-state.service.js';
 import {
   GUILD_DESCRIPTION_MAX_LENGTH,
   GUILD_INVITE_TTL_MS,
+  GUILD_MAX_EXPERIENCE_UPGRADE_LEVEL,
   GUILD_MAX_MEMBERS,
   canEditDescription,
   canInvite,
   canKick,
+  canManageGuildTreasury,
   canSetRole,
+  guildExperienceBonusPercent,
+  guildExperienceUpgradeCost,
   isGuildNameValid,
   isGuildTagValid,
+  isGuildTreasuryAmountValid,
   normalizeGuildDescription,
   normalizeGuildName,
   normalizeGuildTag,
@@ -29,15 +34,27 @@ const guildInclude = {
     },
     orderBy: { joinedAt: 'asc' as const },
   },
+  treasuryTransactions: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 20,
+  },
 };
 
 type GuildWithMembers = Prisma.GuildGetPayload<{ include: typeof guildInclude }>;
-type OwnedCharacter = { id: string; userId: string; realmId: string; name: string };
+type OwnedCharacter = {
+  id: string;
+  userId: string;
+  realmId: string;
+  name: string;
+  silver: number;
+};
 type GuildActor = Prisma.GuildMemberGetPayload<{
-  include: { character: { select: { realmId: true } } };
+  include: { character: { select: { realmId: true; name: true } } };
 }>;
+type TreasuryTransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'UPGRADE_PURCHASE';
 
 const roleOrder: Record<GuildRoleValue, number> = { LEADER: 0, OFFICER: 1, MEMBER: 2 };
+const MAX_DATABASE_INT = 2_147_483_647;
 
 @Injectable()
 export class GuildService {
@@ -50,7 +67,7 @@ export class GuildService {
   ) {}
 
   async getSnapshot(userId: string, characterId: string): Promise<GuildSnapshot> {
-    await this.owner(userId, characterId);
+    const character = await this.owner(userId, characterId);
     await this.expireInvites(characterId);
     const membership = await this.prisma.guildMember.findUnique({
       where: { characterId },
@@ -76,6 +93,7 @@ export class GuildService {
         inviterName: invite.inviter.name,
         expiresAt: invite.expiresAt.getTime(),
       })),
+      characterSilver: character.silver,
     };
   }
 
@@ -237,6 +255,236 @@ export class GuildService {
     return this.getSnapshot(userId, characterId);
   }
 
+  async depositSilver(
+    userId: string,
+    characterId: string,
+    amount: number,
+    operationId: string,
+  ): Promise<GuildSnapshot> {
+    if (!isGuildTreasuryAmountValid(amount)) {
+      throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
+    }
+    const actor = await this.member(userId, characterId);
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockGuild(tx, actor.guildId);
+      await this.lockCharacter(tx, characterId);
+      const currentMember = await this.txMember(tx, characterId, actor.guildId);
+      if (await this.replayedTransaction(tx, actor.guildId, operationId, 'DEPOSIT', characterId, amount)) return;
+      const character = await tx.character.findUnique({
+        where: { id: characterId },
+        select: { userId: true, silver: true },
+      });
+      if (!character || character.userId !== userId) {
+        throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
+      }
+      if (character.silver < amount) {
+        throw new GameError(GAME_ERROR_CODES.INSUFFICIENT_SILVER, 'errors.items.insufficientSilver', {
+          balance: character.silver,
+          required: amount,
+        });
+      }
+      const currentGuild = await tx.guild.findUnique({
+        where: { id: actor.guildId },
+        select: { treasurySilver: true, totalSilverDeposited: true },
+      });
+      if (
+        !currentGuild ||
+        currentGuild.treasurySilver > MAX_DATABASE_INT - amount ||
+        currentGuild.totalSilverDeposited > MAX_DATABASE_INT - amount ||
+        currentMember.contributedSilver > MAX_DATABASE_INT - amount
+      ) {
+        throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', {
+          reason: 'GUILD_TREASURY_LIMIT',
+        });
+      }
+      const guild = await tx.guild.update({
+        where: { id: actor.guildId },
+        data: {
+          treasurySilver: { increment: amount },
+          totalSilverDeposited: { increment: amount },
+        },
+        select: { treasurySilver: true },
+      });
+      await tx.character.update({
+        where: { id: characterId },
+        data: {
+          silver: { decrement: amount },
+          stateVersion: { increment: 1 },
+          lastSavedAt: new Date(),
+        },
+      });
+      await tx.guildMember.update({
+        where: { characterId },
+        data: {
+          contributedSilver: { increment: amount },
+          lastContributionAt: new Date(),
+        },
+      });
+      await tx.guildTreasuryTransaction.create({
+        data: {
+          guildId: actor.guildId,
+          operationId,
+          actorCharacterId: characterId,
+          actorName: actor.character.name,
+          type: 'DEPOSIT',
+          amount,
+          balanceAfter: guild.treasurySilver,
+        },
+      });
+    });
+    await this.broadcastGuild(actor.guildId);
+    return this.getSnapshot(userId, characterId);
+  }
+
+  async withdrawSilver(
+    userId: string,
+    characterId: string,
+    amount: number,
+    operationId: string,
+  ): Promise<GuildSnapshot> {
+    if (!isGuildTreasuryAmountValid(amount)) {
+      throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
+    }
+    const actor = await this.member(userId, characterId);
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockGuild(tx, actor.guildId);
+      await this.lockCharacter(tx, characterId);
+      const currentActor = await this.txMember(tx, characterId, actor.guildId);
+      if (!canManageGuildTreasury(currentActor.role as GuildRoleValue)) {
+        throw new GameError(GAME_ERROR_CODES.GUILD_FORBIDDEN, 'errors.guild.forbidden');
+      }
+      if (await this.replayedTransaction(tx, actor.guildId, operationId, 'WITHDRAWAL', characterId, amount)) return;
+      const guild = await tx.guild.findUnique({
+        where: { id: actor.guildId },
+        select: { treasurySilver: true, totalSilverWithdrawn: true },
+      });
+      const character = await tx.character.findUnique({
+        where: { id: characterId },
+        select: { userId: true, silver: true },
+      });
+      if (!guild || !character || character.userId !== userId) {
+        throw new GameError(GAME_ERROR_CODES.GUILD_REQUIRED, 'errors.guild.required');
+      }
+      if (guild.treasurySilver < amount) {
+        throw new GameError(GAME_ERROR_CODES.INSUFFICIENT_SILVER, 'errors.items.insufficientSilver', {
+          source: 'GUILD_TREASURY',
+          balance: guild.treasurySilver,
+          required: amount,
+        });
+      }
+      if (
+        character.silver > MAX_DATABASE_INT - amount ||
+        guild.totalSilverWithdrawn > MAX_DATABASE_INT - amount
+      ) {
+        throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', {
+          reason: 'GUILD_TREASURY_LIMIT',
+        });
+      }
+      const updatedGuild = await tx.guild.update({
+        where: { id: actor.guildId },
+        data: {
+          treasurySilver: { decrement: amount },
+          totalSilverWithdrawn: { increment: amount },
+        },
+        select: { treasurySilver: true },
+      });
+      await tx.character.update({
+        where: { id: characterId },
+        data: {
+          silver: { increment: amount },
+          stateVersion: { increment: 1 },
+          lastSavedAt: new Date(),
+        },
+      });
+      await tx.guildTreasuryTransaction.create({
+        data: {
+          guildId: actor.guildId,
+          operationId,
+          actorCharacterId: characterId,
+          actorName: actor.character.name,
+          type: 'WITHDRAWAL',
+          amount,
+          balanceAfter: updatedGuild.treasurySilver,
+        },
+      });
+    });
+    await this.broadcastGuild(actor.guildId);
+    return this.getSnapshot(userId, characterId);
+  }
+
+  async purchaseExperienceUpgrade(
+    userId: string,
+    characterId: string,
+    operationId: string,
+  ): Promise<GuildSnapshot> {
+    const actor = await this.member(userId, characterId);
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockGuild(tx, actor.guildId);
+      const currentActor = await this.txMember(tx, characterId, actor.guildId);
+      if (!canManageGuildTreasury(currentActor.role as GuildRoleValue)) {
+        throw new GameError(GAME_ERROR_CODES.GUILD_FORBIDDEN, 'errors.guild.forbidden');
+      }
+      const replay = await tx.guildTreasuryTransaction.findUnique({
+        where: { guildId_operationId: { guildId: actor.guildId, operationId } },
+      });
+      if (replay) {
+        if (replay.type !== 'UPGRADE_PURCHASE' || replay.actorCharacterId !== characterId) {
+          throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
+        }
+        return;
+      }
+      const guild = await tx.guild.findUnique({
+        where: { id: actor.guildId },
+        select: { treasurySilver: true, experienceUpgradeLevel: true, totalSilverSpentOnUpgrades: true },
+      });
+      if (!guild) {
+        throw new GameError(GAME_ERROR_CODES.GUILD_REQUIRED, 'errors.guild.required');
+      }
+      const cost = guildExperienceUpgradeCost(guild.experienceUpgradeLevel);
+      if (cost === null || guild.experienceUpgradeLevel >= GUILD_MAX_EXPERIENCE_UPGRADE_LEVEL) {
+        throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', {
+          reason: 'GUILD_EXPERIENCE_UPGRADE_MAXED',
+        });
+      }
+      if (guild.treasurySilver < cost) {
+        throw new GameError(GAME_ERROR_CODES.INSUFFICIENT_SILVER, 'errors.items.insufficientSilver', {
+          source: 'GUILD_TREASURY',
+          balance: guild.treasurySilver,
+          required: cost,
+        });
+      }
+      if (guild.totalSilverSpentOnUpgrades > MAX_DATABASE_INT - cost) {
+        throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', {
+          reason: 'GUILD_TREASURY_LIMIT',
+        });
+      }
+      const nextLevel = guild.experienceUpgradeLevel + 1;
+      const updatedGuild = await tx.guild.update({
+        where: { id: actor.guildId },
+        data: {
+          treasurySilver: { decrement: cost },
+          experienceUpgradeLevel: nextLevel,
+          totalSilverSpentOnUpgrades: { increment: cost },
+        },
+        select: { treasurySilver: true },
+      });
+      await tx.guildTreasuryTransaction.create({
+        data: {
+          guildId: actor.guildId,
+          operationId,
+          actorCharacterId: characterId,
+          actorName: actor.character.name,
+          type: 'UPGRADE_PURCHASE',
+          amount: cost,
+          balanceAfter: updatedGuild.treasurySilver,
+          upgradeLevel: nextLevel,
+        },
+      });
+    });
+    await this.broadcastGuild(actor.guildId);
+    return this.getSnapshot(userId, characterId);
+  }
+
   async setRole(
     userId: string,
     characterId: string,
@@ -357,7 +605,7 @@ export class GuildService {
   private async owner(userId: string, characterId: string): Promise<OwnedCharacter> {
     const character = await this.prisma.character.findFirst({
       where: { id: characterId, userId },
-      select: { id: true, userId: true, realmId: true, name: true },
+      select: { id: true, userId: true, realmId: true, name: true, silver: true },
     });
     if (!character) throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
     return character;
@@ -367,7 +615,7 @@ export class GuildService {
     await this.owner(userId, characterId);
     const membership = await this.prisma.guildMember.findUnique({
       where: { characterId },
-      include: { character: { select: { realmId: true } } },
+      include: { character: { select: { realmId: true, name: true } } },
     });
     if (!membership) throw new GameError(GAME_ERROR_CODES.GUILD_REQUIRED, 'errors.guild.required');
     return membership;
@@ -386,9 +634,20 @@ export class GuildService {
       roleOrder[left.role as GuildRoleValue] - roleOrder[right.role as GuildRoleValue] ||
       left.joinedAt.getTime() - right.joinedAt.getTime(),
     );
+    const onlineMemberCount = members.filter((member) =>
+      Boolean(this.world.getByCharacterId(member.character.id)?.activeInWorld),
+    ).length;
+    const totalMemberLevels = members.reduce((sum, member) => sum + member.character.level, 0);
+    const memberCount = members.length;
     return {
-      id: guild.id, name: guild.name, tag: guild.tag, description: guild.description,
-      level: guild.level, experience: guild.experience, role,
+      id: guild.id,
+      name: guild.name,
+      tag: guild.tag,
+      description: guild.description,
+      level: guild.level,
+      experience: guild.experience,
+      role,
+      createdAt: guild.createdAt.getTime(),
       members: members.map((member) => ({
         characterId: member.character.id,
         name: member.character.name,
@@ -396,8 +655,62 @@ export class GuildService {
         role: member.role as GuildRoleValue,
         online: Boolean(this.world.getByCharacterId(member.character.id)?.activeInWorld),
         joinedAt: member.joinedAt.getTime(),
+        contributedSilver: member.contributedSilver,
+        mobKills: member.mobKills,
+        bonusExperienceEarned: member.bonusExperienceEarned,
+        lastContributionAt: member.lastContributionAt?.getTime() ?? null,
       })),
+      treasury: {
+        silver: guild.treasurySilver,
+        experienceUpgradeLevel: guild.experienceUpgradeLevel,
+        experienceBonusPercent: guildExperienceBonusPercent(guild.experienceUpgradeLevel),
+        maximumUpgradeLevel: GUILD_MAX_EXPERIENCE_UPGRADE_LEVEL,
+        nextUpgradeCost: guildExperienceUpgradeCost(guild.experienceUpgradeLevel),
+        totalSilverDeposited: guild.totalSilverDeposited,
+        totalSilverWithdrawn: guild.totalSilverWithdrawn,
+        totalSilverSpentOnUpgrades: guild.totalSilverSpentOnUpgrades,
+        recentTransactions: guild.treasuryTransactions.map((transaction) => ({
+          id: transaction.id,
+          type: transaction.type,
+          amount: transaction.amount,
+          balanceAfter: transaction.balanceAfter,
+          actorCharacterId: transaction.actorCharacterId,
+          actorName: transaction.actorName,
+          upgradeLevel: transaction.upgradeLevel,
+          createdAt: transaction.createdAt.getTime(),
+        })),
+      },
+      statistics: {
+        memberCount,
+        onlineMemberCount,
+        averageMemberLevel: memberCount === 0 ? 0 : Math.round((totalMemberLevels / memberCount) * 10) / 10,
+        totalMemberLevels,
+        mobKills: guild.mobKills,
+        bonusExperienceGranted: guild.bonusExperienceGranted,
+      },
     };
+  }
+
+  private async replayedTransaction(
+    tx: Prisma.TransactionClient,
+    guildId: string,
+    operationId: string,
+    type: TreasuryTransactionType,
+    actorCharacterId: string,
+    amount: number,
+  ): Promise<boolean> {
+    const existing = await tx.guildTreasuryTransaction.findUnique({
+      where: { guildId_operationId: { guildId, operationId } },
+    });
+    if (!existing) return false;
+    if (
+      existing.type !== type ||
+      existing.actorCharacterId !== actorCharacterId ||
+      existing.amount !== amount
+    ) {
+      throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
+    }
+    return true;
   }
 
   private async expireInvites(characterId: string): Promise<void> {
@@ -423,6 +736,16 @@ export class GuildService {
     );
     if (rows.length === 0) {
       throw new GameError(GAME_ERROR_CODES.GUILD_REQUIRED, 'errors.guild.required');
+    }
+  }
+
+  private async lockCharacter(tx: Prisma.TransactionClient, characterId: string): Promise<void> {
+    const rows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      'SELECT "id" FROM "Character" WHERE "id" = $1::uuid FOR UPDATE',
+      characterId,
+    );
+    if (rows.length === 0) {
+      throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
     }
   }
 

@@ -15,6 +15,26 @@ const snapshot: GuildSnapshot = {
     level: 1,
     experience: 0,
     role: 'MEMBER',
+    createdAt: 1,
+    treasury: {
+      silver: 0,
+      experienceUpgradeLevel: 0,
+      experienceBonusPercent: 0,
+      maximumUpgradeLevel: 10,
+      nextUpgradeCost: 25_000,
+      totalSilverDeposited: 0,
+      totalSilverWithdrawn: 0,
+      totalSilverSpentOnUpgrades: 0,
+      recentTransactions: [],
+    },
+    statistics: {
+      memberCount: 2,
+      onlineMemberCount: 2,
+      averageMemberLevel: 5.5,
+      totalMemberLevels: 11,
+      mobKills: 0,
+      bonusExperienceGranted: 0,
+    },
     members: [
       {
         characterId: 'self',
@@ -23,6 +43,10 @@ const snapshot: GuildSnapshot = {
         role: 'MEMBER',
         online: true,
         joinedAt: 1,
+        contributedSilver: 0,
+        mobKills: 0,
+        bonusExperienceEarned: 0,
+        lastContributionAt: null,
       },
       {
         characterId: 'ally',
@@ -31,10 +55,15 @@ const snapshot: GuildSnapshot = {
         role: 'OFFICER',
         online: true,
         joinedAt: 2,
+        contributedSilver: 0,
+        mobKills: 0,
+        bonusExperienceEarned: 0,
+        lastContributionAt: null,
       },
     ],
   },
   invites: [],
+  characterSilver: 0,
 };
 
 describe('guild presence', () => {

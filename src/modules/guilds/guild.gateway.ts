@@ -5,11 +5,23 @@ import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GuildChatMessagePayload, GuildSnapshot } from '../../contracts/guild.events.js';
 import type { GameSocket, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
 import {
-  guildChatSchema, guildCreateSchema, guildDisbandSchema, guildGetSchema,
-  guildInviteSchema, guildKickSchema, guildLeaveSchema, guildRespondSchema,
-  guildSetRoleSchema, guildTransferLeadershipSchema, guildUpdateDescriptionSchema,
+  guildBuyExperienceUpgradeSchema,
+  guildChatSchema,
+  guildCreateSchema,
+  guildDepositSchema,
+  guildDisbandSchema,
+  guildGetSchema,
+  guildInviteSchema,
+  guildKickSchema,
+  guildLeaveSchema,
+  guildRespondSchema,
+  guildSetRoleSchema,
+  guildTransferLeadershipSchema,
+  guildUpdateDescriptionSchema,
+  guildWithdrawSchema,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { GuildService } from './guild.service.js';
@@ -40,6 +52,7 @@ export class GuildGateway implements OnModuleDestroy {
   constructor(
     private readonly guilds: GuildService,
     private readonly worldState: WorldStateService,
+    private readonly movementCoordinator: MovementCoordinatorService,
     private readonly localization: LocalizationService,
   ) {}
 
@@ -47,38 +60,68 @@ export class GuildGateway implements OnModuleDestroy {
   get(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildGetSchema, raw, (session) => this.guilds.getSnapshot(session.userId, session.characterId));
   }
+
   @SubscribeMessage('guild:create')
   create(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildCreateSchema, raw, (session, payload) => this.guilds.create(session.userId, session.characterId, payload));
   }
+
   @SubscribeMessage('guild:invite')
   invite(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildInviteSchema, raw, (session, payload) => this.guilds.invite(session.userId, session.characterId, payload.characterName));
   }
+
   @SubscribeMessage('guild:respond')
   respond(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildRespondSchema, raw, (session, payload) => this.guilds.respond(session.userId, session.characterId, payload.inviteId, payload.accept));
   }
+
   @SubscribeMessage('guild:updateDescription')
   updateDescription(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildUpdateDescriptionSchema, raw, (session, payload) => this.guilds.updateDescription(session.userId, session.characterId, payload.description));
   }
+
+  @SubscribeMessage('guild:depositSilver')
+  depositSilver(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
+    return this.handle(client, guildDepositSchema, raw, (session, payload) =>
+      this.guilds.depositSilver(session.userId, session.characterId, payload.amount, payload.requestId),
+    );
+  }
+
+  @SubscribeMessage('guild:withdrawSilver')
+  withdrawSilver(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
+    return this.handle(client, guildWithdrawSchema, raw, (session, payload) =>
+      this.guilds.withdrawSilver(session.userId, session.characterId, payload.amount, payload.requestId),
+    );
+  }
+
+  @SubscribeMessage('guild:buyExperienceUpgrade')
+  buyExperienceUpgrade(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
+    return this.handle(client, guildBuyExperienceUpgradeSchema, raw, (session, payload) =>
+      this.guilds.purchaseExperienceUpgrade(session.userId, session.characterId, payload.requestId),
+    );
+  }
+
   @SubscribeMessage('guild:setRole')
   setRole(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildSetRoleSchema, raw, (session, payload) => this.guilds.setRole(session.userId, session.characterId, payload.targetCharacterId, payload.role));
   }
+
   @SubscribeMessage('guild:kick')
   kick(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildKickSchema, raw, (session, payload) => this.guilds.kick(session.userId, session.characterId, payload.targetCharacterId));
   }
+
   @SubscribeMessage('guild:leave')
   leave(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildLeaveSchema, raw, (session) => this.guilds.leave(session.userId, session.characterId));
   }
+
   @SubscribeMessage('guild:transferLeadership')
   transferLeadership(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildTransferLeadershipSchema, raw, (session, payload) => this.guilds.transferLeadership(session.userId, session.characterId, payload.targetCharacterId));
   }
+
   @SubscribeMessage('guild:disband')
   disband(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<GuildSnapshot>> {
     return this.handle(client, guildDisbandSchema, raw, (session) => this.guilds.disband(session.userId, session.characterId));
@@ -130,7 +173,12 @@ export class GuildGateway implements OnModuleDestroy {
   ): Promise<SocketAck<TResult>> {
     try {
       const payload = schema.parse(raw);
-      return { ok: true, data: await operation(this.requireSession(client), payload) };
+      const session = this.requireSession(client);
+      const data = await this.movementCoordinator.runSerialized(session, () =>
+        operation(session, payload),
+      );
+      this.syncCharacterSilver(session, data);
+      return { ok: true, data };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
@@ -142,6 +190,20 @@ export class GuildGateway implements OnModuleDestroy {
       throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
     }
     return session;
+  }
+
+  private syncCharacterSilver(session: PlayerSession, value: unknown): void {
+    if (
+      value &&
+      typeof value === 'object' &&
+      'characterSilver' in value &&
+      typeof (value as { characterSilver?: unknown }).characterSilver === 'number' &&
+      session.silver !== (value as { characterSilver: number }).characterSilver
+    ) {
+      session.silver = (value as { characterSilver: number }).characterSilver;
+      session.stateRevision += 1;
+      session.dirty = true;
+    }
   }
 
   private guard(userId: string): GuildChatGuard {
