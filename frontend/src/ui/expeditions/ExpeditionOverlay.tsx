@@ -114,10 +114,34 @@ export function ExpeditionOverlay(): React.JSX.Element {
     <>
       <button
         type="button"
-        className="retro-button fixed right-4 top-20 z-40 border-amber-300/70 bg-slate-950/90 px-4 py-2 text-amber-100 shadow-xl"
+        className="group flex w-full items-center justify-between gap-3 rounded-lg border border-amber-300/20 bg-gradient-to-r from-amber-300/[0.08] via-amber-200/[0.04] to-transparent px-3 py-2.5 text-left transition hover:border-amber-300/35 hover:from-amber-300/[0.14] hover:via-amber-200/[0.07]"
         onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
       >
-        Wyprawa{run?.status === 'ACTIVE' ? ' • aktywna' : ''}
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-amber-300/25 bg-slate-950/55 text-amber-200 shadow-inner shadow-amber-300/5 transition group-hover:text-amber-100">
+            <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" />
+              <path d="m15.7 8.3-2.2 5.2-5.2 2.2 2.2-5.2 5.2-2.2Z" />
+              <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+            </svg>
+          </span>
+          <span className="min-w-0">
+            <span className="block font-display text-sm text-amber-100">Wyprawy</span>
+            <span className="block truncate text-[9px] uppercase tracking-[0.13em] text-slate-500">
+              {run
+                ? `${run.definition.name} · ${run.currentNode.title}`
+                : 'Przygotowanie drużyny 1–10'}
+            </span>
+          </span>
+        </span>
+        <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] ${run?.status === 'ACTIVE'
+          ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200'
+          : run?.status === 'PREPARING'
+            ? 'border-amber-300/30 bg-amber-300/10 text-amber-200'
+            : 'border-white/10 bg-white/5 text-slate-400'}`}>
+          {run?.status === 'ACTIVE' ? 'Aktywna' : run?.status === 'PREPARING' ? 'Lobby' : 'Otwórz'}
+        </span>
       </button>
 
       {open ? (
@@ -241,7 +265,7 @@ export function ExpeditionOverlay(): React.JSX.Element {
                     Kup ubezpieczenie za {risk.insuranceCostSilver} srebra
                   </label>
                   <label className="mt-2 flex items-start gap-2 text-amber-100">
-                    <input type="checkbox" checked={riskAccepted} onChange={(event) => setRiskAccepted(event.target.checked)} />
+                    <input type="checkbox" checked={riskAccepted} onChange={(event) => setRiskAccepted(event.checked)} />
                     Akceptuję jawny profil ryzyka i blokadę składu, ról, formacji, loadoutu, trudności i ubezpieczenia po utworzeniu lobby.
                   </label>
                 </div>
