@@ -23,6 +23,7 @@ import { LocalizationService } from '../../i18n/localization.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
+import { isPrismaDatabaseRuleError } from './item-database-error.js';
 import { ItemService } from './item.service.js';
 
 const inventoryEquipSchema = inventoryItemSchema
@@ -161,6 +162,12 @@ export class ItemGateway {
     const locale = client.data.locale ?? 'en';
     if (error instanceof GameError) return { code: error.code, message: this.localization.translate(error.messageKey, locale), details: error.details };
     if (error instanceof ZodError) return { code: GAME_ERROR_CODES.INVALID_PAYLOAD, message: this.localization.translate('errors.payload.invalid', locale), details: { issues: error.issues } };
+    if (isPrismaDatabaseRuleError(error, 'P0001', 'EXPEDITION_LOADOUT_LOCKED')) {
+      return {
+        code: GAME_ERROR_CODES.ITEM_LOADOUT_LOCKED,
+        message: this.localization.translate('errors.items.loadoutLocked', locale),
+      };
+    }
     if (this.isUniqueOperationError(error)) return { code: GAME_ERROR_CODES.INVALID_PAYLOAD, message: this.localization.translate('errors.payload.invalid', locale) };
     this.logger.error('Unhandled item gateway error.', error instanceof Error ? error.stack : undefined);
     return { code: GAME_ERROR_CODES.INTERNAL_ERROR, message: this.localization.translate('errors.internal', locale) };

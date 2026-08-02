@@ -23,6 +23,7 @@ export const englishMessages = {
   'errors.items.notSellable': 'This item cannot be sold.',
   'errors.items.equipped': 'Unequip this item first.',
   'errors.items.levelRequired': 'Your character level is too low to equip this item.',
+  'errors.items.loadoutLocked': 'Equipment cannot be changed while an expedition is being prepared or is active.',
   'errors.items.effectNotNeeded': 'This consumable would not restore anything right now.',
   'errors.items.merchantUnavailable': 'Move closer to a merchant to trade.',
   'errors.npcs.notAvailable': 'Move closer to the NPC to talk.',
