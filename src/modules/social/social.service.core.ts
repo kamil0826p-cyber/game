@@ -45,7 +45,10 @@ import {
   rewardConcentration,
   updateFinderReadiness,
 } from './social.engine.js';
-import { GuildPermissionService, type GuildPermissionActor } from '../guilds/guild-permission.service.js';
+import {
+  GuildPermissionService,
+  type GuildPermissionActor,
+} from '../guilds/guild-permission.service.js';
 import {
   emptyGuildSocialState,
   emptySocialRealmState,
@@ -69,7 +72,8 @@ import type {
   SocialRealmState,
 } from './social.types.js';
 
-const socialJson = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
+const socialJson = (value: unknown): Prisma.InputJsonValue =>
+  value as Prisma.InputJsonValue;
 const operationPattern = /^[A-Za-z0-9:_-]{1,128}$/;
 const ACTIVE_LISTING_STATUSES = new Set(['OPEN', 'LOBBY', 'FROZEN', 'STARTED']);
 const BANK_WITHDRAW_DAILY_LIMIT: Record<GuildRole, number> = {
@@ -127,8 +131,6 @@ const PROJECT_CATALOG = {
 
 type Transaction = Prisma.TransactionClient;
 
-
-
 export abstract class SocialServiceCore {
   constructor(
     protected readonly prisma: PrismaService,
@@ -144,38 +146,55 @@ export abstract class SocialServiceCore {
     operationId: string,
     kind: string,
     request: unknown,
-    mutate: (state: SocialRealmState, now: string, tx: Transaction) => TResult | Promise<TResult>,
+    mutate: (
+      state: SocialRealmState,
+      now: string,
+      tx: Transaction,
+    ) => TResult | Promise<TResult>,
   ): Promise<TResult> {
     this.assertOperationId(operationId);
     const requestHash = this.hash(request);
-    return this.prisma.$transaction(async (tx) => {
-      await tx.socialRealmState.upsert({
-        where: { realmId: session.realmId },
-        create: { realmId: session.realmId, state: socialJson(emptySocialRealmState()) },
-        update: {},
-      });
-      await tx.$queryRaw(Prisma.sql`
-        SELECT "realmId" FROM "SocialRealmState"
-        WHERE "realmId" = ${session.realmId}::uuid FOR UPDATE
-      `);
-      const record = await tx.socialRealmState.findUniqueOrThrow({ where: { realmId: session.realmId } });
-      const state = parseSocialRealmState(record.state);
-      const operationKey = `${session.characterId}:${operationId}`;
-      const existing = state.operations[operationKey];
-      if (existing) {
-        this.assertReplay(existing, kind, requestHash);
-        return existing.result as TResult;
-      }
-      const now = new Date().toISOString();
-      const result = await mutate(state, now, tx);
-      state.operations[operationKey] = { kind, requestHash, result, completedAt: now };
-      this.trimOperations(state.operations);
-      await tx.socialRealmState.update({
-        where: { realmId: session.realmId },
-        data: { state: socialJson(state), revision: { increment: 1 } },
-      });
-      return result;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.socialRealmState.upsert({
+          where: { realmId: session.realmId },
+          create: {
+            realmId: session.realmId,
+            state: socialJson(emptySocialRealmState()),
+          },
+          update: {},
+        });
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "realmId" FROM "SocialRealmState"
+          WHERE "realmId" = ${session.realmId}::uuid FOR UPDATE
+        `);
+        const record = await tx.socialRealmState.findUniqueOrThrow({
+          where: { realmId: session.realmId },
+        });
+        const state = parseSocialRealmState(record.state);
+        const operationKey = `${session.characterId}:${operationId}`;
+        const existing = state.operations[operationKey];
+        if (existing) {
+          this.assertReplay(existing, kind, requestHash);
+          return existing.result as TResult;
+        }
+        const now = new Date().toISOString();
+        const result = await mutate(state, now, tx);
+        state.operations[operationKey] = {
+          kind,
+          requestHash,
+          result,
+          completedAt: now,
+        };
+        this.trimOperations(state.operations);
+        await tx.socialRealmState.update({
+          where: { realmId: session.realmId },
+          data: { state: socialJson(state), revision: { increment: 1 } },
+        });
+        return result;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   protected async mutateGuild<TResult>(
@@ -184,48 +203,65 @@ export abstract class SocialServiceCore {
     kind: string,
     request: unknown,
     requiredPermission: GuildSocialPermission | undefined,
-    mutate: (state: GuildSocialState, now: string, tx: Transaction) => TResult | Promise<TResult>,
+    mutate: (
+      state: GuildSocialState,
+      now: string,
+      tx: Transaction,
+    ) => TResult | Promise<TResult>,
   ): Promise<TResult> {
     this.assertOperationId(operationId);
     const requestHash = this.hash(request);
-    return this.prisma.$transaction(async (tx) => {
-      await this.lockGuild(tx, actor.guildId);
-      const currentActor = await this.currentGuildActor(tx, actor);
-      if (requiredPermission) {
-        await this.permissions.requireForRole(
-          currentActor.guildId,
-          currentActor.role,
-          requiredPermission,
-          tx,
-        );
-      }
-      await tx.guildSocialState.upsert({
-        where: { guildId: actor.guildId },
-        create: { guildId: actor.guildId, state: socialJson(emptyGuildSocialState()) },
-        update: {},
-      });
-      await tx.$queryRaw(Prisma.sql`
-        SELECT "guildId" FROM "GuildSocialState"
-        WHERE "guildId" = ${actor.guildId}::uuid FOR UPDATE
-      `);
-      const record = await tx.guildSocialState.findUniqueOrThrow({ where: { guildId: actor.guildId } });
-      const state = parseGuildSocialState(record.state);
-      const operationKey = `${actor.characterId}:${operationId}`;
-      const existing = state.operations[operationKey];
-      if (existing) {
-        this.assertReplay(existing, kind, requestHash);
-        return existing.result as TResult;
-      }
-      const now = new Date().toISOString();
-      const result = await mutate(state, now, tx);
-      state.operations[operationKey] = { kind, requestHash, result, completedAt: now };
-      this.trimOperations(state.operations);
-      await tx.guildSocialState.update({
-        where: { guildId: actor.guildId },
-        data: { state: socialJson(state), revision: { increment: 1 } },
-      });
-      return result;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return this.prisma.$transaction(
+      async (tx) => {
+        await this.lockGuild(tx, actor.guildId);
+        const currentActor = await this.currentGuildActor(tx, actor);
+        if (requiredPermission) {
+          await this.permissions.requireForRole(
+            currentActor.guildId,
+            currentActor.role,
+            requiredPermission,
+            tx,
+          );
+        }
+        await tx.guildSocialState.upsert({
+          where: { guildId: actor.guildId },
+          create: {
+            guildId: actor.guildId,
+            state: socialJson(emptyGuildSocialState()),
+          },
+          update: {},
+        });
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "guildId" FROM "GuildSocialState"
+          WHERE "guildId" = ${actor.guildId}::uuid FOR UPDATE
+        `);
+        const record = await tx.guildSocialState.findUniqueOrThrow({
+          where: { guildId: actor.guildId },
+        });
+        const state = parseGuildSocialState(record.state);
+        const operationKey = `${actor.characterId}:${operationId}`;
+        const existing = state.operations[operationKey];
+        if (existing) {
+          this.assertReplay(existing, kind, requestHash);
+          return existing.result as TResult;
+        }
+        const now = new Date().toISOString();
+        const result = await mutate(state, now, tx);
+        state.operations[operationKey] = {
+          kind,
+          requestHash,
+          result,
+          completedAt: now,
+        };
+        this.trimOperations(state.operations);
+        await tx.guildSocialState.update({
+          where: { guildId: actor.guildId },
+          data: { state: socialJson(state), revision: { increment: 1 } },
+        });
+        return result;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   protected async requirementsMet(
@@ -238,7 +274,10 @@ export abstract class SocialServiceCore {
     const itemKeys = requirements.requiredItemKeys ?? [];
     if (itemKeys.length > 0) {
       const items = await this.prisma.inventoryItem.findMany({
-        where: { characterId, itemDefinition: { key: { in: itemKeys } } },
+        where: {
+          characterId,
+          itemDefinition: { key: { in: itemKeys } },
+        },
         select: { itemDefinition: { select: { key: true } } },
       });
       const owned = new Set(items.map((item) => item.itemDefinition.key));
@@ -250,17 +289,22 @@ export abstract class SocialServiceCore {
         select: { progressionData: true },
       });
       const raw = character?.progressionData;
-      const progression = raw && typeof raw === 'object' && !Array.isArray(raw)
-        ? raw as Record<string, unknown>
-        : {};
+      const progression =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? (raw as Record<string, unknown>)
+          : {};
       const narrative = progression.narrative;
-      const flags = narrative && typeof narrative === 'object' && !Array.isArray(narrative)
-        ? (narrative as Record<string, unknown>).flags
-        : undefined;
-      const values = flags && typeof flags === 'object' && !Array.isArray(flags)
-        ? flags as Record<string, unknown>
-        : {};
-      if (requirements.requiredFlagKeys!.some((key) => values[key] !== true)) return false;
+      const flags =
+        narrative && typeof narrative === 'object' && !Array.isArray(narrative)
+          ? (narrative as Record<string, unknown>).flags
+          : undefined;
+      const values =
+        flags && typeof flags === 'object' && !Array.isArray(flags)
+          ? (flags as Record<string, unknown>)
+          : {};
+      if (requirements.requiredFlagKeys!.some((key) => values[key] !== true)) {
+        return false;
+      }
     }
     return true;
   }
@@ -279,7 +323,9 @@ export abstract class SocialServiceCore {
     const mentorship = state.mentorships[mentorshipId];
     if (
       !mentorship ||
-      ![mentorship.mentorCharacterId, mentorship.learnerCharacterId].includes(actorCharacterId)
+      ![mentorship.mentorCharacterId, mentorship.learnerCharacterId].includes(
+        actorCharacterId,
+      )
     ) {
       throw this.socialError('SOCIAL_MENTOR_INVALID');
     }
@@ -303,4 +349,70 @@ export abstract class SocialServiceCore {
     };
   }
 
+  protected async currentGuildActor(
+    tx: Transaction,
+    actor: GuildPermissionActor,
+  ): Promise<GuildPermissionActor> {
+    const membership = await tx.guildMember.findUnique({
+      where: { characterId: actor.characterId },
+    });
+    if (!membership || membership.guildId !== actor.guildId) {
+      throw new GameError(GAME_ERROR_CODES.GUILD_REQUIRED, 'errors.guild.required');
+    }
+    return {
+      guildId: membership.guildId,
+      characterId: actor.characterId,
+      role: membership.role,
+    };
+  }
+
+  protected async lockGuild(tx: Transaction, guildId: string): Promise<void> {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "Guild" WHERE "id" = ${guildId}::uuid FOR UPDATE
+    `);
+    if (rows.length !== 1) throw this.socialError('SOCIAL_FORBIDDEN');
+  }
+
+  protected assertReplay(
+    existing: ProcessedSocialOperation,
+    kind: string,
+    requestHash: string,
+  ): void {
+    if (existing.kind !== kind || existing.requestHash !== requestHash) {
+      throw this.socialError('SOCIAL_OPERATION_COLLISION');
+    }
+  }
+
+  protected trimOperations(
+    operations: Record<string, ProcessedSocialOperation>,
+  ): void {
+    const entries = Object.entries(operations);
+    if (entries.length <= 2_000) return;
+    entries
+      .sort((left, right) =>
+        left[1].completedAt.localeCompare(right[1].completedAt),
+      )
+      .slice(0, entries.length - 2_000)
+      .forEach(([key]) => delete operations[key]);
+  }
+
+  protected assertOperationId(operationId: string): void {
+    if (!operationPattern.test(operationId)) {
+      throw this.socialError('SOCIAL_OPERATION_INVALID');
+    }
+  }
+
+  protected hash(value: unknown): string {
+    return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  }
+
+  protected socialError(reason: string): GameError {
+    return new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', {
+      reason,
+    });
+  }
+
+  protected async dashboard(_session: PlayerSession): Promise<SocialDashboardView> {
+    throw this.socialError('SOCIAL_DASHBOARD_NOT_IMPLEMENTED');
+  }
 }
