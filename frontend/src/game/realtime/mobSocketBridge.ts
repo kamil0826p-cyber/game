@@ -62,6 +62,7 @@ export function installMobSocketBridge(client: GameSocketClient): void {
   const pveCombatIds = new Set<string>();
   const combatTurns = new Map<string, number>();
   let boundSocket: GameSocket | undefined;
+  let pendingMobCombat: Promise<CombatSnapshot> | undefined;
 
   const withAck = <T>(emit: (ack: (response: SocketAck<T>) => void) => void): Promise<T> =>
     new Promise<SocketAck<T>>((resolve, reject) => {
@@ -138,26 +139,36 @@ export function installMobSocketBridge(client: GameSocketClient): void {
   };
   bridge.disconnect = () => {
     boundSocket = undefined;
+    pendingMobCombat = undefined;
     pveCombatIds.clear();
     combatTurns.clear();
     mobStore.clear();
     originalDisconnect();
   };
 
-  client.requestMobCombat = async (mobId: string): Promise<CombatSnapshot> => {
-    const socket = bridge.socket;
-    if (!socket?.connected) throw new Error('The game socket is not connected.');
-    const combat = rememberCombat(
-      await withAck<CombatSnapshot>((ack) =>
-        socket.emit(
-          'pve:request',
-          { requestId: createRequestId('pve-request'), mobId },
-          ack,
+  client.requestMobCombat = (mobId: string): Promise<CombatSnapshot> => {
+    if (pendingMobCombat) return pendingMobCombat;
+    const request = (async (): Promise<CombatSnapshot> => {
+      const socket = bridge.socket;
+      if (!socket?.connected) throw new Error('The game socket is not connected.');
+      const combat = rememberCombat(
+        await withAck<CombatSnapshot>((ack) =>
+          socket.emit(
+            'pve:request',
+            { requestId: createRequestId('pve-request'), mobId },
+            ack,
+          ),
         ),
-      ),
-    );
-    gameStore.updateCombatState(combat);
-    return combat;
+      );
+      gameStore.updateCombatState(combat);
+      return combat;
+    })();
+    let tracked: Promise<CombatSnapshot>;
+    tracked = request.finally(() => {
+      if (pendingMobCombat === tracked) pendingMobCombat = undefined;
+    });
+    pendingMobCombat = tracked;
+    return tracked;
   };
 
   client.getActiveCombat = async (): Promise<CombatSnapshot | null> => {
