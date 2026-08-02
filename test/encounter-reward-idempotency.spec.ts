@@ -28,6 +28,7 @@ const settlement = {
 const mob = {
   id: 'mob-id',
   definitionKey: 'rabbit-spawn',
+  encounterKey: 'brood-hunt',
   name: 'Rabbit Spawn',
   rank: 'SPAWN',
   mapId: 'map-a',

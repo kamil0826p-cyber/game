@@ -43,6 +43,7 @@ interface MobSeedDefinition {
   mapKey: string;
   level: number;
   outfitKey: string;
+  encounterKey: string;
   spawnPoints: Array<{ x: number; y: number }>;
   respawnMs: number;
   stats: {
@@ -134,6 +135,7 @@ const mobDefinitions: MobSeedDefinition[] = [
     mapKey: 'greenfields',
     level: 2,
     outfitKey: 'mob-spawn-rabbit',
+    encounterKey: 'brood-hunt',
     spawnPoints: [
       { x: 9, y: 8 },
       { x: 12, y: 10 },
@@ -168,6 +170,7 @@ const mobDefinitions: MobSeedDefinition[] = [
     mapKey: 'crystal-cave',
     level: 7,
     outfitKey: 'mob-executioner-scorpion',
+    encounterKey: 'execution-circle',
     spawnPoints: [
       { x: 8, y: 7 },
       { x: 13, y: 11 },
@@ -487,6 +490,7 @@ async function main(): Promise<void> {
           create: {
             mapId,
             key,
+            encounterKey: definition.encounterKey,
             name: definition.name,
             x: position.x,
             y: position.y,
@@ -497,6 +501,7 @@ async function main(): Promise<void> {
             respawnMs: definition.respawnMs,
           },
           update: {
+            encounterKey: definition.encounterKey,
             name: definition.name,
             x: position.x,
             y: position.y,

@@ -16,6 +16,7 @@ export interface NpcDefinitionContract extends WorldActorPosition {
 
 export interface MobDefinitionContract extends WorldActorPosition {
   key: string;
+  encounterKey: string;
   name: string;
   level: number;
   outfitKey: string;

@@ -9,7 +9,8 @@ import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { buildClaimedEncounter } from './encounters/encounter.actor-factory.js';
-import { ENCOUNTER_CATALOG, encounterForRank } from './encounters/encounter.catalog.js';
+import { ENCOUNTER_CATALOG } from './encounters/encounter.catalog.js';
+import { encounterForMob } from './encounters/encounter.registry.js';
 import {
   encounterRewardOperationId,
   evaluateEncounterEligibility,
@@ -47,6 +48,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     const records = await this.prisma.mobDefinition.findMany({ orderBy: [{ mapId: 'asc' }, { key: 'asc' }] });
     for (const record of records) {
       const mob = this.toRuntimeMob(record);
+      encounterForMob(mob.encounterKey, mob.rank);
       const map = await this.maps.getMap(mob.mapId);
       if (!this.maps.isInside(map, mob.x, mob.y) || this.maps.isCollision(map, mob.x, mob.y)) {
         throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason: `Mob ${record.key} is placed on an invalid tile.` });
@@ -79,7 +81,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     const mob = this.requireMob(mobId);
     if (mob.state !== 'ALIVE') throw new GameError(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
     if (!isActorWithinInteractionRange(session, mob)) throw new GameError(GAME_ERROR_CODES.COMBAT_TOO_FAR, 'errors.combat.tooFar');
-    const definition = encounterForRank(mob.rank);
+    const definition = encounterForMob(mob.encounterKey, mob.rank);
     const encounter = scaleEncounter(definition, partySize);
     mob.state = 'IN_COMBAT';
     mob.engagedCharacterId = session.characterId;
@@ -267,7 +269,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
   }
 
   private toRuntimeMob(record: {
-    id: string; key: string; name: string; mapId: string; x: number; y: number;
+    id: string; key: string; encounterKey: string; name: string; mapId: string; x: number; y: number;
     level: number; outfitKey: string; stats: unknown; lootTable: unknown; respawnMs: number;
   }): RuntimeMob {
     const stats = record.stats as Partial<RuntimeMob['stats']> & { rank?: unknown; experience?: unknown; characterClass?: unknown; renderScale?: unknown };
@@ -276,6 +278,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     const renderScale = stats.renderScale;
     const loot = Array.isArray(record.lootTable) ? record.lootTable : [];
     if (
+      typeof record.encounterKey !== 'string' || record.encounterKey.length === 0 ||
       typeof rank !== 'string' || !MOB_RANKS.includes(rank as MobRank) ||
       !['MAGE', 'WARRIOR', 'ARCHER'].includes(String(characterClass)) ||
       typeof renderScale !== 'number' || !Number.isFinite(renderScale) ||
@@ -283,10 +286,11 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
       !Number.isInteger(stats.experience) || Number(stats.experience) < 0 ||
       !this.validStats(stats) || !loot.every((entry) => this.validLootEntry(entry))
     ) {
-      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason: `Mob definition ${record.key} has malformed stats, scale or loot.` });
+      throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason: `Mob definition ${record.key} has malformed encounter, stats, scale or loot.` });
     }
     return {
-      id: record.id, definitionKey: record.key, name: record.name, rank: rank as MobRank,
+      id: record.id, definitionKey: record.key, encounterKey: record.encounterKey,
+      name: record.name, rank: rank as MobRank,
       mapId: record.mapId, x: record.x, y: record.y, level: record.level,
       characterClass: characterClass as RuntimeMob['characterClass'], outfitKey: record.outfitKey,
       renderScale, respawnMs: Math.max(1_000, record.respawnMs), experience: Number(stats.experience),
