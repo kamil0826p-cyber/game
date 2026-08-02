@@ -221,8 +221,10 @@ export function validateExpeditionDefinition(
       if (node) queue.push(...node.outgoing.map((edge) => edge.toNodeKey));
     }
     for (const node of definition.nodes) {
-      if (!reachable.has(node.key)) addError(`node ${node.key} is unreachable from the start.`);
-      if (reachable.has(node.key) && !nodeCanReachExtraction(node.key, nodeByKey)) addError(`node ${node.key} is trapped in a route without extraction.`);
+      const isReachable = reachable.has(node.key);
+      const reachesExtraction = nodeCanReachExtraction(node.key, nodeByKey);
+      if (!isReachable) addError(`node ${node.key} is unreachable from the start.`);
+      if (!reachesExtraction) addError(`node ${node.key} is trapped in a route without extraction.`);
     }
   }
 
