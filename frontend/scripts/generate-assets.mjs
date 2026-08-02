@@ -6,12 +6,44 @@ const assetsRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'publi
 const tilesetPath = resolve(assetsRoot, 'tiles', 'tiled-world.svg');
 
 const tileset = `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="32" viewBox="0 0 192 32" shape-rendering="crispEdges">
-  <rect width="32" height="32" fill="#3f7a43"/><path d="M0 8h32M0 24h32M8 0v32M24 0v32" stroke="#4b8750" opacity=".35"/>
-  <rect x="32" width="32" height="32" fill="#b9955e"/><path d="M32 7h32M32 23h32" stroke="#d1b27a" opacity=".6"/>
-  <rect x="64" width="32" height="32" fill="none"/><ellipse cx="80" cy="29" rx="8" ry="3" fill="#152419" opacity=".38"/><path d="M75 32V0h10v32z" fill="#6b4326"/><path d="M78 32V0h3v32z" fill="#93603a" opacity=".88"/><path d="M84 15l5-5v6l-5 5zM76 11l-5-5v6l5 5z" fill="#6b4326"/>
-  <rect x="96" width="32" height="32" fill="none"/><circle cx="112" cy="15" r="16" fill="#1f512c"/><circle cx="102" cy="14" r="10" fill="#347842"/><circle cx="121" cy="12" r="11" fill="#2b6a39"/><circle cx="112" cy="23" r="12" fill="#285f34"/>
-  <rect x="128" width="32" height="32" fill="#29263b"/><path d="M128 8h32M128 24h32" stroke="#37334d" opacity=".6"/>
-  <rect x="160" width="32" height="32" fill="none"/><path d="M164 27l5-17 7-5 8 8 5 14z" fill="#5f6689"/><path d="M176 5l3 11 8-3" fill="#9fa9e6" opacity=".75"/>
+  <g id="grass">
+    <rect width="32" height="32" fill="#4b842f"/>
+    <path d="M0 0h9v4H4v4H0zm18 0h14v7h-5v4h-9zM7 13h9v5h5v7H12v4H3v-8h4zM24 18h8v14H20v-6h4z" fill="#548f35"/>
+    <path d="M0 9h5v5H2v6H0zm12-7h4v6h-3v3H9V7h3zm10 10h5v3h-2v5h-4v-4h-3v-3h4zM6 27h5v5H4v-3h2z" fill="#3f7428"/>
+    <path d="M4 5h2v1H4zm12 6h1v3h-1zm13 10h2v1h-2zM9 20h1v2H9zm15 7h2v2h-2z" fill="#75a94a"/>
+  </g>
+
+  <g id="road" transform="translate(32)">
+    <rect width="32" height="32" fill="#a89b69"/>
+    <path d="M0 0h11v5H7v4H0zm20 0h12v8h-5v3h-8V6h-4V2h5zM4 14h10v4h6v8h-7v6H2v-9h3v-5H0v-4zm20 5h8v13H18v-5h6z" fill="#b5a875"/>
+    <path d="M0 8h5v4H2v3H0zm13-3h5v4h-3v4h-4V8h2zm9 8h6v3h-2v5h-5v-4h-3v-3h4zM7 26h6v4H9v2H4v-4h3z" fill="#918457"/>
+    <path d="M4 4h3v2H4zm10 16h4v2h-4zm11 6h3v2h-3zM7 11h2v2H7zm14-8h2v2h-2z" fill="#c9bc86"/>
+  </g>
+
+  <g id="pine-trunk" transform="translate(64)">
+    <rect width="32" height="32" fill="none"/>
+    <path d="M7 28h18v3H4v-2h3z" fill="#183c25" opacity=".5"/>
+    <path d="M12 32v-7h-2v-6h2V8h-1V1h4v7h3v8h-2v7h2v7h5v2z" fill="#3b261a"/>
+    <path d="M14 30V18h1V7h2v11h-1v12h4v2h-9v-2z" fill="#6f4528"/>
+    <path d="M11 14H7v-3H4V7h4v2h4zm6 7h4v-3h4v-4h3v4h-4v3h-5z" fill="#4a2d1d"/>
+    <path d="M15 10h2v4h-2zm0 11h2v4h-2z" fill="#a56d40"/>
+  </g>
+
+  <g id="pine-canopy" transform="translate(96)">
+    <rect width="32" height="32" fill="none"/>
+    <path d="M14 0h4v3h3v3h3v4h3v4h3v6h2v6h-5v3h-6v3H11v-3H5v-3H0v-6h2v-6h3v-4h3V6h3V3h3z" fill="#163f27"/>
+    <path d="M15 3h3v4h3v4h3v4h3v5h3v3h-6v3H8v-3H2v-3h3v-5h3v-4h3V7h4z" fill="#2f6f39"/>
+    <path d="M15 7h3v4h3v4h3v4h-5v3h-7v-3H7v-4h3v-4h2V7z" fill="#4a8a48"/>
+    <path d="M5 24h6v3h10v-3h6v3h-4v3H9v-3H5z" fill="#123820"/>
+    <path d="M11 10h3v2h-3zm8 4h3v2h-3zM8 18h3v2H8zm13 4h3v2h-3z" fill="#79aa55"/>
+  </g>
+
+  <rect x="128" width="32" height="32" fill="#29263b"/>
+  <path d="M128 8h32M128 24h32" stroke="#37334d" opacity=".6"/>
+
+  <rect x="160" width="32" height="32" fill="none"/>
+  <path d="M164 27l5-17 7-5 8 8 5 14z" fill="#5f6689"/>
+  <path d="M176 5l3 11 8-3" fill="#9fa9e6" opacity=".75"/>
 </svg>
 `;
 
