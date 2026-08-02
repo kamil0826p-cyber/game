@@ -1,0 +1,28 @@
+model NarrativeRegionState {
+  realmId   String   @db.Uuid
+  regionKey String   @db.VarChar(96)
+  revision  Int      @default(0)
+  state     Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([realmId, regionKey])
+  @@index([realmId, updatedAt])
+}
+
+model NarrativeOperation {
+  scopeKey         String   @db.VarChar(180)
+  operationId      String   @db.VarChar(128)
+  eventType        String   @db.VarChar(64)
+  reason           String   @db.VarChar(160)
+  characterId      String?  @db.Uuid
+  characterQuestId String?  @db.Uuid
+  payload          Json     @default("{}") @db.JsonB
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@id([scopeKey, operationId])
+  @@index([characterId, createdAt])
+  @@index([characterQuestId, createdAt])
+  @@index([eventType, createdAt])
+}

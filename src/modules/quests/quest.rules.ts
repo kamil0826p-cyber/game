@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import type { SupportedLocale } from '../../i18n/localization.service.js';
+import { parseQuestNarrativeProgress } from '../narrative/narrative.engine.js';
+import type { NarrativeDefinition, QuestNarrativeProgress } from '../narrative/narrative.types.js';
+import { parseNarrativeDefinition } from '../narrative/narrative.validator.js';
 
 const identifierSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const keySchema = z.string().trim().min(1).max(96).regex(/^[a-z0-9-]+$/);
@@ -42,6 +45,12 @@ export const questStepsSchema = z.array(z.discriminatedUnion('type', [
   }
 });
 
+const reactiveQuestContentSchema = z.object({
+  version: z.number().int().min(1).max(2_147_483_647),
+  objectives: questStepsSchema,
+  narrative: z.unknown(),
+}).strict();
+
 export const questRewardsSchema = z.object({
   experience: z.number().int().min(0).max(2_147_483_647).default(0),
   gold: z.literal(0).default(0),
@@ -52,7 +61,12 @@ export const questRewardsSchema = z.object({
 
 export type QuestStepDefinition = z.infer<typeof questStepsSchema>[number];
 export type QuestRewards = z.infer<typeof questRewardsSchema>;
-export interface QuestProgressState { counters: Record<string, number>; stage: number; }
+export interface QuestProgressState {
+  counters: Record<string, number>;
+  stage: number;
+  narrative?: QuestNarrativeProgress;
+}
+export interface QuestNarrativeContent { version: number; objectives: QuestStepDefinition[]; narrative: NarrativeDefinition; }
 export interface EvaluatedQuestStep {
   id: string;
   type: QuestStepDefinition['type'];
@@ -81,14 +95,26 @@ const rawStepCurrent = (
   ? inventoryCounts.get(step.itemKey) ?? 0
   : progress.counters[step.id] ?? 0;
 
+const preserveNarrative = (progress: QuestProgressState): Pick<QuestProgressState, 'narrative'> =>
+  progress.narrative ? { narrative: progress.narrative } : {};
+
 export const emptyQuestProgress = (steps: readonly QuestStepDefinition[] = []): QuestProgressState => ({
   counters: {},
   stage: questStages(steps)[0] ?? 0,
 });
 
+export function parseQuestNarrativeContent(value: unknown): QuestNarrativeContent | undefined {
+  const parsed = reactiveQuestContentSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  const narrative = parseNarrativeDefinition(parsed.data.narrative);
+  if (!narrative || narrative.version !== parsed.data.version) return undefined;
+  return { version: parsed.data.version, objectives: parsed.data.objectives, narrative };
+}
+
 export function parseQuestSteps(value: unknown): QuestStepDefinition[] | undefined {
-  const parsed = questStepsSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  const direct = questStepsSchema.safeParse(value);
+  if (direct.success) return direct.data;
+  return parseQuestNarrativeContent(value)?.objectives;
 }
 
 export function parseQuestRewards(value: unknown): QuestRewards | undefined {
@@ -96,9 +122,21 @@ export function parseQuestRewards(value: unknown): QuestRewards | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+export function resolveQuestRewards(
+  fallback: QuestRewards,
+  progress: QuestProgressState,
+): QuestRewards | undefined {
+  const snapshot = progress.narrative?.definitionSnapshot;
+  const outcome = snapshot?.outcomes.find(
+    (candidate) => candidate.key === progress.narrative?.outcomeKey,
+  );
+  if (!outcome?.rewardProfileKey) return fallback;
+  return snapshot?.rewardProfiles?.[outcome.rewardProfileKey];
+}
+
 export function parseQuestProgress(value: unknown): QuestProgressState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return emptyQuestProgress();
-  const source = value as { counters?: unknown; stage?: unknown };
+  const source = value as { counters?: unknown; stage?: unknown; narrative?: unknown };
   const counters: Record<string, number> = {};
   if (source.counters && typeof source.counters === 'object' && !Array.isArray(source.counters)) {
     for (const [key, counter] of Object.entries(source.counters)) {
@@ -106,7 +144,8 @@ export function parseQuestProgress(value: unknown): QuestProgressState {
     }
   }
   const stage = Number.isInteger(source.stage) && Number(source.stage) >= 0 ? Number(source.stage) : 0;
-  return { counters, stage };
+  const narrative = parseQuestNarrativeProgress(source.narrative);
+  return { counters, stage, ...(narrative ? { narrative } : {}) };
 }
 
 export function localizeQuestText(value: string | { en: string; pl: string } | undefined, locale: SupportedLocale, fallback: string): string {
@@ -130,14 +169,14 @@ export function advanceQuestProgress(
   inventoryCounts: ReadonlyMap<string, number>,
 ): QuestProgressState {
   const stages = questStages(steps);
-  if (stages.length === 0) return { counters: { ...progress.counters }, stage: 0 };
+  if (stages.length === 0) return { counters: { ...progress.counters }, stage: 0, ...preserveNarrative(progress) };
   let stage = normalizedStage(steps, progress.stage);
   while (stage <= stages[stages.length - 1]!) {
     const currentSteps = steps.filter((step) => step.stage === stage);
     if (!currentSteps.every((step) => rawStepCurrent(step, progress, inventoryCounts) >= step.quantity)) break;
     stage = stages.find((candidate) => candidate > stage) ?? stages[stages.length - 1]! + 1;
   }
-  return { counters: { ...progress.counters }, stage };
+  return { counters: { ...progress.counters }, stage, ...preserveNarrative(progress) };
 }
 
 export function reconcileQuestProgress(
@@ -155,7 +194,7 @@ export function reconcileQuestProgress(
     }
     for (const [itemKey, requiredQuantity] of cumulativeRequirements) {
       if ((inventoryCounts.get(itemKey) ?? 0) < requiredQuantity) {
-        return { counters: { ...advanced.counters }, stage };
+        return { counters: { ...advanced.counters }, stage, ...preserveNarrative(advanced) };
       }
     }
   }
@@ -216,10 +255,10 @@ export function incrementObjectiveProgress(
 ): QuestProgressState {
   const counters = { ...progress.counters };
   const activeStage = getActiveQuestStage(steps, progress);
-  if (activeStage === undefined) return { counters, stage: progress.stage };
+  if (activeStage === undefined) return { counters, stage: progress.stage, ...preserveNarrative(progress) };
   for (const step of steps) {
     if (step.stage !== activeStage || step.type === 'COLLECT_ITEM' || !predicate(step)) continue;
     counters[step.id] = Math.min(step.quantity, (counters[step.id] ?? 0) + 1);
   }
-  return { counters, stage: progress.stage };
+  return { counters, stage: progress.stage, ...preserveNarrative(progress) };
 }
