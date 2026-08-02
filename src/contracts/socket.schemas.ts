@@ -30,6 +30,7 @@ const dialogueIdentifier = z
   .max(64)
   .regex(/^[A-Za-z0-9_-]+$/);
 const silver = z.number().int().min(0).max(2_147_483_647);
+const guildTreasuryAmount = z.number().int().min(1).max(2_000_000_000);
 const skillKey = z
   .string()
   .trim()
@@ -203,6 +204,13 @@ export const guildTransferLeadershipSchema = z
   .object({ requestId, targetCharacterId: characterId })
   .strict();
 export const guildDisbandSchema = z.object({ requestId }).strict();
+export const guildDepositSchema = z
+  .object({ requestId, amount: guildTreasuryAmount })
+  .strict();
+export const guildWithdrawSchema = z
+  .object({ requestId, amount: guildTreasuryAmount })
+  .strict();
+export const guildBuyExperienceUpgradeSchema = z.object({ requestId }).strict();
 
 export type CreateCharacterPayload = z.infer<typeof createCharacterSchema>;
 export type SelectCharacterPayload = z.infer<typeof selectCharacterSchema>;
@@ -252,3 +260,8 @@ export type GuildTransferLeadershipPayload = z.infer<
   typeof guildTransferLeadershipSchema
 >;
 export type GuildDisbandPayload = z.infer<typeof guildDisbandSchema>;
+export type GuildDepositPayload = z.infer<typeof guildDepositSchema>;
+export type GuildWithdrawPayload = z.infer<typeof guildWithdrawSchema>;
+export type GuildBuyExperienceUpgradePayload = z.infer<
+  typeof guildBuyExperienceUpgradeSchema
+>;
