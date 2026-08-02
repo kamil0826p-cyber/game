@@ -6,12 +6,13 @@ import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { useGameState } from '../../game/state/gameStore';
 import { useGroupState } from '../../game/state/groupStore';
 import { useI18n } from '../../i18n/I18nProvider';
+import { ExpeditionOverlay } from '../expeditions/ExpeditionOverlay';
 
 function formatSeconds(milliseconds: number): string {
   return `${Math.max(0, Math.ceil(milliseconds / 1_000))}s`;
 }
 
-export function GroupPanel(): React.JSX.Element | null {
+export function GroupPanel(): React.JSX.Element {
   const connection = useGameConnection();
   const game = useGameState();
   const snapshot = useGroupState();
@@ -88,8 +89,6 @@ export function GroupPanel(): React.JSX.Element | null {
     }
   };
 
-  if (!group && invites.length === 0) return null;
-
   return (
     <section
       className="hud-panel pointer-events-auto relative z-40 w-[min(390px,calc(100vw-24px))] overflow-hidden shadow-2xl shadow-black/35"
@@ -113,14 +112,22 @@ export function GroupPanel(): React.JSX.Element | null {
             <span className="block truncate text-[9px] uppercase tracking-[0.15em] text-slate-500">
               {group
                 ? `${group.members.length} / ${group.maxMembers}`
-                : pl
-                  ? `${invites.length} ${invites.length === 1 ? 'zaproszenie' : 'zaproszenia'}`
-                  : `${invites.length} ${invites.length === 1 ? 'invitation' : 'invitations'}`}
+                : invites.length > 0
+                  ? pl
+                    ? `${invites.length} ${invites.length === 1 ? 'zaproszenie' : 'zaproszenia'}`
+                    : `${invites.length} ${invites.length === 1 ? 'invitation' : 'invitations'}`
+                  : pl
+                    ? 'Tryb solo'
+                    : 'Solo mode'}
             </span>
           </span>
         </span>
         <ChevronIcon expanded={expanded} />
       </button>
+
+      <div className="border-t border-white/5 bg-black/10 px-2 py-2">
+        <ExpeditionOverlay />
+      </div>
 
       {expanded ? (
         <div className="scrollbar-thin max-h-[min(58vh,520px)] overflow-y-auto border-t border-white/5 px-3 pb-3 pt-2 md:max-h-[calc(100vh-470px)]">
@@ -164,7 +171,13 @@ export function GroupPanel(): React.JSX.Element | null {
                 </button>
               </div>
             </>
-          ) : null}
+          ) : (
+            <p className="px-1 py-2 text-[10px] leading-relaxed text-slate-500">
+              {pl
+                ? 'Nie jesteś teraz w grupie. Wyprawę możesz przygotować solo albo po utworzeniu drużyny.'
+                : 'You are not in a group. You can prepare an expedition solo or after forming a party.'}
+            </p>
+          )}
         </div>
       ) : null}
     </section>

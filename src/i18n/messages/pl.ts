@@ -9,6 +9,7 @@ export const polishMessages = {
   'errors.character.outfitLocked': 'Ten outfit nie jest jeszcze odblokowany dla wybranej postaci.',
   'errors.character.nameTaken': 'Ta nazwa postaci jest już zajęta.',
   'errors.payload.invalid': 'Wysłane dane są nieprawidłowe.',
+  'errors.expeditions.entryRequirements': 'Co najmniej jedna postać w grupie nie spełnia wymagań wejścia. Popielna Pielgrzymka wymaga obecnie 5. poziomu każdej postaci.',
   'errors.session.notReady': 'Sesja gry nie jest jeszcze gotowa.',
   'errors.movement.tooFast': 'Ruch został odrzucony, ponieważ nie upłynął jeszcze wymagany czas między krokami.',
   'errors.movement.outOfBounds': 'Nie można wyjść poza granice mapy.',

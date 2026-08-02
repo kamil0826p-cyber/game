@@ -8,6 +8,7 @@ export const englishMessages = {
   'errors.character.outfitLocked': 'This outfit is not unlocked for the selected character.',
   'errors.character.nameTaken': 'That character name is already in use.',
   'errors.payload.invalid': 'The request payload is invalid.',
+  'errors.expeditions.entryRequirements': 'At least one party member does not meet this expedition entry requirements. The Ashen Pilgrimage currently requires level 5 for every member.',
   'errors.session.notReady': 'The game session is not ready.',
   'errors.movement.tooFast': 'Movement was rejected because the step cooldown has not elapsed.',
   'errors.movement.outOfBounds': 'Movement outside the map bounds is not allowed.',

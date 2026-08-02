@@ -6,6 +6,7 @@ import { HealthModule } from './health/health.module.js';
 import { LocalizationModule } from './i18n/localization.module.js';
 import { CharacterModule } from './modules/characters/character.module.js';
 import { CombatModule } from './modules/combat/combat.module.js';
+import { ExpeditionModule } from './modules/expeditions/expedition.module.js';
 import { GroupModule } from './modules/groups/group.module.js';
 import { GuildModule } from './modules/guilds/guild.module.js';
 import { ItemModule } from './modules/items/item.module.js';
@@ -33,6 +34,7 @@ import { WorldModule } from './modules/world/world.module.js';
     CharacterModule,
     QuestModule,
     NarrativeModule,
+    ExpeditionModule,
     MobModule,
     CombatModule,
     WorldModule,

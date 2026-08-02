@@ -4,6 +4,9 @@ import { isActorWithinInteractionRange } from '../../common/rules/actor-interact
 import type { MobRewardPayload, MobStatePayload } from '../../contracts/mob.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { CombatRuntime } from '../combat/combat.types.js';
+import { applyExpeditionEncounterVariant } from '../expeditions/expedition.encounter.js';
+import { ExpeditionService } from '../expeditions/expedition.service.js';
+import { GroupService } from '../groups/group.service.js';
 import { MapService } from '../maps/map.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
@@ -38,6 +41,8 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly maps: MapService,
     private readonly rewards: MobRewardService,
+    private readonly expeditions: ExpeditionService,
+    private readonly groups: GroupService,
     private readonly world: WorldStateService,
     private readonly publisher: WorldEventsPublisher,
   ) {}
@@ -80,7 +85,20 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     if (mob.state !== 'ALIVE') throw new GameError(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
     if (!isActorWithinInteractionRange(session, mob)) throw new GameError(GAME_ERROR_CODES.COMBAT_TOO_FAR, 'errors.combat.tooFar');
     const definition = encounterForRank(mob.rank);
-    const encounter = scaleEncounter(definition, partySize);
+    const group = this.groups.getSnapshot(session).group;
+    const partyCharacterIds = group
+      ? group.members.map((member) => member.characterId)
+      : [session.characterId];
+    const authorization = this.expeditions.authorizeEncounterClaim(
+      partyCharacterIds,
+      partySize,
+      definition.key,
+      definition.version,
+    );
+    const encounter = applyExpeditionEncounterVariant(
+      scaleEncounter(definition, partySize),
+      authorization?.variantKey,
+    );
     mob.state = 'IN_COMBAT';
     mob.engagedCharacterId = session.characterId;
     mob.respawnsAt = undefined;
@@ -102,8 +120,39 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
 
     const playerTeamId = playerActors[0]!.teamId;
     const playerWon = runtime.finishReason === 'DEFEATED' && runtime.winnerTeamId === playerTeamId;
+    const expeditionOutcome = {
+      characterIds: playerActors.flatMap((actor) => actor.characterId ? [actor.characterId] : []),
+      encounterKey: encounterState.encounter.definition.key,
+      encounterVersion: encounterState.encounter.definition.version,
+      combatId: runtime.combatId,
+      result: playerWon ? ('VICTORY' as const) : ('DEFEAT' as const),
+      contributions: playerActors.map((actor) => {
+        const contribution = encounterState.contributions.get(actor.actorId);
+        const eligibility = evaluateEncounterEligibility(
+          runtime,
+          encounterState,
+          actor.actorId,
+        );
+        return {
+          characterId: actor.characterId!,
+          eligible: eligibility.eligible,
+          eligibilityReason: eligibility.reason,
+          score: eligibility.score,
+          activeTurnRatio: eligibility.activeTurnRatio,
+          actions: contribution?.actions ?? 0,
+          timedOutTurns: contribution?.timedOutTurns ?? 0,
+          damage: contribution?.damage ?? 0,
+          healing: contribution?.healing ?? 0,
+          protection: contribution?.protection ?? 0,
+          interrupts: contribution?.interrupts ?? 0,
+          cleanses: contribution?.cleanses ?? 0,
+          mechanics: contribution?.mechanics ?? 0,
+        };
+      }),
+    };
     if (!playerWon) {
       this.releaseClaim(mob.id, runtime.initiatorActorId);
+      await this.expeditions.recordEncounterOutcome(expeditionOutcome);
       return;
     }
 
@@ -114,6 +163,8 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     mob.respawnsAt = Date.now() + mob.respawnMs;
     this.broadcastDespawn(mob.mapId, { mobId: mob.id, respawnsAt: mob.respawnsAt });
     this.scheduleRespawn(mob);
+    const expeditionHandled = await this.expeditions.recordEncounterOutcome(expeditionOutcome);
+    if (expeditionHandled) return;
 
     const onlinePlayers = playerActors.flatMap((actor) => {
       const session = this.world.getByCharacterId(actor.characterId!);
@@ -185,7 +236,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
             code: 'LEVEL_UP',
             message: session.locale === 'pl'
               ? `Awans! Twoja postać osiągnęła ${session.level} poziom.`
-              : `Level up! Your character reached level ${session.level}.`,
+              : `Level up! Your character reached ${session.level}.`,
           });
         }
         if (settlement.skippedLoot.length > 0) {
