@@ -19,6 +19,7 @@ import './combat-final-alignment.css';
 import './combat-target-marker.css';
 import './group-panel-actions.css';
 import './inventory.css';
+import './inventory-states.css';
 
 const root = document.getElementById('root');
 if (!root) {
