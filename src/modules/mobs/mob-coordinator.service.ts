@@ -10,7 +10,7 @@ import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { buildClaimedEncounter } from './encounters/encounter.actor-factory.js';
 import { ENCOUNTER_CATALOG } from './encounters/encounter.catalog.js';
-import { encounterForKey } from './encounters/encounter.registry.js';
+import { encounterForMob } from './encounters/encounter.registry.js';
 import {
   encounterRewardOperationId,
   evaluateEncounterEligibility,
@@ -48,7 +48,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     const records = await this.prisma.mobDefinition.findMany({ orderBy: [{ mapId: 'asc' }, { key: 'asc' }] });
     for (const record of records) {
       const mob = this.toRuntimeMob(record);
-      encounterForKey(mob.encounterKey);
+      encounterForMob(mob.encounterKey, mob.rank);
       const map = await this.maps.getMap(mob.mapId);
       if (!this.maps.isInside(map, mob.x, mob.y) || this.maps.isCollision(map, mob.x, mob.y)) {
         throw new GameError(GAME_ERROR_CODES.MAP_INVALID, 'errors.map.invalid', { reason: `Mob ${record.key} is placed on an invalid tile.` });
@@ -81,7 +81,7 @@ export class MobCoordinatorService implements OnModuleInit, OnModuleDestroy {
     const mob = this.requireMob(mobId);
     if (mob.state !== 'ALIVE') throw new GameError(GAME_ERROR_CODES.COMBAT_BUSY, 'errors.combat.busy');
     if (!isActorWithinInteractionRange(session, mob)) throw new GameError(GAME_ERROR_CODES.COMBAT_TOO_FAR, 'errors.combat.tooFar');
-    const definition = encounterForKey(mob.encounterKey);
+    const definition = encounterForMob(mob.encounterKey, mob.rank);
     const encounter = scaleEncounter(definition, partySize);
     mob.state = 'IN_COMBAT';
     mob.engagedCharacterId = session.characterId;
