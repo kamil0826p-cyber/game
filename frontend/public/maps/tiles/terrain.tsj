@@ -1,10 +1,10 @@
 {
   "columns": 2,
-  "image": "../../assets/tiles/terrain.svg",
+  "image": "../../assets/tiles/village-terrain.svg",
   "imageheight": 32,
   "imagewidth": 64,
   "margin": 0,
-  "name": "terrain",
+  "name": "village-terrain",
   "spacing": 0,
   "tilecount": 2,
   "tileheight": 32,
