@@ -6,11 +6,11 @@ The shared runtime types define five ordered ranks: **Pomiot**, **Kat**, **Arcyk
 
 The initial content is inserted by `prisma/seed.ts`: seven level-2 Królik Pomiot rows in Greenfields and seven level-7 Skorpion Kat rows in Crystal Cave. The seed validates collision, portals, the player spawn and the merchant tile, then moves an invalid requested mob position to the nearest unique walkable tile.
 
-`MobDefinition` rows remain the runtime source of truth for persistent world instances, stats, loot, claim state and respawn. Clicking one world mob claims only that row. Additional enemies created by its encounter exist only inside combat and do not create independent world respawns.
+`MobDefinition` rows remain the runtime source of truth for persistent world instances, encounter selection, stats, loot, claim state and respawn. Every row stores an explicit `encounterKey`; rank is presentation and balance metadata and no longer decides which fight is started. Clicking one world mob claims only that row. Additional enemies created by its encounter exist only inside combat and do not create independent world respawns.
 
 ## Versioned encounter definitions
 
-A claimed mob rank selects a typed encounter definition identified by stable `key + version`. Definitions contain:
+A claimed mob's `encounterKey` selects the newest typed encounter definition with the matching stable `key`. Different mob species may use different encounter keys while sharing the same rank. Definitions contain:
 
 - allowed and recommended party size;
 - actor templates, roles, front/back formation and skills;
@@ -20,7 +20,7 @@ A claimed mob rank selects a typed encounter definition identified by stable `ke
 - telegraphs and declared counters;
 - victory/defeat and contribution-based reward rules.
 
-The catalog is validated at startup and in unit tests. Invalid skill/actor references, unreachable phases, unsafe strong actions, incomplete scaling tiers and any possible roster above ten enemies fail validation.
+The catalog is validated at startup and in unit tests. Invalid skill/actor references, duplicate `key + version` identities, unreachable phases, unsafe strong actions, incomplete scaling tiers and any possible roster above ten enemies fail validation. Multiple encounter families may declare the same supported rank because rank ownership is no longer exclusive.
 
 Scaling changes mechanics in addition to HP and power. Larger parties introduce guards, support actors, back-line pressure, wider telegraphs, more break capacity and bounded summon waves.
 
