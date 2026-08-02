@@ -21,9 +21,11 @@ import {
   combatRespondSchema,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import { PvpPolicyViolationError } from '../pvp/pvp.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { CombatService } from './combat.service.js';
+import { PvpCombatIntegrationService } from './pvp-combat.integration.js';
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class CombatGateway {
@@ -31,6 +33,7 @@ export class CombatGateway {
 
   constructor(
     private readonly combats: CombatService,
+    private readonly pvp: PvpCombatIntegrationService,
     private readonly world: WorldStateService,
     private readonly localization: LocalizationService,
   ) {}
@@ -51,7 +54,7 @@ export class CombatGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
     return this.handle(client, combatRequestSchema, raw, (session, payload) =>
-      this.combats.request(session.userId, session.characterId, payload.targetCharacterId),
+      this.pvp.request(session, payload.targetCharacterId),
     );
   }
 
@@ -61,7 +64,7 @@ export class CombatGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CombatSnapshot>> {
     return this.handle(client, combatRespondSchema, raw, (session, payload) =>
-      this.combats.respond(session.userId, session.characterId, payload.combatId, payload.accept),
+      this.pvp.respond(session, payload.combatId, payload.accept),
     );
   }
 
@@ -94,8 +97,9 @@ export class CombatGateway {
     try {
       const payload = schema.parse(raw);
       const session = this.world.getBySocketId(client.id);
-      if (!session || !session.activeInWorld || client.data.sessionState !== 'IN_WORLD')
+      if (!session || !session.activeInWorld || client.data.sessionState !== 'IN_WORLD') {
         throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+      }
       return { ok: true, data: await operation(session, payload) };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
@@ -104,18 +108,27 @@ export class CombatGateway {
 
   private toSocketError(error: unknown, client: GameSocket): SocketErrorPayload {
     const locale = client.data.locale ?? 'en';
-    if (error instanceof GameError)
+    if (error instanceof GameError) {
       return {
         code: error.code,
         message: this.localization.translate(error.messageKey, locale),
         details: error.details,
       };
-    if (error instanceof ZodError)
+    }
+    if (error instanceof PvpPolicyViolationError) {
+      return {
+        code: GAME_ERROR_CODES.COMBAT_FORBIDDEN,
+        message: this.localization.translate('errors.combat.forbidden', locale),
+        details: { pvpReason: error.reason },
+      };
+    }
+    if (error instanceof ZodError) {
       return {
         code: GAME_ERROR_CODES.INVALID_PAYLOAD,
         message: this.localization.translate('errors.payload.invalid', locale),
         details: { issues: error.issues },
       };
+    }
     this.logger.error(
       'Unhandled combat gateway error.',
       error instanceof Error ? error.stack : undefined,

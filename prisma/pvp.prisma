@@ -1,0 +1,168 @@
+model PvpProfile {
+  characterId             String    @id @db.Uuid
+  optedIn                 Boolean   @default(false)
+  notoriety               Int       @default(0)
+  notorietyChangedAt      DateTime  @default(now())
+  spawnProtectedUntil     DateTime?
+  reconnectProtectedUntil DateTime?
+  defeatProtectedUntil    DateTime?
+  combatCooldownUntil     DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
+
+model PvpBounty {
+  id                 String    @id @db.Uuid
+  targetCharacterId  String    @db.Uuid
+  creatorCharacterId String?   @db.Uuid
+  hunterCharacterId  String?   @db.Uuid
+  amountSilver       Int
+  feeSilver          Int
+  status             String    @db.VarChar(16)
+  operationId        String    @db.VarChar(96)
+  claimedCombatId    String?   @db.Uuid
+  createdAt          DateTime  @default(now())
+  expiresAt          DateTime
+  acceptedAt         DateTime?
+  closedAt           DateTime?
+
+  @@unique([creatorCharacterId, operationId], map: "PvpBounty_creator_operation_key")
+  @@index([status, expiresAt, amountSilver(sort: Desc)], map: "PvpBounty_board_idx")
+  @@index([targetCharacterId, status], map: "PvpBounty_target_idx")
+  @@index([hunterCharacterId, status], map: "PvpBounty_hunter_idx")
+}
+
+model PvpCombat {
+  combatId        String    @id @db.Uuid
+  mapId           String    @db.Uuid
+  zoneType        String    @db.VarChar(16)
+  kind            String    @db.VarChar(16)
+  modeKey         String?   @db.VarChar(64)
+  ratingPool      String?   @db.VarChar(96)
+  rulesVersion    Int
+  attackerTeam    Json      @db.JsonB
+  defenderTeam    Json      @db.JsonB
+  legalAggression Boolean
+  rewardMultiplier Float    @default(1)
+  bountyId        String?   @db.Uuid
+  status          String    @db.VarChar(16)
+  startedAt       DateTime
+  settledAt       DateTime?
+
+  @@index([startedAt], map: "PvpCombat_started_idx")
+  @@index([bountyId], map: "PvpCombat_bounty_idx")
+}
+
+model PvpCombatSettlement {
+  combatId     String   @id @db.Uuid
+  winnerTeamId String   @db.VarChar(128)
+  finishReason String   @db.VarChar(64)
+  payload      Json     @default("{}") @db.JsonB
+  settledAt    DateTime @default(now())
+}
+
+model PvpOpponentHistory {
+  id                String   @id @db.Uuid
+  winnerCharacterId String   @db.Uuid
+  loserCharacterId  String   @db.Uuid
+  combatId          String   @db.Uuid
+  defeatedAt        DateTime
+
+  @@unique([combatId, winnerCharacterId, loserCharacterId], map: "PvpOpponentHistory_combat_pair_key")
+  @@index([winnerCharacterId, loserCharacterId, defeatedAt(sort: Desc)], map: "PvpOpponentHistory_repeat_idx")
+}
+
+model PvpRating {
+  characterId              String   @db.Uuid
+  poolKey                  String   @db.VarChar(96)
+  seasonKey                String   @db.VarChar(96)
+  rating                   Int      @default(1000)
+  uncertainty              Int      @default(350)
+  placementMatchesRemaining Int     @default(5)
+  gamesPlayed              Int      @default(0)
+  updatedAt                DateTime @updatedAt
+
+  @@id([characterId, poolKey, seasonKey])
+  @@index([seasonKey, poolKey, rating(sort: Desc)], map: "PvpRating_leaderboard_idx")
+}
+
+model PvpRewardLedger {
+  id             String   @id @db.Uuid
+  combatId       String   @db.Uuid
+  characterId    String   @db.Uuid
+  operationId    String   @db.VarChar(128)
+  renown         Int      @default(0)
+  cosmeticTokens Int      @default(0)
+  eligible       Boolean
+  contribution   Json     @db.JsonB
+  createdAt      DateTime @default(now())
+
+  @@unique([combatId, characterId], map: "PvpRewardLedger_combat_character_key")
+  @@unique([characterId, operationId], map: "PvpRewardLedger_operation_key")
+}
+
+model PvpReplay {
+  combatId    String   @id @db.Uuid
+  rulesVersion Int
+  modeKey     String?  @db.VarChar(64)
+  checksum    String   @db.VarChar(64)
+  eventLog    Json     @db.JsonB
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([expiresAt], map: "PvpReplay_expiry_idx")
+}
+
+model PvpReport {
+  id                  String    @id @db.Uuid
+  combatId            String    @db.Uuid
+  reporterCharacterId String    @db.Uuid
+  category            String    @db.VarChar(32)
+  operationId         String    @db.VarChar(96)
+  createdAt           DateTime  @default(now())
+  reviewedAt          DateTime?
+
+  @@unique([reporterCharacterId, operationId], map: "PvpReport_operation_key")
+  @@index([reviewedAt, createdAt], map: "PvpReport_review_idx")
+}
+
+model PvpOutbox {
+  id          String    @id @db.Uuid
+  aggregateId String    @db.VarChar(128)
+  eventType   String    @db.VarChar(64)
+  operationId String    @unique(map: "PvpOutbox_operation_key") @db.VarChar(160)
+  payload     Json      @db.JsonB
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+
+  @@index([publishedAt, createdAt], map: "PvpOutbox_pending_idx")
+}
+
+model PvpRiskSignal {
+  id          String    @id @db.Uuid
+  combatId    String?   @db.Uuid
+  characterId String?   @db.Uuid
+  signalType  String    @db.VarChar(64)
+  riskScore   Int
+  operationId String    @unique(map: "PvpRiskSignal_operation_key") @db.VarChar(160)
+  evidence    Json      @db.JsonB
+  createdAt   DateTime  @default(now())
+  reviewedAt  DateTime?
+
+  @@index([reviewedAt, riskScore(sort: Desc), createdAt], map: "PvpRiskSignal_review_idx")
+}
+
+model PvpObjectiveContribution {
+  id              String   @id @db.Uuid
+  combatId        String   @db.Uuid
+  characterId     String   @db.Uuid
+  operationId     String   @db.VarChar(128)
+  objectivePoints Int      @default(0)
+  activeMs        Int      @default(0)
+  lateJoin        Boolean  @default(false)
+  disconnected    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([characterId, operationId], map: "PvpObjectiveContribution_operation_key")
+  @@index([combatId, characterId], map: "PvpObjectiveContribution_combat_character_idx")
+}

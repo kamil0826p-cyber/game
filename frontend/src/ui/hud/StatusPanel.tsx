@@ -19,6 +19,19 @@ const zoneLabelKey = {
   PVP: 'map.zone.pvp',
 } as const;
 
+const zoneWarning = {
+  en: {
+    SAFE: 'No unsolicited PvP. Duels require consent.',
+    OUTLAW: 'Contracts are legal; unlawful aggression creates notoriety and bounty risk.',
+    PVP: 'Immediate combat is enabled. Spawn, reconnect and defeat protections still apply.',
+  },
+  pl: {
+    SAFE: 'Brak nieproszonego PvP. Pojedynki wymagają zgody.',
+    OUTLAW: 'Kontrakty są legalne; bezprawna agresja nalicza rozgłos i ryzyko bounty.',
+    PVP: 'Walka może rozpocząć się natychmiast. Nadal działa ochrona odrodzenia, reconnectu i po porażce.',
+  },
+} as const;
+
 const numberFormatter = new Intl.NumberFormat('pl-PL');
 const MAX_CHARACTER_LEVEL = 100;
 
@@ -28,7 +41,7 @@ function experienceRequiredForLevel(level: number): number {
 }
 
 export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Element {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const atLevelCap = character.level >= MAX_CHARACTER_LEVEL;
   const experienceTarget = atLevelCap ? 0 : experienceRequiredForLevel(character.level);
   const experiencePercent = atLevelCap
@@ -36,10 +49,18 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
     : Math.min(100, (character.experience / Math.max(1, experienceTarget)) * 100);
 
   return (
-    <section className="hud-panel pointer-events-none w-[min(390px,calc(100vw-24px))] p-3" aria-label="Player status">
+    <section
+      className="hud-panel pointer-events-none w-[min(390px,calc(100vw-24px))] p-3"
+      aria-label="Player status"
+    >
       <div className="flex items-center gap-3">
         <div className="grid size-[74px] shrink-0 place-items-center overflow-hidden rounded-lg border border-amber-300/30 bg-slate-950/65">
-          <OutfitPreview outfitKey={character.outfitKey} characterClass={character.characterClass} size="small" animated />
+          <OutfitPreview
+            outfitKey={character.outfitKey}
+            characterClass={character.characterClass}
+            size="small"
+            animated
+          />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
@@ -49,7 +70,9 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
                 {t(classLabelKey[character.characterClass])} · {t('common.level')} {character.level}
               </p>
             </div>
-            <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>{t(zoneLabelKey[map.zoneType])}</span>
+            <span className={`zone-badge zone-${map.zoneType.toLowerCase()}`}>
+              {t(zoneLabelKey[map.zoneType])}
+            </span>
           </div>
           <Meter label={t('hud.health')} value={character.hp} max={character.maxHp} className="bg-rose-500" />
           <Meter label={t('hud.energy')} value={character.energy} max={character.maxEnergy} className="bg-sky-500" />
@@ -65,9 +88,23 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
         </div>
       </div>
       <div className="mt-2 border-t border-white/5 pt-2">
+        <div
+          className={`mb-2 rounded-md border px-2 py-1.5 text-[10px] leading-4 ${
+            map.zoneType === 'PVP'
+              ? 'border-rose-400/30 bg-rose-950/25 text-rose-100'
+              : map.zoneType === 'OUTLAW'
+                ? 'border-amber-400/25 bg-amber-950/20 text-amber-100'
+                : 'border-emerald-400/20 bg-emerald-950/20 text-emerald-100'
+          }`}
+          role="status"
+        >
+          {zoneWarning[locale][map.zoneType]}
+        </div>
         <div className="flex items-center justify-between gap-3 text-[10px] text-slate-400">
           <span className="truncate">{map.name}</span>
-          <span className="shrink-0 font-mono">X {character.x} · Y {character.y}</span>
+          <span className="shrink-0 font-mono">
+            X {character.x} · Y {character.y}
+          </span>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <CurrencyBadge label="Srebro" value={character.silver ?? 0} variant="silver" />
@@ -78,7 +115,15 @@ export function StatusPanel({ character, map }: StatusPanelProps): React.JSX.Ele
   );
 }
 
-function CurrencyBadge({ label, value, variant }: { label: string; value: number; variant: 'silver' | 'gold' }): React.JSX.Element {
+function CurrencyBadge({
+  label,
+  value,
+  variant,
+}: {
+  label: string;
+  value: number;
+  variant: 'silver' | 'gold';
+}): React.JSX.Element {
   const isSilver = variant === 'silver';
   const borderClass = isSilver ? 'border-slate-300/20' : 'border-amber-300/25';
   const backgroundClass = isSilver ? 'bg-slate-300/5' : 'bg-amber-300/5';
@@ -88,24 +133,46 @@ function CurrencyBadge({ label, value, variant }: { label: string; value: number
   const valueClass = isSilver ? 'text-slate-100' : 'text-amber-200';
 
   return (
-    <div className={`flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 ${borderClass} ${backgroundClass}`} aria-label={`${label}: ${numberFormatter.format(value)}`} title={`${label}: ${numberFormatter.format(value)}`}>
-      <span className={`grid size-6 shrink-0 place-items-center rounded-full border font-display text-[10px] font-bold ${iconClass}`} aria-hidden="true">
+    <div
+      className={`flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 ${borderClass} ${backgroundClass}`}
+      aria-label={`${label}: ${numberFormatter.format(value)}`}
+      title={`${label}: ${numberFormatter.format(value)}`}
+    >
+      <span
+        className={`grid size-6 shrink-0 place-items-center rounded-full border font-display text-[10px] font-bold ${iconClass}`}
+        aria-hidden="true"
+      >
         {isSilver ? 'S' : 'Z'}
       </span>
       <span className="min-w-0">
         <span className="block text-[8px] uppercase tracking-[0.14em] text-slate-500">{label}</span>
-        <span className={`block truncate font-mono text-xs font-semibold ${valueClass}`}>{numberFormatter.format(value)}</span>
+        <span className={`block truncate font-mono text-xs font-semibold ${valueClass}`}>
+          {numberFormatter.format(value)}
+        </span>
       </span>
     </div>
   );
 }
 
-function Meter({ label, value, max, className }: { label: string; value: number; max: number; className: string }): React.JSX.Element {
+function Meter({
+  label,
+  value,
+  max,
+  className,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  className: string;
+}): React.JSX.Element {
   const percent = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   return (
     <div className="mt-1.5">
       <div className="mb-0.5 flex justify-between text-[9px] uppercase tracking-wider text-slate-500">
-        <span>{label}</span><span>{value} / {max}</span>
+        <span>{label}</span>
+        <span>
+          {value} / {max}
+        </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full border border-black/40 bg-black/55">
         <div className={`h-full ${className}`} style={{ width: `${percent}%` }} />
