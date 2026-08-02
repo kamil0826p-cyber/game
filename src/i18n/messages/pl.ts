@@ -24,6 +24,7 @@ export const polishMessages = {
   'errors.items.notSellable': 'Tego przedmiotu nie można sprzedać.',
   'errors.items.equipped': 'Najpierw zdejmij ten przedmiot.',
   'errors.items.levelRequired': 'Poziom twojej postaci jest zbyt niski, aby założyć ten przedmiot.',
+  'errors.items.loadoutLocked': 'Nie możesz zmieniać wyposażenia podczas przygotowania lub trwania wyprawy.',
   'errors.items.effectNotNeeded': 'Ten przedmiot niczego teraz nie odnowi.',
   'errors.items.merchantUnavailable': 'Podejdź bliżej do handlarza, aby handlować.',
   'errors.npcs.notAvailable': 'Podejdź bliżej do NPC, aby porozmawiać.',
