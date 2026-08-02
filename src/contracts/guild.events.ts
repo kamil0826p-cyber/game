@@ -1,7 +1,9 @@
 import type { SocketAck } from './socket.events.js';
 import type {
+  GuildBuyExperienceUpgradePayload,
   GuildChatPayload,
   GuildCreatePayload,
+  GuildDepositPayload,
   GuildDisbandPayload,
   GuildGetPayload,
   GuildInviteCommandPayload,
@@ -11,9 +13,14 @@ import type {
   GuildSetRolePayload,
   GuildTransferLeadershipPayload,
   GuildUpdateDescriptionPayload,
+  GuildWithdrawPayload,
 } from './socket.schemas.js';
 
 export type GuildRolePayload = 'LEADER' | 'OFFICER' | 'MEMBER';
+export type GuildTreasuryTransactionTypePayload =
+  | 'DEPOSIT'
+  | 'WITHDRAWAL'
+  | 'UPGRADE_PURCHASE';
 
 export interface GuildMemberPayload {
   characterId: string;
@@ -22,6 +29,42 @@ export interface GuildMemberPayload {
   role: GuildRolePayload;
   online: boolean;
   joinedAt: number;
+  contributedSilver: number;
+  mobKills: number;
+  bonusExperienceEarned: number;
+  lastContributionAt: number | null;
+}
+
+export interface GuildTreasuryTransactionPayload {
+  id: string;
+  type: GuildTreasuryTransactionTypePayload;
+  amount: number;
+  balanceAfter: number;
+  actorCharacterId: string;
+  actorName: string;
+  upgradeLevel: number | null;
+  createdAt: number;
+}
+
+export interface GuildTreasuryPayload {
+  silver: number;
+  experienceUpgradeLevel: number;
+  experienceBonusPercent: number;
+  maximumUpgradeLevel: number;
+  nextUpgradeCost: number | null;
+  totalSilverDeposited: number;
+  totalSilverWithdrawn: number;
+  totalSilverSpentOnUpgrades: number;
+  recentTransactions: GuildTreasuryTransactionPayload[];
+}
+
+export interface GuildStatisticsPayload {
+  memberCount: number;
+  onlineMemberCount: number;
+  averageMemberLevel: number;
+  totalMemberLevels: number;
+  mobKills: number;
+  bonusExperienceGranted: number;
 }
 
 export interface GuildDetailsPayload {
@@ -32,7 +75,10 @@ export interface GuildDetailsPayload {
   level: number;
   experience: number;
   role: GuildRolePayload;
+  createdAt: number;
   members: GuildMemberPayload[];
+  treasury: GuildTreasuryPayload;
+  statistics: GuildStatisticsPayload;
 }
 
 export interface GuildInvitePayload {
@@ -47,6 +93,7 @@ export interface GuildInvitePayload {
 export interface GuildSnapshot {
   guild: GuildDetailsPayload | null;
   invites: GuildInvitePayload[];
+  characterSilver: number;
 }
 
 export interface GuildChatMessagePayload {
@@ -70,6 +117,9 @@ declare module './socket.events.js' {
     'guild:leave': (payload: GuildLeavePayload, acknowledgement?: (response: SocketAck<GuildSnapshot>) => void) => void;
     'guild:transferLeadership': (payload: GuildTransferLeadershipPayload, acknowledgement?: (response: SocketAck<GuildSnapshot>) => void) => void;
     'guild:disband': (payload: GuildDisbandPayload, acknowledgement?: (response: SocketAck<GuildSnapshot>) => void) => void;
+    'guild:depositSilver': (payload: GuildDepositPayload, acknowledgement?: (response: SocketAck<GuildSnapshot>) => void) => void;
+    'guild:withdrawSilver': (payload: GuildWithdrawPayload, acknowledgement?: (response: SocketAck<GuildSnapshot>) => void) => void;
+    'guild:buyExperienceUpgrade': (payload: GuildBuyExperienceUpgradePayload, acknowledgement?: (response: SocketAck<GuildSnapshot>) => void) => void;
     'guild:chatSend': (payload: GuildChatPayload, acknowledgement?: (response: SocketAck<GuildChatMessagePayload>) => void) => void;
   }
 
