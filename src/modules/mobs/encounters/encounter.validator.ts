@@ -1,6 +1,5 @@
 import { COMBAT_TEAM_LIMIT } from '../../combat/combat.rules.js';
 import { SKILL_CATALOG } from '../../skills/skill.catalog.js';
-import { MOB_RANKS } from '../mob.catalog.js';
 import type { EncounterDefinition } from './encounter.types.js';
 import { ENCOUNTER_PARTY_THRESHOLDS } from './encounter.types.js';
 
@@ -243,24 +242,12 @@ export function validateEncounterDefinition(
 
 export function assertEncounterCatalog(definitions: readonly EncounterDefinition[]): void {
   const versions = new Set<string>();
-  const rankOwners = new Map<string, string>();
   const errors: string[] = [];
   for (const definition of definitions) {
     const identity = `${definition.key}@${definition.version}`;
     if (versions.has(identity)) errors.push(`Duplicate encounter version ${identity}.`);
     versions.add(identity);
-    for (const rank of definition.ranks) {
-      const existing = rankOwners.get(rank);
-      if (existing && existing !== definition.key) {
-        errors.push(`Mob rank ${rank} is assigned to both ${existing} and ${definition.key}.`);
-      } else {
-        rankOwners.set(rank, definition.key);
-      }
-    }
     errors.push(...validateEncounterDefinition(definition).errors);
-  }
-  for (const rank of MOB_RANKS) {
-    if (!rankOwners.has(rank)) errors.push(`Mob rank ${rank} has no encounter definition.`);
   }
   if (errors.length > 0) throw new Error(`INVALID_ENCOUNTER_CATALOG\n${errors.join('\n')}`);
 }
