@@ -17,8 +17,12 @@ import {
   usesAttackMotion,
   type CombatStagePosition,
 } from '../../game/combat/combatPresentation';
+import {
+  isCombatActionTargetReady,
+  resolveCombatActionTarget,
+} from '../../game/combat/combatTargeting';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
-import { useGameState } from '../../game/state/gameStore';
+import { gameStore, useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import {
   COMBAT_SKILL_INTENT_EVENT,
@@ -344,12 +348,12 @@ export function CombatArena({
     () => new Set(ownLegalActions.flatMap((action) => action.targetActorIds)),
     [ownLegalActions],
   );
-  const legalSkillTargetCounts = useMemo(
+  const legalActionsBySkill = useMemo(
     () =>
       Object.fromEntries(
         ownLegalActions
           .filter((action) => action.action === 'SKILL' && action.skillKey)
-          .map((action) => [action.skillKey!, action.targetActorIds.length]),
+          .map((action) => [action.skillKey!, action]),
       ),
     [ownLegalActions],
   );
@@ -421,15 +425,23 @@ export function CombatArena({
     if (!canIssueCommand || busy || combat.status !== 'ACTIVE') return;
     const legal = findLegalAction(action, skillKey);
     if (!legal) return;
-    const targetActorId =
-      (selectedTargetId && legal.targetActorIds.includes(selectedTargetId)
-        ? selectedTargetId
-        : legal.targetActorIds[0]) ?? undefined;
+    const target = resolveCombatActionTarget(legal, selectedTargetId);
+    if (!target.ready) {
+      gameStore.addNotification({
+        code: 'COMBAT_TARGET_REQUIRED',
+        message:
+          locale === 'pl'
+            ? 'Zaznacz cel odpowiedni dla wybranej akcji.'
+            : 'Select a valid target for the chosen action.',
+      });
+      setSelectedTargetId(undefined);
+      return;
+    }
     void mutate(() =>
       connection.performTeamCombatAction(
         combat.combatId,
         action,
-        targetActorId,
+        target.targetActorId,
         skillKey,
         combat.turnNumber,
       ),
@@ -711,11 +723,19 @@ export function CombatArena({
           <button
             type="button"
             className="combat-basic-attack"
-            disabled={!isOwnDecision || busy || !basicAction}
+            disabled={
+              !isOwnDecision ||
+              busy ||
+              !isCombatActionTargetReady(basicAction, selectedTargetId)
+            }
             onClick={() => perform('BASIC_ATTACK')}
             title={
               basicAction
-                ? `${locale === 'pl' ? 'Legalne cele' : 'Legal targets'}: ${basicAction.targetActorIds.length}`
+                ? isCombatActionTargetReady(basicAction, selectedTargetId)
+                  ? `${locale === 'pl' ? 'Legalne cele' : 'Legal targets'}: ${basicAction.targetActorIds.length}`
+                  : locale === 'pl'
+                    ? 'Zaznacz przeciwnika, którego chcesz zaatakować.'
+                    : 'Select the enemy you want to attack.'
                 : undefined
             }
           >
@@ -726,21 +746,29 @@ export function CombatArena({
           <ActionBar
             disabled={!isOwnDecision || busy}
             disabledLabel={t('combat.turn.wait')}
-            legalTargetCounts={legalSkillTargetCounts}
+            legalActionsBySkill={legalActionsBySkill}
+            selectedTargetId={selectedTargetId}
           />
           <div className="flex max-w-[34rem] flex-wrap justify-center gap-1">
             {tacticalActions.map((action) => {
               const details = TACTICAL_LABELS[action.action];
+              const targetReady = isCombatActionTargetReady(action, selectedTargetId);
               return (
                 <button
                   key={actionKey(action)}
                   type="button"
                   className="rounded border border-amber-200/40 bg-black/65 px-2 py-1 text-[10px] font-semibold text-amber-100 disabled:opacity-40"
-                  disabled={busy}
+                  disabled={busy || !targetReady}
                   onClick={() => perform(action.action)}
-                  title={`${details[locale]} · ${
-                    locale === 'pl' ? 'legalne cele' : 'legal targets'
-                  }: ${action.targetActorIds.length}`}
+                  title={
+                    targetReady
+                      ? `${details[locale]} · ${
+                          locale === 'pl' ? 'legalne cele' : 'legal targets'
+                        }: ${action.targetActorIds.length}`
+                      : locale === 'pl'
+                        ? 'Zaznacz cel odpowiedni dla tej akcji.'
+                        : 'Select a valid target for this action.'
+                  }
                 >
                   <span className="mr-1" aria-hidden="true">
                     {details.glyph}

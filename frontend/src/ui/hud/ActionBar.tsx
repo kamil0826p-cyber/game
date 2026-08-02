@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SkillBuildSnapshot } from '../../contracts/skillBuild';
 import type { SkillDefinitionPayload } from '../../contracts/socket';
+import type { CombatLegalActionPayload } from '../../contracts/tacticalCombat';
+import { isCombatActionTargetReady } from '../../game/combat/combatTargeting';
 import { getSkillCopy } from '../../game/skills/skillCopy';
 import { getSkillUseBlockReason } from '../../game/skills/skillUi';
 import { useGameState } from '../../game/state/gameStore';
@@ -15,7 +17,8 @@ export interface CombatSkillIntent {
 interface ActionBarProps {
   disabled?: boolean;
   disabledLabel?: string;
-  legalTargetCounts?: Readonly<Record<string, number>>;
+  legalActionsBySkill?: Readonly<Record<string, CombatLegalActionPayload>>;
+  selectedTargetId?: string;
 }
 
 const blockReasonLabelKey = {
@@ -32,11 +35,13 @@ const isEditable = (target: EventTarget | null): boolean =>
 export function ActionBar({
   disabled = false,
   disabledLabel,
-  legalTargetCounts,
+  legalActionsBySkill,
+  selectedTargetId,
 }: ActionBarProps = {}): React.JSX.Element {
   const { locale, t } = useI18n();
   const state = useGameState();
   const [active, setActive] = useState<number>();
+  const intentLocked = useRef(false);
   const build = state.skillTree as SkillBuildSnapshot | undefined;
   const slots = useMemo(() => {
     const activeKeys = new Set(
@@ -60,31 +65,35 @@ export function ActionBar({
   }, [build, state.skillTree]);
 
   const activate = (skill: SkillDefinitionPayload, index: number): void => {
-    const hasLegalTarget =
-      legalTargetCounts === undefined || (legalTargetCounts[skill.key] ?? 0) > 0;
+    const legalAction = legalActionsBySkill?.[skill.key];
+    const combatTargetBlocked =
+      legalActionsBySkill !== undefined &&
+      !isCombatActionTargetReady(legalAction, selectedTargetId);
     if (
+      intentLocked.current ||
       disabled ||
-      !hasLegalTarget ||
+      combatTargetBlocked ||
       !state.self ||
       getSkillUseBlockReason(skill, state.self.combatState, state.self.energy)
     ) {
       return;
     }
+    intentLocked.current = true;
     setActive(index);
     window.dispatchEvent(
       new CustomEvent<CombatSkillIntent>(COMBAT_SKILL_INTENT_EVENT, {
         detail: { skillKey: skill.key },
       }),
     );
-    window.setTimeout(
-      () => setActive((current) => (current === index ? undefined : current)),
-      180,
-    );
+    window.setTimeout(() => {
+      intentLocked.current = false;
+      setActive((current) => (current === index ? undefined : current));
+    }, 180);
   };
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
-      if (isEditable(event.target)) return;
+      if (event.repeat || isEditable(event.target)) return;
       const index = Number(event.key) - 1;
       const skill = slots[index];
       if (skill) activate(skill, index);
@@ -115,17 +124,31 @@ export function ActionBar({
           state.self.combatState,
           state.self.energy,
         );
-        const legalTargets = legalTargetCounts?.[skill.key];
-        const lacksLegalTarget = legalTargets !== undefined && legalTargets === 0;
-        const noTargetLabel = locale === 'pl' ? 'Brak legalnego celu' : 'No legal target';
-        const reason = lacksLegalTarget
-          ? noTargetLabel
-          : disabled && !blockReason
+        const legalAction = legalActionsBySkill?.[skill.key];
+        const combatRestricted = legalActionsBySkill !== undefined;
+        const lacksLegalAction = combatRestricted && !legalAction;
+        const targetMismatch = Boolean(
+          legalAction && !isCombatActionTargetReady(legalAction, selectedTargetId),
+        );
+        const combatTargetBlocked = lacksLegalAction || targetMismatch;
+        const noActionLabel =
+          locale === 'pl' ? 'Umiejętność niedostępna w tej turze' : 'Skill unavailable this turn';
+        const targetMismatchLabel =
+          locale === 'pl'
+            ? 'Zaznacz cel odpowiedni dla tej umiejętności'
+            : 'Select a valid target for this skill';
+        const reason =
+          disabled && !blockReason
             ? (disabledLabel ?? t('hud.action.ready'))
-            : blockReason
-              ? t(blockReasonLabelKey[blockReason])
-              : t('hud.action.ready');
+            : lacksLegalAction
+              ? noActionLabel
+              : targetMismatch
+                ? targetMismatchLabel
+                : blockReason
+                  ? t(blockReasonLabelKey[blockReason])
+                  : t('hud.action.ready');
         const cooldownLabel = `${skill.cooldownTurnsRemaining}/${skill.cooldownTurns}`;
+        const legalTargets = legalAction?.targetActorIds.length;
         const targetLabel =
           legalTargets === undefined
             ? skill.targeting
@@ -138,12 +161,12 @@ export function ActionBar({
             <button
               type="button"
               aria-label={`${localized.name} (${index + 1}): ${reason}`}
-              disabled={disabled || lacksLegalTarget || blockReason !== undefined}
+              disabled={disabled || combatTargetBlocked || blockReason !== undefined}
               onClick={() => activate(skill, index)}
               className={[
                 'action-slot',
                 skill.rank < 1 ? 'action-slot-locked' : '',
-                (blockReason || lacksLegalTarget) && skill.rank > 0
+                (blockReason || combatTargetBlocked) && skill.rank > 0
                   ? 'action-slot-disabled'
                   : '',
                 active === index ? 'action-slot-active' : '',
