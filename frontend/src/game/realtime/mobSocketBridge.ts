@@ -163,12 +163,12 @@ export function installMobSocketBridge(client: GameSocketClient): void {
       gameStore.updateCombatState(combat);
       return combat;
     })();
-    let tracked: Promise<CombatSnapshot>;
-    tracked = request.finally(() => {
-      if (pendingMobCombat === tracked) pendingMobCombat = undefined;
-    });
-    pendingMobCombat = tracked;
-    return tracked;
+    const clearPending = (): void => {
+      if (pendingMobCombat === request) pendingMobCombat = undefined;
+    };
+    pendingMobCombat = request;
+    void request.then(clearPending, clearPending);
+    return request;
   };
 
   client.getActiveCombat = async (): Promise<CombatSnapshot | null> => {
