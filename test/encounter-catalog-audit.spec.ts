@@ -1,33 +1,44 @@
 import { describe, expect, it } from 'vitest';
+import { ENCOUNTER_CATALOG } from '../src/modules/mobs/encounters/encounter.catalog.js';
 import {
-  ENCOUNTER_CATALOG,
-  selectLatestEncounterForRank,
-} from '../src/modules/mobs/encounters/encounter.catalog.js';
+  selectLatestEncounterForKey,
+} from '../src/modules/mobs/encounters/encounter.registry.js';
 import type { EncounterDefinition } from '../src/modules/mobs/encounters/encounter.types.js';
+import { assertEncounterCatalog } from '../src/modules/mobs/encounters/encounter.validator.js';
 
 const clone = (definition: EncounterDefinition): EncounterDefinition =>
   JSON.parse(JSON.stringify(definition)) as EncounterDefinition;
 
 describe('encounter catalog audit', () => {
-  it('selects the highest available encounter version for a mob rank', () => {
-    const current = ENCOUNTER_CATALOG.find((entry) =>
-      entry.ranks.includes('EXECUTIONER' as never),
-    )!;
+  it('selects the highest available encounter version for an encounter key', () => {
+    const current = ENCOUNTER_CATALOG.find((entry) => entry.key === 'execution-circle')!;
     const oldVersion = { ...clone(current), version: 1 };
     const newVersion = { ...clone(current), version: 3 };
     const middleVersion = { ...clone(current), version: 2 };
 
     expect(
-      selectLatestEncounterForRank(
+      selectLatestEncounterForKey(
         [oldVersion, newVersion, middleVersion],
-        'EXECUTIONER',
+        'execution-circle',
       ).version,
     ).toBe(3);
   });
 
-  it('fails loudly when a rank has no encounter definition', () => {
-    expect(() => selectLatestEncounterForRank([], 'SPAWN')).toThrow(
-      'Missing encounter definition for mob rank SPAWN.',
+  it('fails loudly when an encounter key has no definition', () => {
+    expect(() => selectLatestEncounterForKey([], 'missing-encounter')).toThrow(
+      'Missing encounter definition for key missing-encounter.',
     );
+  });
+
+  it('allows multiple encounter families to support the same mob rank', () => {
+    const current = ENCOUNTER_CATALOG.find((entry) => entry.key === 'brood-hunt')!;
+    const alternative = {
+      ...clone(current),
+      key: 'forest-ambush',
+      version: 1,
+      name: 'Leśna zasadzka',
+    };
+
+    expect(() => assertEncounterCatalog([...ENCOUNTER_CATALOG, alternative])).not.toThrow();
   });
 });
