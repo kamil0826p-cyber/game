@@ -1,6 +1,7 @@
 import { MobileUnsupportedNotice } from '../components/common/MobileUnsupportedNotice';
 import { BackgroundMusic } from '../game/audio/BackgroundMusic';
 import { GameCanvas } from '../game/canvas/GameCanvas';
+import { ExpeditionOverlay } from '../ui/expeditions/ExpeditionOverlay';
 import { GameHud } from '../ui/hud/GameHud';
 
 export function GameScreen(): React.JSX.Element {
@@ -9,6 +10,7 @@ export function GameScreen(): React.JSX.Element {
       <GameCanvas />
       <BackgroundMusic />
       <GameHud />
+      <ExpeditionOverlay />
       <MobileUnsupportedNotice />
     </main>
   );

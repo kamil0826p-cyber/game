@@ -1,0 +1,89 @@
+enum ExpeditionRunStatus {
+  PREPARING
+  ACTIVE
+  EXTRACTED
+  FAILED
+  ABANDONED
+  COMPLETED
+}
+
+model ExpeditionRun {
+  id                String                  @id @default(uuid()) @db.Uuid
+  realmId           String                  @db.Uuid
+  leaderCharacterId String                  @db.Uuid
+  definitionKey     String                  @db.VarChar(96)
+  definitionVersion Int
+  contentVersion    String                  @db.VarChar(64)
+  seed              Int
+  status            ExpeditionRunStatus     @default(PREPARING)
+  currentNodeKey    String                  @db.VarChar(96)
+  revision          Int                     @default(0)
+  snapshot          Json                    @db.JsonB
+  startedAt         DateTime?
+  terminalAt        DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  members           ExpeditionMember[]
+  operations        ExpeditionOperation[]
+  rewards           ExpeditionRewardLedger[]
+  activeMembers      ExpeditionActiveMember[]
+
+  @@index([realmId, status])
+  @@index([leaderCharacterId, status])
+  @@index([definitionKey, definitionVersion])
+}
+
+model ExpeditionMember {
+  runId             String        @db.Uuid
+  characterId       String        @db.Uuid
+  roleKey           String        @db.VarChar(64)
+  formation         String        @db.VarChar(16)
+  loadoutSnapshot   Json          @db.JsonB
+  riskAccepted      Boolean
+  rewardEligible    Boolean       @default(true)
+  joinedAt          DateTime      @default(now())
+  lastSeenAt        DateTime      @default(now())
+  disconnectedAt    DateTime?
+  run               ExpeditionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, characterId])
+  @@index([characterId, joinedAt])
+}
+
+model ExpeditionActiveMember {
+  characterId String        @id @db.Uuid
+  runId       String        @db.Uuid
+  createdAt   DateTime      @default(now())
+  run         ExpeditionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+model ExpeditionOperation {
+  runId         String        @db.Uuid
+  operationId   String        @db.VarChar(128)
+  operationType String        @db.VarChar(48)
+  status        String        @db.VarChar(16)
+  result        Json          @db.JsonB
+  createdAt     DateTime      @default(now())
+  completedAt   DateTime?
+  run           ExpeditionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, operationId])
+  @@index([status, createdAt])
+}
+
+model ExpeditionRewardLedger {
+  id                String        @id @default(uuid()) @db.Uuid
+  runId             String        @db.Uuid
+  characterId       String        @db.Uuid
+  operationId       String        @db.VarChar(128)
+  definitionVersion Int
+  settlement        Json          @db.JsonB
+  createdAt         DateTime      @default(now())
+  run               ExpeditionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, characterId])
+  @@unique([characterId, operationId])
+  @@index([characterId, createdAt])
+}
