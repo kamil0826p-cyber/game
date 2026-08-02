@@ -18,6 +18,7 @@ import './combat-tactical-controls.css';
 import './combat-final-alignment.css';
 import './combat-target-marker.css';
 import './group-panel-actions.css';
+import './inventory.css';
 
 const root = document.getElementById('root');
 if (!root) {
