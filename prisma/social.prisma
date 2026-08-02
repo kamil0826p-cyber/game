@@ -1,0 +1,104 @@
+model SocialRealmState {
+  realmId   String   @id @db.Uuid
+  revision  Int      @default(0)
+  state     Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model GuildSocialState {
+  guildId   String   @id @db.Uuid
+  revision  Int      @default(0)
+  state     Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model SocialBlock {
+  blockerCharacterId String   @db.Uuid
+  blockedCharacterId String   @db.Uuid
+  createdAt          DateTime @default(now())
+
+  @@id([blockerCharacterId, blockedCharacterId])
+  @@index([blockedCharacterId, createdAt])
+}
+
+model GuildRolePermission {
+  guildId    String    @db.Uuid
+  role       GuildRole
+  permission String    @db.VarChar(48)
+  allowed    Boolean
+  updatedBy  String    @db.Uuid
+  updatedAt  DateTime  @updatedAt
+
+  @@id([guildId, role, permission])
+  @@index([guildId, role])
+}
+
+model GuildBankItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  guildId           String   @db.Uuid
+  tabKey            String   @db.VarChar(32)
+  itemDefinitionId  String   @db.Uuid
+  itemDefinitionKey String   @db.VarChar(96)
+  itemName           String   @db.VarChar(120)
+  instanceHash       String   @db.VarChar(64)
+  instanceData       Json     @db.JsonB
+  quantity           Int
+  lockedProjectKey   String   @default("") @db.VarChar(96)
+  revision           Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([guildId, tabKey, itemDefinitionId, instanceHash, lockedProjectKey])
+  @@index([guildId, tabKey, updatedAt])
+  @@index([itemDefinitionId])
+}
+
+model GuildBankOperation {
+  guildId         String   @db.Uuid
+  operationId     String   @db.VarChar(128)
+  actorCharacterId String  @db.Uuid
+  operationType   String   @db.VarChar(32)
+  requestHash     String   @db.VarChar(64)
+  status          String   @db.VarChar(16)
+  result          Json     @default("{}") @db.JsonB
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  @@id([guildId, operationId])
+  @@index([actorCharacterId, createdAt])
+  @@index([status, createdAt])
+}
+
+model GuildBankAudit {
+  id                 String   @id @default(uuid()) @db.Uuid
+  guildId            String   @db.Uuid
+  operationId        String   @db.VarChar(128)
+  actorCharacterId   String   @db.Uuid
+  action              String   @db.VarChar(32)
+  itemDefinitionId   String?  @db.Uuid
+  itemDefinitionKey  String?  @db.VarChar(96)
+  quantity            Int      @default(0)
+  metadata            Json     @default("{}") @db.JsonB
+  createdAt           DateTime @default(now())
+
+  @@unique([guildId, operationId, action])
+  @@index([guildId, createdAt])
+  @@index([actorCharacterId, createdAt])
+}
+
+model GuildBankDailyUsage {
+  guildId            String   @db.Uuid
+  characterId        String   @db.Uuid
+  dayKey             String   @db.VarChar(10)
+  withdrawnQuantity  Int      @default(0)
+  updatedAt          DateTime @updatedAt
+
+  @@id([guildId, characterId, dayKey])
+  @@index([guildId, dayKey])
+}

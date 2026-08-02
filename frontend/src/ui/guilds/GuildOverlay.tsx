@@ -4,6 +4,7 @@ import {
   TOGGLE_GUILD_WINDOW_EVENT,
 } from '../../game/guilds/guildUiEvents';
 import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
+import { CLOSE_SOCIAL_WINDOW_EVENT } from '../../game/social/socialUiEvents';
 import { gameStore, useGameState } from '../../game/state/gameStore';
 import { CLOSE_SETTINGS_WINDOW_EVENT } from '../settings/settingsUiEvents';
 import { GuildModal } from './GuildModal';
@@ -27,6 +28,7 @@ export function GuildOverlay(): React.JSX.Element | null {
     const close = () => setOpen(false);
     const toggle = () => {
       window.dispatchEvent(new Event(CLOSE_SETTINGS_WINDOW_EVENT));
+      window.dispatchEvent(new Event(CLOSE_SOCIAL_WINDOW_EVENT));
       gameStore.setActiveModal(null);
       setOpen((current) => !current);
     };
@@ -38,6 +40,7 @@ export function GuildOverlay(): React.JSX.Element | null {
       } else if ((event.key === 'g' || event.key === 'G') && !gameStore.getSnapshot().activeModal) {
         event.preventDefault();
         window.dispatchEvent(new Event(CLOSE_SETTINGS_WINDOW_EVENT));
+        window.dispatchEvent(new Event(CLOSE_SOCIAL_WINDOW_EVENT));
         setOpen((current) => !current);
       }
     };

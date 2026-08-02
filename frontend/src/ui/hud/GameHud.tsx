@@ -14,6 +14,7 @@ import { ModalHost } from '../modals/ModalHost';
 import { NpcInteractionLayer } from '../npcs/NpcInteractionLayer';
 import { PlayerInteractionLayer } from '../interactions/PlayerInteractionLayer';
 import { SettingsOverlay } from '../settings/SettingsOverlay';
+import { SocialHubOverlay } from '../social/SocialHubOverlay';
 import { ActionBar } from './ActionBar';
 import { ChatPanel } from './ChatPanel';
 import { ConnectionOverlay } from './ConnectionOverlay';
@@ -131,6 +132,7 @@ export function GameHud(): React.JSX.Element | null {
       <ModalHost />
       <SettingsOverlay />
       <GuildOverlay />
+      <SocialHubOverlay />
       <NpcInteractionLayer />
       <PlayerInteractionLayer />
       <MobRewardOverlay />

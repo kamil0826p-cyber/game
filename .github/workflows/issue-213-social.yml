@@ -1,0 +1,45 @@
+name: Issue 213 social systems
+
+on:
+  pull_request:
+    paths:
+      - 'src/modules/social/**'
+      - 'src/modules/groups/**'
+      - 'src/modules/guilds/**'
+      - 'src/contracts/social.*'
+      - 'prisma/social.prisma'
+      - 'prisma/migrations/20260802090000_social_systems/**'
+      - 'frontend/src/**/social/**'
+      - 'frontend/src/contracts/social.ts'
+      - 'frontend/src/game/realtime/socialSocketBridge.ts'
+      - 'frontend/src/game/realtime/GameConnectionProvider.tsx'
+      - 'frontend/src/ui/hud/**'
+      - 'test/social-framework.spec.ts'
+      - 'test/group-finder-service.spec.ts'
+      - 'test/guild-permission-service.spec.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+      - run: npm --prefix frontend ci
+      - run: npm run prisma:validate
+      - run: npm run typecheck
+      - run: npm test -- test/social-framework.spec.ts test/group-finder-service.spec.ts test/guild-permission-service.spec.ts
+      - run: npm run frontend:typecheck
+      - run: npm run frontend:test
+      - run: npm run frontend:build

@@ -55,6 +55,98 @@ export class GroupService implements OnModuleDestroy {
     return this.snapshotFor(session.characterId);
   }
 
+  getActivityRoster(actor: PlayerSession): PlayerSession[] {
+    this.pruneExpiredInvites();
+    const group = this.groupForCharacter(actor.characterId);
+    if (!group) return [actor];
+    if (group.adminCharacterId !== actor.characterId) {
+      throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+    }
+    const roster = [...group.members.keys()].map((characterId) => {
+      const session = this.world.getByCharacterId(characterId);
+      if (
+        !session?.activeInWorld ||
+        session.realmId !== actor.realmId ||
+        session.combatState !== 'IDLE'
+      ) {
+        throw new GameError(
+          GAME_ERROR_CODES.GROUP_PARTICIPANT_UNAVAILABLE,
+          'errors.group.participantUnavailable',
+        );
+      }
+      return session;
+    });
+    if (roster.length < 1 || roster.length > GROUP_MAX_MEMBERS) {
+      throw new GameError(GAME_ERROR_CODES.GROUP_FULL, 'errors.group.full');
+    }
+    return roster;
+  }
+
+  getGroupCharacterIds(characterId: string): string[] {
+    const group = this.groupForCharacter(characterId);
+    return group ? [...group.members.keys()] : [characterId];
+  }
+
+  assembleFinderRoster(leader: PlayerSession, rawCharacterIds: readonly string[]): GroupSnapshot {
+    this.pruneExpiredInvites();
+    const characterIds = [...new Set(rawCharacterIds)];
+    if (
+      characterIds.length < 1 ||
+      characterIds.length > GROUP_MAX_MEMBERS ||
+      !characterIds.includes(leader.characterId)
+    ) {
+      throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
+    }
+    const sessions = characterIds.map((characterId) => {
+      const session = this.world.getByCharacterId(characterId);
+      if (
+        !session?.activeInWorld ||
+        session.realmId !== leader.realmId ||
+        session.combatState !== 'IDLE'
+      ) {
+        throw new GameError(
+          GAME_ERROR_CODES.GROUP_PARTICIPANT_UNAVAILABLE,
+          'errors.group.participantUnavailable',
+        );
+      }
+      return session;
+    });
+
+    const existing = this.groupForCharacter(leader.characterId);
+    if (existing && existing.adminCharacterId !== leader.characterId) {
+      throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+    }
+    if (existing) {
+      for (const existingCharacterId of existing.members.keys()) {
+        if (!characterIds.includes(existingCharacterId)) {
+          throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+        }
+      }
+    }
+    for (const characterId of characterIds) {
+      const currentGroup = this.groupForCharacter(characterId);
+      if (currentGroup && currentGroup.id !== existing?.id) {
+        throw new GameError(GAME_ERROR_CODES.GROUP_TARGET_MEMBER, 'errors.group.targetMember');
+      }
+    }
+
+    if (characterIds.length === 1) {
+      if (existing) {
+        throw new GameError(GAME_ERROR_CODES.GROUP_FORBIDDEN, 'errors.group.forbidden');
+      }
+      return this.snapshotFor(leader.characterId);
+    }
+
+    const group = existing ?? this.createGroup(leader);
+    for (const session of sessions) {
+      group.members.set(session.characterId, this.storeMember(session));
+      this.groupIdByCharacter.set(session.characterId, group.id);
+      this.removeInvitesForTarget(session.characterId);
+    }
+    this.publishGroup(group);
+    return this.snapshotFor(leader.characterId);
+  }
+
   invite(actor: PlayerSession, targetCharacterId: string): GroupSnapshot {
     this.pruneExpiredInvites();
     if (actor.characterId === targetCharacterId) {

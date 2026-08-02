@@ -21,6 +21,7 @@ import { QuestModule } from './modules/quests/quest.module.js';
 import { RealmModule } from './modules/realm/realm.module.js';
 import { RealtimeModule } from './modules/realtime/realtime.module.js';
 import { SkillModule } from './modules/skills/skill.module.js';
+import { SocialModule } from './modules/social/social.module.js';
 import { WorldModule } from './modules/world/world.module.js';
 
 @Module({
@@ -43,6 +44,7 @@ import { WorldModule } from './modules/world/world.module.js';
     SkillModule,
     GuildModule,
     GroupModule,
+    SocialModule,
     RealtimeModule,
     ItemModule,
     NpcInteractionModule,
