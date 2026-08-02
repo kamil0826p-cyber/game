@@ -1,6 +1,6 @@
 {
   "columns": 0,
-  "name": "tree-trunk",
+  "name": "pine-trunk",
   "tilecount": 1,
   "tileheight": 32,
   "tilewidth": 32,
@@ -10,7 +10,7 @@
   "tiles": [
     {
       "id": 0,
-      "image": "../../../frontend/public/assets/tiles/tree-trunk.svg",
+      "image": "../../../frontend/public/assets/tiles/pine-trunk.svg",
       "imageheight": 85,
       "imagewidth": 96,
       "objectgroup": {
