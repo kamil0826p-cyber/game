@@ -89,12 +89,3 @@ export const outfitImageUrl = (
   gender: CharacterGender = 'MALE',
 ): string =>
   `${import.meta.env.BASE_URL}assets/sprites/${genderFolder(gender)}/${encodeURIComponent(outfitKey)}.png?v=${OUTFIT_ASSET_VERSION}`;
-
-/**
- * Kept as a compatibility helper for callers that expect a list. An outfit has
- * exactly one valid image candidate: its own gender-specific sprite sheet.
- */
-export const outfitImageCandidates = (
-  outfitKey: string,
-  gender: CharacterGender = 'MALE',
-): readonly string[] => [outfitImageUrl(outfitKey, gender)];
