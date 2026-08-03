@@ -1,4 +1,5 @@
 import type { CharacterClass, CharacterGender } from '../contracts/game';
+import { maleWarriorSpriteDataUrl } from './warriorSpriteData';
 export interface ClientOutfitDefinition { key: string; label: string; characterClass: CharacterClass; unlockLevel: number; description: string; }
 const outfit = (key: string, label: string, characterClass: CharacterClass, unlockLevel: number, description: string): ClientOutfitDefinition => ({ key, label, characterClass, unlockLevel, description });
 export const OUTFIT_CATALOG: Readonly<Record<CharacterClass, readonly ClientOutfitDefinition[]>> = {
@@ -13,9 +14,9 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
 };
 const genderFolder = (gender: CharacterGender): string => gender.toLowerCase();
 const genderAssetUrl = (outfitKey: string, gender: CharacterGender): string =>
-  `${import.meta.env.BASE_URL}assets/sprites/${genderFolder(gender)}/${encodeURIComponent(outfitKey)}.png?v=15`;
+  `${import.meta.env.BASE_URL}assets/sprites/${genderFolder(gender)}/${encodeURIComponent(outfitKey)}.png?v=16`;
 const legacyAssetUrl = (outfitKey: string, extension: 'png' | 'svg'): string =>
-  `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.${extension}?v=15`;
+  `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.${extension}?v=16`;
 const fallbackKeyFor = (outfitKey: string): string => {
   if (outfitKey.startsWith('mage-') && outfitKey !== 'mage-apprentice') return 'mage-archmage';
   if (outfitKey.startsWith('warrior-') && outfitKey !== 'warrior-recruit') return 'warrior-champion';
@@ -29,10 +30,12 @@ export const outfitImageCandidates = (
   gender: CharacterGender = 'MALE',
 ): readonly string[] => {
   const fallback = fallbackKeyFor(outfitKey);
+  const redesignedWarrior = gender === 'MALE' ? maleWarriorSpriteDataUrl(outfitKey) : null;
   return [...new Set([
+    redesignedWarrior,
     genderAssetUrl(outfitKey, gender),
     legacyAssetUrl(outfitKey, 'png'),
     legacyAssetUrl(outfitKey, 'svg'),
     legacyAssetUrl(fallback, 'png'),
-  ])];
+  ].filter((candidate): candidate is string => Boolean(candidate)))];
 };
