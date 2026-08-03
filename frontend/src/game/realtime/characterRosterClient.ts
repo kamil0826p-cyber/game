@@ -43,9 +43,11 @@ declare module './GameSocketClient' {
   interface GameSocketClient {
     listCharacters(): Promise<CharacterRosterPayload>;
     selectCharacter(characterId: string): Promise<void>;
-    createCharacterWithAppearance(
+    updateCharacterOutfit(characterId: string, outfitKey: string): Promise<CharacterRosterEntry>;
+    createCharacterWithOutfit(
       name: string,
       characterClass: CharacterClass,
+      outfitKey: string,
       gender: CharacterGender,
     ): Promise<void>;
   }
@@ -70,9 +72,24 @@ GameSocketClient.prototype.selectCharacter = async function (characterId: string
   gameStore.spawn(payload);
 };
 
-GameSocketClient.prototype.createCharacterWithAppearance = async function (
+GameSocketClient.prototype.updateCharacterOutfit = async function (
+  characterId: string,
+  outfitKey: string,
+): Promise<CharacterRosterEntry> {
+  const internal = this as unknown as InternalClient;
+  return unwrap(await internal.withAck<CharacterRosterEntry>((ack) =>
+    internal.requireSocket().emit(
+      'character:outfit',
+      { requestId: createRequestId('character-outfit'), characterId, outfitKey },
+      ack,
+    ),
+  ));
+};
+
+GameSocketClient.prototype.createCharacterWithOutfit = async function (
   name: string,
   characterClass: CharacterClass,
+  outfitKey: string,
   gender: CharacterGender,
 ): Promise<void> {
   const internal = this as unknown as InternalClient;
@@ -84,6 +101,7 @@ GameSocketClient.prototype.createCharacterWithAppearance = async function (
         name,
         characterClass,
         gender,
+        outfitKey,
       },
       ack,
     ),
