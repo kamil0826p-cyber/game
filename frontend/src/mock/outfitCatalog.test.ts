@@ -1,20 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { getOutfitForLevel, OUTFIT_CATALOG, outfitImageUrl } from './outfitCatalog';
+import { OUTFIT_CATALOG, outfitImageUrl } from './outfitCatalog';
 
 const expectedUnlockLevels = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
 describe('outfit catalog', () => {
-  it('contains eleven outfits for every character class', () => {
-    for (const outfits of Object.values(OUTFIT_CATALOG)) expect(outfits).toHaveLength(11);
-  });
-
-  it('switches to a separate outfit every ten levels', () => {
+  it('contains eleven selectable outfits for every character class', () => {
     for (const outfits of Object.values(OUTFIT_CATALOG)) {
+      expect(outfits).toHaveLength(11);
       expect(outfits.map((outfit) => outfit.unlockLevel)).toEqual(expectedUnlockLevels);
+      expect(new Set(outfits.map((outfit) => outfit.key)).size).toBe(11);
     }
-    expect(getOutfitForLevel('WARRIOR', 9).key).toBe('warrior-recruit');
-    expect(getOutfitForLevel('WARRIOR', 10).key).toBe('warrior-guard');
-    expect(getOutfitForLevel('WARRIOR', 100).key).toBe('warrior-immortal');
   });
 
   it('gives every outfit and gender one exact PNG path', () => {
