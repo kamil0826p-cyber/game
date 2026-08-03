@@ -10,12 +10,12 @@
 
 ## Assets
 
-Every one of the 33 outfit keys has independent paths under:
+Every one of the 33 outfit keys has an independent PNG under both:
 
 - `frontend/public/assets/sprites/male/`
 - `frontend/public/assets/sprites/female/`
 
-Both paths currently point to copies of the existing art. Legacy root files remain fallback candidates, which makes deployment tolerant of stale browser/CDN caches. World and lobby female art can be replaced per outfit without changing keys or resolver code. The combat-specific limitation is documented below.
+Asset resolution is exact: a selected outfit key loads only its matching gender-specific PNG. The client does not recolor a base sprite, load a legacy root asset, or substitute another outfit from the same class. A missing or invalid sheet is reported as an asset error instead of silently changing the character appearance.
 
 ## Security and compatibility
 
@@ -29,13 +29,16 @@ Both paths currently point to copies of the existing art. Legacy root files rema
 
 - The old creator selected an outfit and then performed a second update. The new appearance-aware creation event persists gender and outfit atomically.
 - The roster displayed a hard-coded total of 10 outfits despite each class having 11. It now uses the catalog length.
+- Legacy asset fallback logic could display a different class outfit when the selected PNG was missing. All preview and world rendering paths now resolve one exact PNG.
+- The asset generator previously mapped multiple outfit keys to a shared base image. It now validates 66 independent gender-specific files and keeps the 1/10/20/.../100 unlock schedule.
 
 ## Tests added or extended
 
 - Character service: selected gender and legacy male default.
 - Socket schema: default, accepted, and rejected gender values.
-- Frontend catalog: all 33 outfits resolve to separate male/female paths and retain legacy fallback.
+- Frontend catalog: all 33 outfits resolve to separate male/female paths.
+- Frontend asset tests: no legacy, SVG, class-level, or copied-outfit fallback path is exposed.
 
 ## Known limitation
 
-Combat participant payloads still identify appearance by outfit key only. This is visually neutral while male and female sprite sheets are identical. Before replacing female sheets with different artwork, gender should also be added to the combat participant contract and passed to `OutfitPreview` in the combat arena.
+Combat participant payloads still identify appearance by outfit key only. Before male and female combat artwork diverges, gender should also be added to the combat participant contract and passed to `OutfitPreview` in the combat arena.
