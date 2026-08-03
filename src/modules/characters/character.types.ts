@@ -18,7 +18,6 @@ export interface CreateCharacterInput {
   name: string;
   characterClass: CharacterClass;
   gender?: CharacterGender;
-  outfitKey?: string;
 }
 
 export type StartingCharacterTemplate = CharacterStats;
