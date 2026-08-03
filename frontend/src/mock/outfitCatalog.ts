@@ -11,28 +11,14 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
   WARRIOR: { label: 'Warrior', role: 'Armored vanguard', description: 'High health, strength, and armor for close combat.', accent: 'text-rose-300' },
   ARCHER: { label: 'Archer', role: 'Agile marksman', description: 'High agility with balanced health and energy.', accent: 'text-emerald-300' },
 };
-const genderFolder = (gender: CharacterGender): string => gender.toLowerCase();
-const genderAssetUrl = (outfitKey: string, gender: CharacterGender): string =>
-  `${import.meta.env.BASE_URL}assets/sprites/${genderFolder(gender)}/${encodeURIComponent(outfitKey)}.png?v=15`;
-const legacyAssetUrl = (outfitKey: string, extension: 'png' | 'svg'): string =>
-  `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.${extension}?v=15`;
-const fallbackKeyFor = (outfitKey: string): string => {
-  if (outfitKey.startsWith('mage-') && outfitKey !== 'mage-apprentice') return 'mage-archmage';
-  if (outfitKey.startsWith('warrior-') && outfitKey !== 'warrior-recruit') return 'warrior-champion';
-  if (outfitKey.startsWith('archer-') && outfitKey !== 'archer-scout') return 'archer-ranger';
-  return outfitKey;
+export const getOutfitForLevel = (characterClass: CharacterClass, level: number): ClientOutfitDefinition => {
+  const normalizedLevel = Math.max(1, Math.trunc(level));
+  const outfits = OUTFIT_CATALOG[characterClass];
+  for (let index = outfits.length - 1; index >= 0; index -= 1) {
+    const candidate = outfits[index];
+    if (candidate && candidate.unlockLevel <= normalizedLevel) return candidate;
+  }
+  return outfits[0]!;
 };
 export const outfitImageUrl = (outfitKey: string, gender: CharacterGender = 'MALE'): string =>
-  genderAssetUrl(outfitKey, gender);
-export const outfitImageCandidates = (
-  outfitKey: string,
-  gender: CharacterGender = 'MALE',
-): readonly string[] => {
-  const fallback = fallbackKeyFor(outfitKey);
-  return [...new Set([
-    genderAssetUrl(outfitKey, gender),
-    legacyAssetUrl(outfitKey, 'png'),
-    legacyAssetUrl(outfitKey, 'svg'),
-    legacyAssetUrl(fallback, 'png'),
-  ])];
-};
+  `${import.meta.env.BASE_URL}assets/sprites/${gender.toLowerCase()}/${encodeURIComponent(outfitKey)}.png?v=16`;
