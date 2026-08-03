@@ -48,31 +48,20 @@ export const OUTFIT_CATALOG: Readonly<Record<CharacterClass, readonly OutfitDefi
   ],
 };
 
-export const getOutfitForLevel = (
-  characterClass: CharacterClass,
-  level: number,
-): OutfitDefinition => {
-  const normalizedLevel = Math.max(1, Math.trunc(level));
-  const outfits = OUTFIT_CATALOG[characterClass];
-
-  for (let index = outfits.length - 1; index >= 0; index -= 1) {
-    const outfit = outfits[index];
-    if (outfit && outfit.unlockLevel <= normalizedLevel) return outfit;
-  }
-
-  return outfits[0]!;
-};
-
 export const getDefaultOutfit = (characterClass: CharacterClass): OutfitDefinition =>
-  getOutfitForLevel(characterClass, 1);
+  OUTFIT_CATALOG[characterClass][0]!;
 
 export const getUnlockedOutfits = (
   characterClass: CharacterClass,
   level: number,
-): OutfitDefinition[] => [getOutfitForLevel(characterClass, level)];
+): OutfitDefinition[] =>
+  OUTFIT_CATALOG[characterClass].filter((outfit) => outfit.unlockLevel <= level);
 
 export const isOutfitUnlocked = (
   characterClass: CharacterClass,
   level: number,
   outfitKey: string,
-): boolean => getOutfitForLevel(characterClass, level).key === outfitKey;
+): boolean =>
+  OUTFIT_CATALOG[characterClass].some(
+    (outfit) => outfit.key === outfitKey && outfit.unlockLevel <= level,
+  );
