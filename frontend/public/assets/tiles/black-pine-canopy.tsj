@@ -11,7 +11,7 @@
   "tiles": [
     {
       "id": 0,
-      "image": "../../assets/tiles/black-pine-canopy.svg",
+      "image": "black-pine-canopy.svg",
       "imageheight": 109,
       "imagewidth": 116
     }
