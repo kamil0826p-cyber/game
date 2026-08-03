@@ -51,6 +51,14 @@ export class MovementCoordinatorService implements OnModuleDestroy {
     return this.pathMovement.cancel(session.characterId);
   }
 
+  transferToMap(session: PlayerSession, destinationMapKey: string): Promise<void> {
+    this.assertAcceptingCommands();
+    this.pathMovement.cancel(session.characterId);
+    return this.serialExecutor.run(session.characterId, () =>
+      this.movement.transferToMap(session, destinationMapKey),
+    );
+  }
+
   assertAcceptingCommands(): void {
     if (!this.acceptingCommands) {
       throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');

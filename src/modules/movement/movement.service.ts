@@ -218,6 +218,52 @@ export class MovementService {
     return { accepted: true, payload };
   }
 
+  async transferToMap(session: PlayerSession, destinationMapKey: string): Promise<void> {
+    if (
+      this.worldState.getByCharacterId(session.characterId)?.connectionId !== session.connectionId
+    ) {
+      return;
+    }
+    const destinationMap = await this.maps.getMapByKey(destinationMapKey);
+    const destination = this.maps.findNearestWalkable(
+      destinationMap,
+      destinationMap.spawn,
+      (x, y) => this.worldState.isOccupied(destinationMap.id, x, y, session.characterId),
+    );
+    const committedAt = Date.now();
+    session.nextMoveAllowedAt = committedAt + this.config.values.MOVE_STEP_MS;
+    const previous = this.worldState.updatePosition(session, {
+      mapId: destinationMap.id,
+      x: destination.x,
+      y: destination.y,
+      direction: 'SOUTH',
+    });
+    const nearbyPlayers = this.visibility.afterMovement(session, previous, true, committedAt);
+
+    this.publisher.emit(session.socketId, 'world:mapChanged', {
+      map: this.toMapState(destinationMap),
+      npcs: await this.npcs.getMapNpcs(destinationMap.id),
+      self: this.worldState.toSelfState(session),
+      nearbyPlayers,
+      serverTime: committedAt,
+    });
+
+    const snapshot = this.persistence.capture(session);
+    try {
+      const persisted = await this.persistence.persistSnapshot(snapshot, 'combat');
+      this.worldState.markPersisted(
+        persisted.characterId,
+        persisted.connectionId,
+        persisted.revision,
+      );
+    } catch (error) {
+      this.logger.error(
+        `System map transfer checkpoint failed for character ${session.characterId}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
   toMapState(map: RuntimeMap): MapStatePayload {
     return {
       id: map.id,

@@ -1,0 +1,15 @@
+{
+  "columns": 8,
+  "image": "../../assets/tiles/ashen-infirmary.svg",
+  "imageheight": 96,
+  "imagewidth": 256,
+  "margin": 0,
+  "name": "ashen-infirmary",
+  "spacing": 0,
+  "tilecount": 24,
+  "tileheight": 32,
+  "tilewidth": 32,
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.11.0"
+}

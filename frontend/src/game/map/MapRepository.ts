@@ -4,6 +4,7 @@ import { compileMapDefinition, decodeTiledMapPayload, parseTiledMap } from './ti
 const mapUrls: Readonly<Record<string, string>> = {
   greenfields: '/maps/greenfields.json',
   'crystal-cave': '/maps/crystal-cave.json',
+  'ashen-infirmary': '/maps/ashen-infirmary.json',
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);

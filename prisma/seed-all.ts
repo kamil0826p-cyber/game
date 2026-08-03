@@ -37,6 +37,15 @@ async function verifyQuestContent(): Promise<void> {
     });
     if (!map) throw new Error('Seed verification failed: Greenfields does not exist.');
 
+    const hospital = await prisma.map.findUnique({
+      where: { realmId_key: { realmId: realm.id, key: 'ashen-infirmary' } },
+      include: { sourcePortals: true },
+    });
+    if (!hospital) throw new Error('Seed verification failed: Ashen Infirmary does not exist.');
+    if (hospital.sourcePortals.length !== 1) {
+      throw new Error('Seed verification failed: Ashen Infirmary portal is missing or duplicated.');
+    }
+
     const [quest, npc] = await Promise.all([
       prisma.questDefinition.findUnique({ where: { key: 'rabbit-fur-for-mira' } }),
       prisma.npcDefinition.findUnique({
@@ -65,6 +74,7 @@ async function verifyQuestContent(): Promise<void> {
 
 async function main(): Promise<void> {
   runSeed('seed.ts');
+  runSeed('seed-hospital.ts');
   runSeed('seed-quests.ts');
   await verifyQuestContent();
 }
