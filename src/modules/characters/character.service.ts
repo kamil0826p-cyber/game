@@ -165,6 +165,28 @@ export class CharacterService {
     }
   }
 
+  async updateOutfit(
+    userId: string,
+    characterId: string,
+    _requestedOutfitKey: string,
+  ): Promise<PersistedCharacterState> {
+    const character = await this.findCharacterForCurrentRealm(userId, characterId);
+    if (!character) {
+      throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
+    }
+
+    const outfitKey = getOutfitForLevel(character.characterClass, character.level).key;
+    const updated = await this.prisma.character.update({
+      where: { id: character.id },
+      data: {
+        outfitKey,
+        stateVersion: { increment: 1 },
+        lastSavedAt: new Date(),
+      },
+    });
+    return this.toPersistedState(updated);
+  }
+
   private toPersistedState(character: CharacterRow): PersistedCharacterState {
     const characterClass = character.class as PersistedCharacterState['characterClass'];
     return {
