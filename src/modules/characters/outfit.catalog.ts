@@ -62,3 +62,17 @@ export const getOutfitForLevel = (
 
   return outfits[0]!;
 };
+
+export const getDefaultOutfit = (characterClass: CharacterClass): OutfitDefinition =>
+  getOutfitForLevel(characterClass, 1);
+
+export const getUnlockedOutfits = (
+  characterClass: CharacterClass,
+  level: number,
+): OutfitDefinition[] => [getOutfitForLevel(characterClass, level)];
+
+export const isOutfitUnlocked = (
+  characterClass: CharacterClass,
+  level: number,
+  outfitKey: string,
+): boolean => getOutfitForLevel(characterClass, level).key === outfitKey;
