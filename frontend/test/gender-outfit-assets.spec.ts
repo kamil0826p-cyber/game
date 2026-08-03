@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OUTFIT_CATALOG, outfitImageCandidates, outfitImageUrl } from '../src/mock/outfitCatalog';
+import { OUTFIT_CATALOG, outfitImageUrl } from '../src/mock/outfitCatalog';
 
 describe('gender-specific outfit assets', () => {
   const outfits = Object.values(OUTFIT_CATALOG).flat();
@@ -15,12 +15,12 @@ describe('gender-specific outfit assets', () => {
     }
   });
 
-  it('does not fall back to legacy, SVG, or another outfit artwork', () => {
+  it('never resolves a legacy root, SVG, or another outfit asset', () => {
     for (const gender of ['MALE', 'FEMALE'] as const) {
       for (const outfit of outfits) {
-        const candidates = outfitImageCandidates(outfit.key, gender);
-        expect(candidates).toEqual([outfitImageUrl(outfit.key, gender)]);
-        expect(candidates[0]).not.toMatch(/\/assets\/sprites\/[^/]+\.(png|svg)/);
+        const path = outfitImageUrl(outfit.key, gender);
+        expect(path).toContain(`/${gender.toLowerCase()}/${outfit.key}.png?v=16`);
+        expect(path).not.toMatch(/\/assets\/sprites\/[^/]+\.(png|svg)/);
       }
     }
   });
