@@ -10,10 +10,17 @@ import { WorldModule } from '../world/world.module.js';
 import { CombatOccupancyService } from './combat-occupancy.service.js';
 import { CombatGateway } from './combat.gateway.js';
 import { CombatService } from './combat.service.js';
+import { DefeatRecoveryService } from './defeat-recovery.service.js';
 
 @Module({
   imports: [GroupModule, MapModule, MovementModule, PersistenceModule, TradeModule, SkillModule, WorldModule],
-  providers: [KeyedSerialExecutor, CombatOccupancyService, CombatService, CombatGateway],
-  exports: [CombatOccupancyService, CombatService],
+  providers: [
+    KeyedSerialExecutor,
+    CombatOccupancyService,
+    DefeatRecoveryService,
+    CombatService,
+    CombatGateway,
+  ],
+  exports: [CombatOccupancyService, DefeatRecoveryService, CombatService],
 })
 export class CombatModule {}

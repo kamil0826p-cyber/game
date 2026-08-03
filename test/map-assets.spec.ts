@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compileCollisionGrid, extractEmbeddedPortals, parseTiledMap } from '../src/modules/maps/tiled-map.parser.js';
 
-const mapNames = ['greenfields', 'crystal-cave'] as const;
+const mapNames = ['greenfields', 'crystal-cave', 'ashen-infirmary'] as const;
 const readJson = async (path: string): Promise<unknown> => JSON.parse(await readFile(path, 'utf8')) as unknown;
 
 describe('committed Tiled map assets', () => {
@@ -35,4 +35,14 @@ describe('committed Tiled map assets', () => {
       }
     });
   }
+
+  it('ashen-infirmary SVG atlas keeps all tiles self-contained', async () => {
+    const svg = await readFile(
+      resolve('frontend', 'public', 'assets', 'tiles', 'ashen-infirmary.svg'),
+      'utf8',
+    );
+    expect(svg.match(/data-tile-id=/g) ?? []).toHaveLength(24);
+    expect(svg).not.toContain('url(#');
+  });
+
 });
