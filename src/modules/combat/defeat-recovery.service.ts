@@ -60,7 +60,9 @@ export class DefeatRecoveryService implements OnModuleInit, OnModuleDestroy {
       ? participant.teamId !== undefined
         ? participant.teamId !== snapshot.winnerTeamId
         : participant.actorId !== snapshot.winnerActorId
-      : participant.hp <= 0;
+      : snapshot.winnerActorId
+        ? participant.actorId !== snapshot.winnerActorId
+        : participant.hp <= 0;
     if (!playerLost) return;
 
     const resultKey = `${snapshot.combatId}:${session.characterId}`;

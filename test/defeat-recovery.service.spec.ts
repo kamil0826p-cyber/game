@@ -137,6 +137,40 @@ describe('DefeatRecoveryService', () => {
     service.onModuleDestroy();
   });
 
+
+  it('treats a forfeit without team metadata as a defeat based on the winner actor', async () => {
+    const session = createSession();
+    session.hp = 120;
+    let observer:
+      | ((socketId: string, snapshot: CombatSnapshot) => void | Promise<void>)
+      | undefined;
+    const transferToMap = vi.fn(async () => undefined);
+    const service = new DefeatRecoveryService(
+      { transferToMap } as unknown as MovementCoordinatorService,
+      { getBySocketId: () => session } as unknown as WorldStateService,
+      {
+        observe: (_event: string, callback: typeof observer) => {
+          observer = callback;
+          return () => undefined;
+        },
+        emit: vi.fn(),
+      } as unknown as WorldEventsPublisher,
+    );
+    const snapshot = finalSnapshot();
+    snapshot.finishReason = 'FORFEIT';
+    snapshot.winnerTeamId = undefined;
+    snapshot.participants[0].teamId = undefined;
+    snapshot.participants[1].teamId = undefined;
+    snapshot.participants[0].hp = 120;
+
+    service.onModuleInit();
+    await observer!(session.socketId, snapshot);
+
+    expect(transferToMap).toHaveBeenCalledOnce();
+    expect(transferToMap).toHaveBeenCalledWith(session, DEFEAT_RECOVERY_MAP_KEY);
+    service.onModuleDestroy();
+  });
+
   it('does not move the winning player', async () => {
     const session = createSession();
     session.characterId = 'player-winner';
