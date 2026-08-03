@@ -4,7 +4,7 @@ import type { PersistedCharacterState } from '../../common/domain/game.types.js'
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { RealmService } from '../realm/realm.service.js';
-import { getOutfitForLevel } from './outfit.catalog.js';
+import { getDefaultOutfit, isOutfitUnlocked } from './outfit.catalog.js';
 import { PROGRESSION_RULES_VERSION } from './progression/character-progression.rules.js';
 import { CharacterProgressionService } from './progression/character-progression.service.js';
 import type { CreateCharacterInput, FirebaseUserRecord } from './character.types.js';
@@ -97,7 +97,11 @@ export class CharacterService {
   async createCharacter(userId: string, input: CreateCharacterInput): Promise<PersistedCharacterState> {
     const realm = await this.realmService.getCurrentRealm();
     const stats = this.progression.initialStats(input.characterClass);
-    const outfitKey = getOutfitForLevel(input.characterClass, 1).key;
+    const defaultOutfit = getDefaultOutfit(input.characterClass).key;
+    const requestedOutfit = input.outfitKey ?? defaultOutfit;
+    const outfitKey = isOutfitUnlocked(input.characterClass, 1, requestedOutfit)
+      ? requestedOutfit
+      : defaultOutfit;
 
     try {
       const character = await this.prisma.$transaction(async (transaction) => {
@@ -168,14 +172,16 @@ export class CharacterService {
   async updateOutfit(
     userId: string,
     characterId: string,
-    _requestedOutfitKey: string,
+    outfitKey: string,
   ): Promise<PersistedCharacterState> {
     const character = await this.findCharacterForCurrentRealm(userId, characterId);
     if (!character) {
       throw new GameError(GAME_ERROR_CODES.CHARACTER_NOT_FOUND, 'errors.character.required');
     }
+    if (!isOutfitUnlocked(character.characterClass, character.level, outfitKey)) {
+      throw new GameError(GAME_ERROR_CODES.OUTFIT_NOT_UNLOCKED, 'errors.character.outfitLocked');
+    }
 
-    const outfitKey = getOutfitForLevel(character.characterClass, character.level).key;
     const updated = await this.prisma.character.update({
       where: { id: character.id },
       data: {
@@ -188,17 +194,16 @@ export class CharacterService {
   }
 
   private toPersistedState(character: CharacterRow): PersistedCharacterState {
-    const characterClass = character.class as PersistedCharacterState['characterClass'];
     return {
       id: character.id,
       userId: character.userId,
       realmId: character.realmId,
       name: character.name,
-      characterClass,
+      characterClass: character.class as PersistedCharacterState['characterClass'],
       gender: (character.gender ?? 'MALE') as PersistedCharacterState['gender'],
       level: character.level,
       experience: character.experience,
-      outfitKey: getOutfitForLevel(characterClass, character.level).key,
+      outfitKey: character.outfitKey,
       mapId: character.mapId,
       x: character.x,
       y: character.y,
