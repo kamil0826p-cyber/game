@@ -1,6 +1,6 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
 import type { CharacterGender, Direction } from '../../contracts/game';
-import { outfitImageCandidates } from '../../mock/outfitCatalog';
+import { outfitImageUrl } from '../../mock/outfitCatalog';
 
 export interface OutfitSheetFrames {
   frameDurationMs: number;
@@ -21,15 +21,19 @@ const createFrames = (baseTexture: Texture): OutfitSheetFrames => {
       const row = directionRows[direction];
       return [
         direction,
-        Array.from({ length: 4 }, (_, column) => new Texture({
-          source: baseTexture.source,
-          frame: new Rectangle(
-            column * FRAME_WIDTH,
-            row * FRAME_HEIGHT,
-            FRAME_WIDTH,
-            FRAME_HEIGHT,
-          ),
-        })),
+        Array.from(
+          { length: 4 },
+          (_, column) =>
+            new Texture({
+              source: baseTexture.source,
+              frame: new Rectangle(
+                column * FRAME_WIDTH,
+                row * FRAME_HEIGHT,
+                FRAME_WIDTH,
+                FRAME_HEIGHT,
+              ),
+            }),
+        ),
       ];
     }),
   ) as Record<Direction, Texture[]>;
@@ -41,25 +45,15 @@ const loadFrames = async (
   outfitKey: string,
   gender: CharacterGender,
 ): Promise<OutfitSheetFrames> => {
-  const errors: unknown[] = [];
-
-  for (const url of outfitImageCandidates(outfitKey, gender)) {
-    try {
-      const baseTexture = await Assets.load<Texture>(url);
-      if (baseTexture.source.width !== SHEET_WIDTH || baseTexture.source.height !== SHEET_HEIGHT) {
-        await Assets.unload(url);
-        throw new Error(
-          `Outfit ${outfitKey} has invalid dimensions ${baseTexture.source.width}x${baseTexture.source.height}. Expected ${SHEET_WIDTH}x${SHEET_HEIGHT}.`,
-        );
-      }
-      return createFrames(baseTexture);
-    } catch (error) {
-      errors.push(error);
-      console.warn(`Outfit candidate failed for ${outfitKey} (${gender}): ${url}`, error);
-    }
+  const url = outfitImageUrl(outfitKey, gender);
+  const baseTexture = await Assets.load<Texture>(url);
+  if (baseTexture.source.width !== SHEET_WIDTH || baseTexture.source.height !== SHEET_HEIGHT) {
+    await Assets.unload(url);
+    throw new Error(
+      `Outfit ${outfitKey} has invalid dimensions ${baseTexture.source.width}x${baseTexture.source.height}. Expected ${SHEET_WIDTH}x${SHEET_HEIGHT}.`,
+    );
   }
-
-  throw new AggregateError(errors, `No outfit image candidate could be loaded for ${outfitKey} (${gender}).`);
+  return createFrames(baseTexture);
 };
 
 export const getOutfitSheetFrames = (
@@ -72,7 +66,7 @@ export const getOutfitSheetFrames = (
 
   const loading = loadFrames(outfitKey, gender).catch((error: unknown) => {
     frameCache.delete(cacheKey);
-    console.error(`Failed to load outfit ${outfitKey} (${gender}).`, error);
+    console.error(`Failed to load exact outfit ${outfitKey} (${gender}).`, error);
     return undefined;
   });
   frameCache.set(cacheKey, loading);
