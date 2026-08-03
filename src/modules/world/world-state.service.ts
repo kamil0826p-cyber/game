@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import type { CharacterGender, Direction } from '../../common/domain/game.types.js';
 import { GameConfigService } from '../../config/game-config.service.js';
 import type { PublicPlayerState, SelfCharacterState } from '../../contracts/socket.events.js';
-import { getOutfitForLevel } from '../characters/outfit.catalog.js';
 import { SpatialIndexService } from './spatial-index.service.js';
 import type { CreatePlayerSessionInput, PlayerSession } from './player-session.types.js';
 
@@ -32,7 +31,6 @@ export class WorldStateService {
     const positionChanged =
       input.mapId !== character.mapId || input.x !== character.x || input.y !== character.y;
     const staleCombatState = character.combatState !== 'IDLE';
-    const outfitKey = getOutfitForLevel(character.characterClass, character.level).key;
     return {
       socketId: input.socketId,
       connectionId: input.connectionId,
@@ -46,7 +44,7 @@ export class WorldStateService {
       experience: character.experience,
       silver: character.silver ?? 0,
       gold: character.gold ?? 0,
-      outfitKey,
+      outfitKey: character.outfitKey,
       mapId: input.mapId,
       x: input.x,
       y: input.y,
@@ -202,15 +200,13 @@ export class WorldStateService {
   }
 
   toPublicState(session: PlayerSession): PublicPlayerState & { gender: CharacterGender } {
-    const outfitKey = getOutfitForLevel(session.characterClass, session.level).key;
-    session.outfitKey = outfitKey;
     return {
       characterId: session.characterId,
       name: session.name,
       characterClass: session.characterClass,
       gender: session.gender,
       level: session.level,
-      outfitKey,
+      outfitKey: session.outfitKey,
       mapId: session.mapId,
       x: session.x,
       y: session.y,
