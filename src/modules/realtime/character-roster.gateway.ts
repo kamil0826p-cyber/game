@@ -5,13 +5,11 @@ import type { GameSocket, SocketAck, SocketErrorPayload, WorldSpawnPayload } fro
 import {
   createCharacterSchema,
   selectCharacterSchema,
-  updateCharacterOutfitSchema,
   type CreateCharacterPayload,
   type SelectCharacterPayload,
-  type UpdateCharacterOutfitPayload,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
-import type { CharacterRosterEntry, CharacterRosterPayload } from './session-lifecycle.service.js';
+import type { CharacterRosterPayload } from './session-lifecycle.service.js';
 import { SessionLifecycleService } from './session-lifecycle.service.js';
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
@@ -43,7 +41,6 @@ export class CharacterRosterGateway {
           name: payload.name,
           characterClass: payload.characterClass,
           gender: payload.gender,
-          outfitKey: payload.outfitKey,
         }),
       };
     } catch (error) {
@@ -59,22 +56,6 @@ export class CharacterRosterGateway {
     try {
       const payload: SelectCharacterPayload = selectCharacterSchema.parse(rawPayload);
       return { ok: true, data: await this.lifecycle.selectCharacter(client, payload.characterId) };
-    } catch (error) {
-      return { ok: false, error: this.toSocketError(error, client) };
-    }
-  }
-
-  @SubscribeMessage('character:outfit')
-  async outfit(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() rawPayload: unknown,
-  ): Promise<SocketAck<CharacterRosterEntry>> {
-    try {
-      const payload: UpdateCharacterOutfitPayload = updateCharacterOutfitSchema.parse(rawPayload);
-      return {
-        ok: true,
-        data: await this.lifecycle.updateCharacterOutfit(client, payload.characterId, payload.outfitKey),
-      };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
     }
