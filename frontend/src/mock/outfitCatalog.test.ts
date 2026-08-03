@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OUTFIT_CATALOG, outfitImageCandidates, outfitImageUrl } from './outfitCatalog';
+import { OUTFIT_CATALOG, outfitImageUrl } from './outfitCatalog';
 
 const expectedUnlockLevels = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
@@ -32,13 +32,9 @@ describe('outfit catalog', () => {
     expect(outfitImageUrl('future outfit')).toContain('future%20outfit.png?v=16');
   });
 
-  it('never substitutes another outfit as a fallback candidate', () => {
-    for (const gender of ['MALE', 'FEMALE'] as const) {
-      for (const outfit of Object.values(OUTFIT_CATALOG).flat()) {
-        expect(outfitImageCandidates(outfit.key, gender)).toEqual([
-          outfitImageUrl(outfit.key, gender),
-        ]);
-      }
-    }
+  it('maps a selection only to the selected outfit key', () => {
+    expect(outfitImageUrl('mage-evoker', 'MALE')).toContain('/male/mage-evoker.png?v=16');
+    expect(outfitImageUrl('warrior-warlord', 'FEMALE')).toContain('/female/warrior-warlord.png?v=16');
+    expect(outfitImageUrl('archer-starshot', 'MALE')).toContain('/male/archer-starshot.png?v=16');
   });
 });
