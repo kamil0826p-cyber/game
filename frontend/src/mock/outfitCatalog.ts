@@ -11,14 +11,5 @@ export const CLASS_PRESENTATION: Readonly<Record<CharacterClass, { label: string
   WARRIOR: { label: 'Warrior', role: 'Armored vanguard', description: 'High health, strength, and armor for close combat.', accent: 'text-rose-300' },
   ARCHER: { label: 'Archer', role: 'Agile marksman', description: 'High agility with balanced health and energy.', accent: 'text-emerald-300' },
 };
-export const getOutfitForLevel = (characterClass: CharacterClass, level: number): ClientOutfitDefinition => {
-  const normalizedLevel = Math.max(1, Math.trunc(level));
-  const outfits = OUTFIT_CATALOG[characterClass];
-  for (let index = outfits.length - 1; index >= 0; index -= 1) {
-    const candidate = outfits[index];
-    if (candidate && candidate.unlockLevel <= normalizedLevel) return candidate;
-  }
-  return outfits[0]!;
-};
 export const outfitImageUrl = (outfitKey: string, gender: CharacterGender = 'MALE'): string =>
   `${import.meta.env.BASE_URL}assets/sprites/${gender.toLowerCase()}/${encodeURIComponent(outfitKey)}.png?v=16`;
