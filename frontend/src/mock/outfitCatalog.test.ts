@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OUTFIT_CATALOG, outfitImageCandidates, outfitImageUrl } from './outfitCatalog';
+import { OUTFIT_CATALOG, outfitImageUrl } from './outfitCatalog';
 
 const expectedUnlockLevels = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
@@ -14,33 +14,31 @@ describe('outfit catalog', () => {
     }
   });
 
-  it('gives every outfit its own directly loadable PNG path', () => {
-    const keys = Object.values(OUTFIT_CATALOG).flat().map((outfit) => outfit.key);
-    const paths = keys.map(outfitImageUrl);
+  it('gives every outfit and gender one exact PNG path', () => {
+    const keys = Object.values(OUTFIT_CATALOG)
+      .flat()
+      .map((outfit) => outfit.key);
+    const paths = keys.flatMap((key) => [
+      outfitImageUrl(key, 'MALE'),
+      outfitImageUrl(key, 'FEMALE'),
+    ]);
 
     expect(keys).toHaveLength(33);
     expect(new Set(keys).size).toBe(33);
-    expect(new Set(paths).size).toBe(33);
+    expect(paths).toHaveLength(66);
+    expect(new Set(paths).size).toBe(66);
     expect(paths.every((path) => path.includes('assets/sprites/'))).toBe(true);
-    expect(paths.every((path) => path.endsWith('.png?v=13'))).toBe(true);
+    expect(paths.every((path) => path.endsWith('.png?v=16'))).toBe(true);
   });
 
   it('encodes outfit keys before building the asset URL', () => {
-    expect(outfitImageUrl('future outfit')).toContain('future%20outfit.png?v=13');
+    expect(outfitImageUrl('future outfit')).toContain('future%20outfit.png?v=16');
   });
 
-  it('falls back to the second class artwork for copied outfit slots', () => {
-    expect(outfitImageCandidates('mage-evoker')).toEqual([
-      expect.stringContaining('mage-evoker.png?v=13'),
-      expect.stringContaining('mage-archmage.png?v=13'),
-    ]);
-    expect(outfitImageCandidates('warrior-warlord')).toEqual([
-      expect.stringContaining('warrior-warlord.png?v=13'),
-      expect.stringContaining('warrior-champion.png?v=13'),
-    ]);
-    expect(outfitImageCandidates('archer-starshot')).toEqual([
-      expect.stringContaining('archer-starshot.png?v=13'),
-      expect.stringContaining('archer-ranger.png?v=13'),
-    ]);
+  it('never substitutes another outfit image', () => {
+    expect(outfitImageUrl('mage-evoker')).toContain('/male/mage-evoker.png?v=16');
+    expect(outfitImageUrl('warrior-warlord')).toContain('/male/warrior-warlord.png?v=16');
+    expect(outfitImageUrl('archer-starshot')).toContain('/male/archer-starshot.png?v=16');
+    expect(outfitImageUrl('warrior-warlord')).not.toContain('warrior-champion');
   });
 });
