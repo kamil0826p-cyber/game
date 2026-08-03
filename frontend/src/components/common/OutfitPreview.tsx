@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CharacterClass, CharacterGender, Direction } from '../../contracts/game';
-import { outfitImageCandidates } from '../../mock/outfitCatalog';
+import { outfitImageUrl } from '../../mock/outfitCatalog';
 
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
 
@@ -37,24 +37,13 @@ export function OutfitPreview({
     image.decoding = 'async';
     const mob = outfitKey.startsWith('mob-');
     const safeRenderScale = Math.max(0.2, Math.min(3, renderScale));
-    const candidates = mob
-      ? [`${import.meta.env.BASE_URL}assets/mobs/${encodeURIComponent(outfitKey)}.svg`]
-      : [...outfitImageCandidates(outfitKey, gender)];
-    let candidateIndex = 0;
+    const imageUrl = mob
+      ? `${import.meta.env.BASE_URL}assets/mobs/${encodeURIComponent(outfitKey)}.svg`
+      : outfitImageUrl(outfitKey, gender);
     let frameId = 0;
     let start = performance.now();
     let loaded = false;
     let cancelled = false;
-
-    const tryNextCandidate = () => {
-      loaded = false;
-      const next = candidates[candidateIndex++];
-      if (next) {
-        image.src = next;
-        return;
-      }
-      console.error(`No outfit image candidate could be loaded for ${outfitKey} (${gender}).`);
-    };
 
     const draw = (now: number) => {
       if (cancelled) return;
@@ -89,8 +78,10 @@ export function OutfitPreview({
       if (cancelled) return;
       const validSheet = mob || (image.naturalWidth === 128 && image.naturalHeight === 192);
       if (!validSheet) {
-        console.error(`Outfit ${outfitKey} has invalid dimensions ${image.naturalWidth}x${image.naturalHeight}. Expected 128x192.`);
-        tryNextCandidate();
+        loaded = false;
+        console.error(
+          `Outfit ${outfitKey} has invalid dimensions ${image.naturalWidth}x${image.naturalHeight}. Expected 128x192.`,
+        );
         return;
       }
       loaded = true;
@@ -98,11 +89,11 @@ export function OutfitPreview({
     };
     image.onerror = () => {
       if (cancelled) return;
-      console.warn(`Outfit image failed to load: ${image.src}`);
-      tryNextCandidate();
+      loaded = false;
+      console.error(`Outfit image failed to load: ${imageUrl}`);
     };
 
-    tryNextCandidate();
+    image.src = imageUrl;
     frameId = requestAnimationFrame(draw);
     return () => {
       cancelled = true;
