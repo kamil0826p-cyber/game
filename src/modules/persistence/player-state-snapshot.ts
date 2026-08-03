@@ -1,5 +1,4 @@
 import type { CombatState, Direction } from '../../common/domain/game.types.js';
-import { getOutfitForLevel } from '../characters/outfit.catalog.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 
 export interface PlayerStateSnapshot {
@@ -36,7 +35,7 @@ export const capturePlayerState = (session: PlayerSession): PlayerStateSnapshot 
   direction: session.direction,
   level: session.level,
   experience: session.experience,
-  outfitKey: getOutfitForLevel(session.characterClass, session.level).key,
+  outfitKey: session.outfitKey,
   combatState: session.combatState,
   hp: session.hp,
   maxHp: session.maxHp,
