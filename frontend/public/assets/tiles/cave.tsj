@@ -10,13 +10,13 @@
   "tiles": [
     {
       "id": 0,
-      "image": "../../assets/tiles/cave-floor.svg",
+      "image": "cave-floor.svg",
       "imageheight": 32,
       "imagewidth": 32
     },
     {
       "id": 1,
-      "image": "../../assets/tiles/cave-rock.svg",
+      "image": "cave-rock.svg",
       "imageheight": 32,
       "imagewidth": 32,
       "properties": [

@@ -10,7 +10,7 @@
   "tiles": [
     {
       "id": 0,
-      "image": "../../assets/tiles/black-pine-trunk.svg",
+      "image": "black-pine-trunk.svg",
       "imageheight": 85,
       "imagewidth": 96,
       "objectgroup": {
