@@ -24,6 +24,7 @@ export const englishMessages = {
   'errors.items.equipped': 'Unequip this item first.',
   'errors.items.levelRequired': 'Your character level is too low to equip this item.',
   'errors.items.loadoutLocked': 'Equipment cannot be changed while an expedition is being prepared or is active.',
+  'errors.items.combatLocked': 'Equipment cannot be changed while a combat request is pending or combat is active.',
   'errors.items.effectNotNeeded': 'This consumable would not restore anything right now.',
   'errors.items.curseRestriction': 'An equipped curse prevents the use of healing consumables.',
   'errors.items.merchantUnavailable': 'Move closer to a merchant to trade.',

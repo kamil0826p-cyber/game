@@ -20,6 +20,7 @@ import {
   type MerchantSellPayload,
 } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import { CombatOccupancyService } from '../combat/combat-occupancy.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
@@ -47,6 +48,7 @@ export class ItemGateway {
     private readonly items: ItemService,
     private readonly worldState: WorldStateService,
     private readonly movementCoordinator: MovementCoordinatorService,
+    private readonly combatOccupancy: CombatOccupancyService,
     private readonly localization: LocalizationService,
   ) {}
 
@@ -62,8 +64,9 @@ export class ItemGateway {
 
   @SubscribeMessage('inventory:equip')
   equip(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryEquipSchema, raw, async (session, payload) =>
-      this.syncSession(
+    return this.handle(client, inventoryEquipSchema, raw, async (session, payload) => {
+      this.assertEquipmentChangeAllowed(session);
+      return this.syncSession(
         session,
         await (this.items as ConfirmingItemService).equip(
           session.userId,
@@ -71,13 +74,19 @@ export class ItemGateway {
           payload.itemId,
           payload.confirmationHash,
         ),
-      ),
-    );
+      );
+    });
   }
 
   @SubscribeMessage('inventory:unequip')
   unequip(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<InventorySnapshot>> {
-    return this.handle(client, inventoryItemSchema, raw, async (session, payload) => this.syncSession(session, await this.items.unequip(session.userId, session.characterId, payload.itemId)));
+    return this.handle(client, inventoryItemSchema, raw, async (session, payload) => {
+      this.assertEquipmentChangeAllowed(session);
+      return this.syncSession(
+        session,
+        await this.items.unequip(session.userId, session.characterId, payload.itemId),
+      );
+    });
   }
 
   @SubscribeMessage('inventory:use')
@@ -118,6 +127,20 @@ export class ItemGateway {
       this.syncSession(session, snapshot.inventory);
       return snapshot;
     });
+  }
+
+  private assertEquipmentChangeAllowed(session: PlayerSession): void {
+    if (
+      session.combatState === 'IDLE' &&
+      !this.combatOccupancy.isOccupied(session.characterId)
+    ) {
+      return;
+    }
+    throw new GameError(
+      GAME_ERROR_CODES.ITEM_LOADOUT_LOCKED,
+      'errors.items.combatLocked',
+      { reason: 'EQUIPMENT_LOCKED_DURING_COMBAT' },
+    );
   }
 
   private assertMerchantAccess(client: GameSocket, npcId: MerchantRequestPayload['npcId']): void {

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CharacterModule } from '../characters/character.module.js';
+import { CombatOccupancyModule } from '../combat/combat-occupancy.module.js';
 import { MovementModule } from '../movement/movement.module.js';
 import { NpcModule } from '../npcs/npc.module.js';
 import { WorldModule } from '../world/world.module.js';
@@ -24,7 +25,13 @@ import { RewardClaimsGateway } from './reward-claims.gateway.js';
 import { RewardClaimsService } from './reward-claims.service.js';
 
 @Module({
-  imports: [WorldModule, MovementModule, CharacterModule, NpcModule],
+  imports: [
+    WorldModule,
+    MovementModule,
+    CharacterModule,
+    CombatOccupancyModule,
+    NpcModule,
+  ],
   providers: [
     ItemizationCatalogService,
     ItemInventoryService,

@@ -142,3 +142,38 @@ describe('CharacterProgressionService respec idempotency', () => {
     ).rejects.toMatchObject({ code: GAME_ERROR_CODES.INVALID_PAYLOAD });
   });
 });
+
+describe('CharacterProgressionService absolute resource policy', () => {
+  it('does not heal when the calculated resource maximum increases', async () => {
+    const { character, service, transaction } = createHarness();
+    character.hp = 200;
+    character.energy = 70;
+    character.level = 11;
+
+    const result = await service.recomputeInTransaction(
+      transaction as never,
+      character.id,
+      { preserveAbsoluteResources: true },
+    );
+
+    expect(result.maxHp).toBeGreaterThan(235);
+    expect(result.maxEnergy).toBeGreaterThanOrEqual(99);
+    expect(result.hp).toBe(200);
+    expect(result.energy).toBe(70);
+  });
+
+  it('only clamps resources when the calculated maximum decreases', async () => {
+    const { character, service, transaction } = createHarness();
+    character.level = 9;
+
+    const result = await service.recomputeInTransaction(
+      transaction as never,
+      character.id,
+      { preserveAbsoluteResources: true },
+    );
+
+    expect(result.maxHp).toBeLessThan(235);
+    expect(result.hp).toBe(result.maxHp);
+    expect(result.energy).toBe(Math.min(99, result.maxEnergy));
+  });
+});
