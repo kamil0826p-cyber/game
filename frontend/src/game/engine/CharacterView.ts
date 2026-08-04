@@ -1,5 +1,5 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
-import type { CharacterGender, PublicPlayerState } from '../../contracts/game';
+import type { PublicPlayerState } from '../../contracts/game';
 import { isGroupMate, subscribeGroupPresence } from '../groups/groupPresence';
 import { isGuildMate, subscribeGuildPresence } from '../guilds/guildPresence';
 import { WORLD_TILE_SIZE } from './constants';
@@ -28,7 +28,7 @@ export class CharacterView {
   private movementStartedAt = 0;
   private movementDuration = 1;
   private moving = false;
-  private lastAppearanceKey = '';
+  private lastOutfitKey = '';
 
   constructor(
     state: PublicPlayerState,
@@ -83,7 +83,7 @@ export class CharacterView {
     this.startX = this.targetX = x;
     this.startY = this.targetY = y;
     this.container.position.set(x, y);
-    this.loadOutfit(state.outfitKey, state.gender ?? 'MALE');
+    this.loadOutfit(state.outfitKey);
   }
 
   sync(state: PublicPlayerState, stepMs: number, immediate = false): void {
@@ -93,10 +93,7 @@ export class CharacterView {
     this.state = state;
     this.nameText.text = `${state.name}  Lv. ${state.level}`;
     this.updateBadgeStyle();
-    const gender = state.gender ?? 'MALE';
-    if (`${gender}:${state.outfitKey}` !== this.lastAppearanceKey) {
-      this.loadOutfit(state.outfitKey, gender);
-    }
+    if (state.outfitKey !== this.lastOutfitKey) this.loadOutfit(state.outfitKey);
 
     if (immediate || distance > WORLD_TILE_SIZE * 1.6) {
       this.startX = this.targetX = nextX;
@@ -176,16 +173,15 @@ export class CharacterView {
     if (texture && this.sprite.texture !== texture) this.sprite.texture = texture;
   }
 
-  private loadOutfit(outfitKey: string, gender: CharacterGender): void {
-    const appearanceKey = `${gender}:${outfitKey}`;
-    this.lastAppearanceKey = appearanceKey;
+  private loadOutfit(outfitKey: string): void {
+    this.lastOutfitKey = outfitKey;
     this.frames = undefined;
     this.sprite.visible = false;
 
-    void getOutfitSheetFrames(outfitKey, gender).then((frames) => {
-      if (this.destroyed || this.lastAppearanceKey !== appearanceKey) return;
+    void getOutfitSheetFrames(outfitKey).then((frames) => {
+      if (this.destroyed || this.lastOutfitKey !== outfitKey) return;
       if (!frames) {
-        console.error(`Outfit frames failed to load for ${outfitKey} (${gender}).`);
+        console.error(`Outfit frames failed to load for ${outfitKey}.`);
         return;
       }
       const initialTexture = frames.frames[this.state.direction]?.[0];
