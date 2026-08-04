@@ -20,8 +20,15 @@ import type {
 } from '../src/modules/items/itemization.types.js';
 import { SKILL_CATALOG } from '../src/modules/skills/skill.catalog.js';
 
+type ModifierOverrides = Omit<
+  Partial<EquippedItemCurseModifiers>,
+  'corruptionByTrigger'
+> & {
+  corruptionByTrigger?: Partial<EquippedItemCurseModifiers['corruptionByTrigger']>;
+};
+
 const modifiers = (
-  overrides: Partial<EquippedItemCurseModifiers> = {},
+  overrides: ModifierOverrides = {},
 ): EquippedItemCurseModifiers => {
   const base: EquippedItemCurseModifiers = {
     healingReceivedMultiplier: 1,
