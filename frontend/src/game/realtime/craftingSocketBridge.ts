@@ -10,6 +10,7 @@ import type {
   SocketAck,
 } from '../../contracts/socket';
 import { createRequestId } from '../../utils/requestId';
+import { invalidateRewardClaims } from '../rewards/rewardClaimsUiEvents';
 import { gameStore } from '../state/gameStore';
 import type { GameSocketClient } from './GameSocketClient';
 
@@ -19,7 +20,7 @@ interface CraftingClientEvents {
     acknowledgement: (response: SocketAck<CraftingSnapshot>) => void,
   ) => void;
   'crafting:craft': (
-    payload: { requestId: string; recipeKey: string },
+    payload: { requestId: string; recipeKey: string; recipeVersion: number },
     acknowledgement: (response: SocketAck<CraftingResult>) => void,
   ) => void;
   'crafting:orderCreate': (
@@ -52,7 +53,7 @@ interface BridgeClient {
 declare module './GameSocketClient' {
   interface GameSocketClient {
     getCrafting(): Promise<CraftingSnapshot>;
-    craftRecipe(recipeKey: string): Promise<CraftingResult>;
+    craftRecipe(recipeKey: string, recipeVersion: number): Promise<CraftingResult>;
     createCraftOrder(
       recipeKey: string,
       rewardSilver: number,
@@ -64,6 +65,13 @@ declare module './GameSocketClient' {
 }
 
 const ACK_TIMEOUT_MS = 8_000;
+
+class CraftingAckTimeoutError extends Error {
+  constructor() {
+    super('The game server did not acknowledge the request.');
+    this.name = 'CraftingAckTimeoutError';
+  }
+}
 
 export function installCraftingSocketBridge(client: GameSocketClient): void {
   const bridge = client as unknown as BridgeClient;
@@ -80,7 +88,7 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
     new Promise<SocketAck<T>>((resolve, reject) => {
       const socket = requireSocket();
       const timeout = window.setTimeout(
-        () => reject(new Error('The game server did not acknowledge the request.')),
+        () => reject(new CraftingAckTimeoutError()),
         ACK_TIMEOUT_MS,
       );
       emit(socket, (response) => {
@@ -110,11 +118,13 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
 
   const synchronizeResult = <T extends CraftingResult | CraftOrderMutationResult>(result: T): T => {
     synchronizeSilver(result.snapshot);
+    const delivery = 'crafted' in result ? result.crafted.delivery : result.mutation.delivery;
+    if (delivery === 'CLAIMS') invalidateRewardClaims();
     return result;
   };
 
   const refreshInventory = async <T>(result: T): Promise<T> => {
-    await client.getInventory();
+    await client.getInventory().catch(() => undefined);
     return result;
   };
 
@@ -127,16 +137,24 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
       ),
     ).then(synchronizeSilver);
 
-  client.craftRecipe = (recipeKey) =>
-    withAck<CraftingResult>((socket, acknowledgement) =>
-      socket.emit(
-        'crafting:craft',
-        { requestId: createRequestId('crafting-craft'), recipeKey },
-        acknowledgement,
-      ),
-    )
+  client.craftRecipe = (recipeKey, recipeVersion) => {
+    const requestId = createRequestId('crafting-craft');
+    const attempt = (): Promise<CraftingResult> =>
+      withAck<CraftingResult>((socket, acknowledgement) =>
+        socket.emit(
+          'crafting:craft',
+          { requestId, recipeKey, recipeVersion },
+          acknowledgement,
+        ),
+      );
+    return attempt()
+      .catch((error: unknown) => {
+        if (error instanceof CraftingAckTimeoutError) return attempt();
+        throw error;
+      })
       .then(synchronizeResult)
       .then(refreshInventory);
+  };
 
   client.createCraftOrder = (recipeKey, rewardSilver) =>
     withAck<CraftOrderMutationResult>((socket, acknowledgement) =>
