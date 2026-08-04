@@ -1,4 +1,5 @@
 import type { CharacterClass, EquipmentSlot } from '../common/domain/game.types.js';
+import type { InventoryItemizationPayload } from '../modules/items/itemization.contracts.js';
 import type {
   CombatSnapshot,
   ItemRarity,
@@ -35,6 +36,7 @@ export interface MobLootRewardPayload {
   minimumLevel: number;
   statBonuses: ItemStatBonuses;
   effect?: { hp?: number; energy?: number };
+  itemization?: InventoryItemizationPayload;
 }
 
 export interface MobRewardPayload {
