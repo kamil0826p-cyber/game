@@ -1,3 +1,4 @@
+import { ITEM_SALVAGE_PROFILES } from './itemization.catalog.js';
 import type {
   ItemBindPolicy,
   ItemCurseCost,
@@ -9,6 +10,21 @@ import type {
   RolledItemAffix,
 } from './itemization.types.js';
 import { buildItemEquipPreview } from './itemization.rules.js';
+
+export interface InventorySalvageOutputPayload {
+  itemKey: string;
+  quantity: number;
+}
+
+export interface InventorySalvagePreviewPayload {
+  profileKey: string;
+  deterministic: InventorySalvageOutputPayload[];
+  rare?: {
+    itemKey: string;
+    chance: number;
+    guaranteedAfterMisses: number;
+  };
+}
 
 export interface InventoryItemizationPayload {
   snapshotVersion: number;
@@ -34,6 +50,7 @@ export interface InventoryItemizationPayload {
   bindPolicy: ItemBindPolicy;
   tradePolicy: ItemTradePolicy;
   salvagePolicy: ItemSalvagePolicy;
+  salvage?: InventorySalvagePreviewPayload;
   boundCharacterId?: string;
   equipConfirmationHash: string;
   requiresEquipConfirmation: boolean;
@@ -44,6 +61,10 @@ export const toInventoryItemizationPayload = (
   snapshot: ItemInstanceSnapshot,
 ): InventoryItemizationPayload => {
   const preview = buildItemEquipPreview(metadata, snapshot);
+  const salvageProfileKey = metadata.mechanics?.salvageProfileKey;
+  const salvageProfile = salvageProfileKey
+    ? ITEM_SALVAGE_PROFILES[salvageProfileKey]
+    : undefined;
   return {
     snapshotVersion: snapshot.version,
     powerLevel: snapshot.powerLevel,
@@ -61,6 +82,20 @@ export const toInventoryItemizationPayload = (
     bindPolicy: snapshot.bindPolicy,
     tradePolicy: snapshot.tradePolicy,
     salvagePolicy: snapshot.salvagePolicy,
+    salvage:
+      snapshot.salvagePolicy === 'ALLOWED' && salvageProfile
+        ? {
+            profileKey: salvageProfile.key,
+            deterministic: salvageProfile.deterministic.map((output) => ({ ...output })),
+            rare: salvageProfile.rare
+              ? {
+                  itemKey: salvageProfile.rare.itemKey,
+                  chance: salvageProfile.rare.chance,
+                  guaranteedAfterMisses: salvageProfile.rare.guaranteedAfterMisses,
+                }
+              : undefined,
+          }
+        : undefined,
     boundCharacterId: snapshot.boundCharacterId,
     equipConfirmationHash: preview.confirmationHash,
     requiresEquipConfirmation: preview.requiresConfirmation,
