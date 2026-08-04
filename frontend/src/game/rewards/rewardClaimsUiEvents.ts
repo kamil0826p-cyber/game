@@ -1,3 +1,5 @@
+export const TOGGLE_REWARD_CLAIMS_WINDOW_EVENT = 'game:toggle-reward-claims-window';
+export const CLOSE_REWARD_CLAIMS_WINDOW_EVENT = 'game:close-reward-claims-window';
 export const REWARD_CLAIMS_UPDATED_EVENT = 'game:reward-claims-updated';
 export const REWARD_CLAIMS_INVALIDATED_EVENT = 'game:reward-claims-invalidated';
 
