@@ -1,0 +1,246 @@
+{
+  "columns": 0,
+  "name": "hospital-props",
+  "tilecount": 9,
+  "tileheight": 32,
+  "tilewidth": 32,
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.11.0",
+  "tiles": [
+    {
+      "id": 0,
+      "image": "hospital-bedside-table.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "furniture"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "image": "hospital-apothecary-cabinet.svg",
+      "imageheight": 64,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "furniture"
+        }
+      ],
+      "objectgroup": {
+        "draworder": "index",
+        "id": 1,
+        "name": "Collision",
+        "objects": [
+          {
+            "height": 32,
+            "id": 1,
+            "name": "Footprint",
+            "rotation": 0,
+            "type": "collision",
+            "visible": true,
+            "width": 32,
+            "x": 0,
+            "y": 32
+          }
+        ],
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "image": "hospital-privacy-screen-left.svg",
+      "imageheight": 64,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "screen"
+        }
+      ],
+      "objectgroup": {
+        "draworder": "index",
+        "id": 1,
+        "name": "Collision",
+        "objects": [
+          {
+            "height": 32,
+            "id": 1,
+            "name": "Footprint",
+            "rotation": 0,
+            "type": "collision",
+            "visible": true,
+            "width": 32,
+            "x": 0,
+            "y": 32
+          }
+        ],
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 3,
+      "image": "hospital-privacy-screen-right.svg",
+      "imageheight": 64,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "screen"
+        }
+      ],
+      "objectgroup": {
+        "draworder": "index",
+        "id": 1,
+        "name": "Collision",
+        "objects": [
+          {
+            "height": 32,
+            "id": 1,
+            "name": "Footprint",
+            "rotation": 0,
+            "type": "collision",
+            "visible": true,
+            "width": 32,
+            "x": 0,
+            "y": 32
+          }
+        ],
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 4,
+      "image": "hospital-blood-basin.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "medical-prop"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "image": "hospital-brazier.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "light"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "image": "hospital-candle-stand.svg",
+      "imageheight": 64,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "light"
+        }
+      ],
+      "objectgroup": {
+        "draworder": "index",
+        "id": 1,
+        "name": "Collision",
+        "objects": [
+          {
+            "height": 32,
+            "id": 1,
+            "name": "Footprint",
+            "rotation": 0,
+            "type": "collision",
+            "visible": true,
+            "width": 32,
+            "x": 0,
+            "y": 32
+          }
+        ],
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 7,
+      "image": "hospital-crate.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "storage"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "image": "hospital-barrel.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "storage"
+        }
+      ]
+    }
+  ]
+}
