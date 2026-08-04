@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CombatParticipantPayload, CombatSnapshot } from '../src/contracts/socket.events.js';
 import { DefeatRecoveryService } from '../src/modules/combat/defeat-recovery.service.js';
 
-const participant = (characterId: string, hp: number): CombatParticipantPayload => ({
+const participant = (
+  characterId: string,
+  hp: number,
+): CombatParticipantPayload => ({
   actorId: characterId,
   kind: 'PLAYER',
   characterId,
@@ -54,6 +57,7 @@ describe('DefeatRecoveryService', () => {
       characterId: 'dead',
       locale: 'pl',
       activeInWorld: true,
+      combatState: 'IDLE',
       mapId: 'greenfields-id',
       x: 8,
       y: 8,
@@ -82,7 +86,9 @@ describe('DefeatRecoveryService', () => {
         revision: session.stateRevision,
       })),
     };
-    const visibility = { afterMovement: vi.fn().mockReturnValue([]) };
+    const visibility = {
+      afterMovement: vi.fn().mockReturnValue([]),
+    };
     const publisher = {
       onCombatUpdated: vi.fn().mockReturnValue(vi.fn()),
       emit: vi.fn(),
@@ -96,7 +102,7 @@ describe('DefeatRecoveryService', () => {
       updatePosition: vi.fn(
         (
           session: typeof deadSession,
-          next: { mapId: string; x: number; y: number; direction: 'NORTH' },
+          next: typeof hospital.spawn & { mapId: string; direction: 'NORTH' },
         ) => {
           const previous = {
             mapId: session.mapId,
