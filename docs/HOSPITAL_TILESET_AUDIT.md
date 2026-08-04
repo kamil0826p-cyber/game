@@ -40,7 +40,7 @@ middle
 foot
 ```
 
-Każdy segment zajmuje jedno pole `32 x 32` i ma pełną kolizję. Dzięki temu mapę można swobodnie układać, obracać przez dobór warstw i łatwo wymieniać uszkodzony albo zakrwawiony środkowy segment w przyszłości.
+Każdy segment zajmuje jedno pole `32 x 32` i ma pełną kolizję. Dzięki temu łóżka można swobodnie rozmieszczać i łatwo wymienić uszkodzony albo zakrwawiony środkowy segment w przyszłości.
 
 ### Wysokie obiekty
 

@@ -84,7 +84,7 @@ describe('dark hospital Tiled assets', () => {
       }
     }
 
-    expect(referencedImages).toHaveLength(25);
+    expect(referencedImages.size).toBe(25);
   });
 
   it('models beds as two three-piece objects', async () => {
