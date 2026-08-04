@@ -20,12 +20,6 @@ import { ItemEconomyService } from './item-economy.service.js';
 
 const requestId = z.string().trim().min(1).max(96);
 const characterOperation = z.object({ requestId }).strict();
-const craftSchema = z
-  .object({ requestId, recipeKey: z.string().trim().min(1).max(96) })
-  .strict();
-const craftOrderActionSchema = z
-  .object({ requestId, orderId: z.string().uuid() })
-  .strict();
 const salvageSchema = z
   .object({ requestId, itemId: z.string().uuid() })
   .strict();
@@ -59,77 +53,20 @@ export class ItemEconomyGateway {
   ) {}
 
   @SubscribeMessage('itemization:get')
-  get(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<unknown>> {
+  get(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<unknown>> {
     return this.handle(client, characterOperation, raw, (session) =>
       this.economy.snapshot(session.userId, session.characterId),
     );
   }
 
-  @SubscribeMessage('itemization:craft')
-  craft(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<unknown>> {
-    return this.handle(client, craftSchema, raw, async (session, payload) => {
-      const result = await this.economy.craft(
-        session.userId,
-        session.characterId,
-        payload.recipeKey,
-        payload.requestId,
-      );
-      this.syncSilver(session, result);
-      return result;
-    });
-  }
-
-  @SubscribeMessage('itemization:craftOrder:create')
-  createCraftOrder(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, craftSchema, raw, (session, payload) =>
-      this.economy.createCraftOrder(
-        session.userId,
-        session.characterId,
-        payload.recipeKey,
-        payload.requestId,
-      ),
-    );
-  }
-
-  @SubscribeMessage('itemization:craftOrder:fulfill')
-  fulfillCraftOrder(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, craftOrderActionSchema, raw, async (session, payload) => {
-      const result = await this.economy.fulfillCraftOrder(
-        session.userId,
-        session.characterId,
-        payload.orderId,
-        payload.requestId,
-      );
-      this.syncSilver(session, result);
-      return result;
-    });
-  }
-
-  @SubscribeMessage('itemization:craftOrder:cancel')
-  cancelCraftOrder(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, craftOrderActionSchema, raw, async (session, payload) => {
-      const result = await this.economy.cancelCraftOrder(
-        session.userId,
-        session.characterId,
-        payload.orderId,
-        payload.requestId,
-      );
-      this.syncSilver(session, result);
-      return result;
-    });
-  }
-
   @SubscribeMessage('itemization:salvage')
-  salvage(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<unknown>> {
+  salvage(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<unknown>> {
     return this.handle(client, salvageSchema, raw, (session, payload) =>
       this.economy.salvage(
         session.userId,
@@ -141,7 +78,10 @@ export class ItemEconomyGateway {
   }
 
   @SubscribeMessage('itemization:market:get')
-  market(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<unknown>> {
+  market(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<unknown>> {
     return this.handle(client, marketQuerySchema, raw, (_session, payload) =>
       this.economy.market(payload.itemKey),
     );
@@ -199,14 +139,20 @@ export class ItemEconomyGateway {
   }
 
   @SubscribeMessage('itemization:claims:get')
-  claims(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<unknown>> {
+  claims(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<unknown>> {
     return this.handle(client, characterOperation, raw, (session) =>
       this.economy.claims(session.userId, session.characterId),
     );
   }
 
   @SubscribeMessage('itemization:claims:claim')
-  claim(@ConnectedSocket() client: GameSocket, @MessageBody() raw: unknown): Promise<SocketAck<unknown>> {
+  claim(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<unknown>> {
     return this.handle(client, claimActionSchema, raw, async (session, payload) => {
       const result = await this.economy.claim(
         session.userId,
