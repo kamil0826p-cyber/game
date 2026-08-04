@@ -22,22 +22,25 @@ import { SKILL_CATALOG } from '../src/modules/skills/skill.catalog.js';
 
 const modifiers = (
   overrides: Partial<EquippedItemCurseModifiers> = {},
-): EquippedItemCurseModifiers => ({
-  healingReceivedMultiplier: 1,
-  healingConsumablesLocked: false,
-  corruptionByTrigger: {
-    SKILL_CAST: 0,
-    GUARD_SUCCESS: 0,
-    COMBAT_END: 0,
-  },
-  ...overrides,
-  corruptionByTrigger: {
-    SKILL_CAST: 0,
-    GUARD_SUCCESS: 0,
-    COMBAT_END: 0,
-    ...overrides.corruptionByTrigger,
-  },
-});
+): EquippedItemCurseModifiers => {
+  const base: EquippedItemCurseModifiers = {
+    healingReceivedMultiplier: 1,
+    healingConsumablesLocked: false,
+    corruptionByTrigger: {
+      SKILL_CAST: 0,
+      GUARD_SUCCESS: 0,
+      COMBAT_END: 0,
+    },
+  };
+  return {
+    ...base,
+    ...overrides,
+    corruptionByTrigger: {
+      ...base.corruptionByTrigger,
+      ...overrides.corruptionByTrigger,
+    },
+  };
+};
 
 const cursedSnapshot = (
   key: string,
