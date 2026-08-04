@@ -4,7 +4,7 @@ import type { CraftingRecipePayload } from '../../../contracts/crafting';
 
 interface CraftingRecipeListProps {
   recipes: CraftingRecipePayload[];
-  selectedKey?: string;
+  selectedKey: string | undefined;
   locale: 'en' | 'pl';
   onSelect: (recipeKey: string) => void;
 }
