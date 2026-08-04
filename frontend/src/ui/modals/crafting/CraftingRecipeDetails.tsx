@@ -24,7 +24,7 @@ const classLabels = {
 } as const;
 
 interface CraftingRecipeDetailsProps {
-  recipe?: CraftingRecipePayload;
+  recipe: CraftingRecipePayload | undefined;
   silver: number;
   locale: 'en' | 'pl';
   busy: boolean;
