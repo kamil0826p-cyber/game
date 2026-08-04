@@ -27,7 +27,10 @@ export const MARKET_MAX_PRICE_SILVER = 2_147_483_647;
 export const marketListingFee = (priceSilver: number): number =>
   Math.max(1, Math.floor(priceSilver * MARKET_LISTING_FEE_RATE));
 export const marketCommission = (priceSilver: number): number =>
-  Math.min(priceSilver, Math.max(1, Math.floor(priceSilver * MARKET_COMMISSION_RATE)));
+  Math.min(
+    Math.max(0, priceSilver - 1),
+    Math.max(1, Math.floor(priceSilver * MARKET_COMMISSION_RATE)),
+  );
 export const marketUnitPrice = (priceSilver: number, quantity: number): number =>
   Math.floor(priceSilver / quantity);
 
