@@ -65,12 +65,14 @@ export class CraftingGateway {
   ): Promise<SocketAck<CraftingSnapshot>> {
     return this.handle(client, craftingRequestSchema, raw, async (session) => {
       const station = await this.requireStation(client, session);
-      return this.crafting.getSnapshot(
+      const result = await this.crafting.getSnapshot(
         session.userId,
         session.characterId,
         station,
         await this.stationName(station.npcId),
       );
+      this.syncSilver(client, session, result.silver);
+      return result;
     });
   }
 
