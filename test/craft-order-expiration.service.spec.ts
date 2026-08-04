@@ -1,6 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { PrismaService } from '../src/database/prisma.service.js';
 import { CraftOrderExpirationService } from '../src/modules/items/craft-order-expiration.service.js';
 import type { CraftOrderService } from '../src/modules/items/craft-order.service.js';
+import type { WorldStateService } from '../src/modules/world/world-state.service.js';
+
+const dependencies = (
+  expireOrders: ReturnType<typeof vi.fn>,
+  sessions: Array<{
+    characterId: string;
+    silver: number;
+    stateRevision: number;
+    dirty: boolean;
+  }> = [],
+  balances: Array<{ id: string; silver: number }> = [],
+) => ({
+  craftOrders: { expireOrders } as unknown as CraftOrderService,
+  prisma: {
+    character: { findMany: vi.fn().mockResolvedValue(balances) },
+  } as unknown as PrismaService,
+  worldState: { listSessions: vi.fn().mockReturnValue(sessions) } as unknown as WorldStateService,
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -8,17 +27,31 @@ afterEach(() => {
 });
 
 describe('CraftOrderExpirationService', () => {
-  it('sweeps immediately, drains full batches and schedules later sweeps', async () => {
+  it('sweeps immediately, drains full batches and synchronizes online balances', async () => {
     vi.useFakeTimers();
     const expireOrders = vi
       .fn()
       .mockResolvedValueOnce(100)
       .mockResolvedValueOnce(2)
       .mockResolvedValueOnce(0);
-    const service = new CraftOrderExpirationService({ expireOrders } as unknown as CraftOrderService);
+    const session = {
+      characterId: 'character-1',
+      silver: 10,
+      stateRevision: 4,
+      dirty: false,
+    };
+    const { craftOrders, prisma, worldState } = dependencies(
+      expireOrders,
+      [session],
+      [{ id: 'character-1', silver: 250 }],
+    );
+    const service = new CraftOrderExpirationService(craftOrders, prisma, worldState);
 
     service.onModuleInit();
     await vi.waitFor(() => expect(expireOrders).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(session.silver).toBe(250));
+    expect(session.stateRevision).toBe(5);
+    expect(session.dirty).toBe(true);
 
     await vi.advanceTimersByTimeAsync(60_000);
     await vi.waitFor(() => expect(expireOrders).toHaveBeenCalledTimes(3));
@@ -36,7 +69,8 @@ describe('CraftOrderExpirationService', () => {
         release = () => resolve(0);
       }),
     );
-    const service = new CraftOrderExpirationService({ expireOrders } as unknown as CraftOrderService);
+    const { craftOrders, prisma, worldState } = dependencies(expireOrders);
+    const service = new CraftOrderExpirationService(craftOrders, prisma, worldState);
 
     service.onModuleInit();
     await vi.waitFor(() => expect(expireOrders).toHaveBeenCalledOnce());
