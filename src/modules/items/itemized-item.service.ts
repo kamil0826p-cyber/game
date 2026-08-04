@@ -8,7 +8,10 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { CharacterProgressionService } from '../characters/progression/character-progression.service.js';
 import { CanonicalItemService } from './canonical-item.service.js';
 import { ItemCurseRuntimeService } from './item-curse-runtime.service.js';
-import type { InventoryItemizationPayload } from './itemization.contracts.js';
+import {
+  toInventoryItemizationPayload,
+  type InventoryItemizationPayload,
+} from './itemization.contracts.js';
 import { ItemInventoryService } from './item-inventory.service.js';
 import { ItemizationCatalogService } from './itemization-catalog.service.js';
 import {
@@ -282,28 +285,10 @@ export class ItemizedItemService extends CanonicalItemService {
       items: snapshot.items.map((item) => {
         const entry = byId.get(item.id);
         if (!entry) return item;
-        const preview = buildItemEquipPreview(entry.metadata, entry.snapshot);
-        const itemization: InventoryItemizationPayload = {
-          snapshotVersion: entry.snapshot.version,
-          powerLevel: entry.snapshot.powerLevel,
-          powerBudget: entry.snapshot.powerBudget,
-          powerSpent: entry.snapshot.powerSpent,
-          affixes: entry.snapshot.affixes.map((affix) => ({
-            ...affix,
-            tags: [...affix.tags],
-            statBonuses: { ...affix.statBonuses },
-          })),
-          relic: preview.relic,
-          curse: preview.curse,
-          craftQuality: entry.snapshot.craftQuality,
-          origin: { ...entry.snapshot.origin },
-          bindPolicy: entry.snapshot.bindPolicy,
-          tradePolicy: entry.snapshot.tradePolicy,
-          salvagePolicy: entry.snapshot.salvagePolicy,
-          boundCharacterId: entry.snapshot.boundCharacterId,
-          equipConfirmationHash: preview.confirmationHash,
-          requiresEquipConfirmation: preview.requiresConfirmation,
-        };
+        const itemization: InventoryItemizationPayload = toInventoryItemizationPayload(
+          entry.metadata,
+          entry.snapshot,
+        );
         return {
           ...item,
           statBonuses: effectiveItemStatBonuses(entry.metadata, entry.snapshot),
