@@ -4,12 +4,15 @@ import { MapService } from '../maps/map.service.js';
 import type { RuntimeMap } from '../maps/runtime-map.types.js';
 import { NpcService } from '../npcs/npc.service.js';
 import { PlayerPersistenceService } from '../persistence/player-persistence.service.js';
+import type { PlayerSession } from '../world/player-session.types.js';
 import { VisibilityService } from '../world/visibility.service.js';
 import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 
 const HOSPITAL_MAP_KEY = 'hospital';
 const PROCESSED_COMBAT_RETENTION_MS = 10 * 60_000;
+const COMBAT_RELEASE_WAIT_MS = 2_000;
+const COMBAT_RELEASE_POLL_MS = 20;
 
 @Injectable()
 export class DefeatRecoveryService implements OnModuleInit, OnModuleDestroy {
@@ -70,13 +73,8 @@ export class DefeatRecoveryService implements OnModuleInit, OnModuleDestroy {
       const hospitalNpcs = await this.npcs.getMapNpcs(hospital.id);
 
       for (const characterId of defeatedCharacterIds) {
-        const session = this.world.getByCharacterId(characterId);
-        if (!session) {
-          this.logger.warn(
-            `Defeated character ${characterId} is offline; hospital transfer will occur on the next active defeat event.`,
-          );
-          continue;
-        }
+        const session = await this.waitForCombatRelease(characterId);
+        if (!session) continue;
 
         const transferredAt = Date.now();
         const previous = this.world.updatePosition(session, {
@@ -123,6 +121,26 @@ export class DefeatRecoveryService implements OnModuleInit, OnModuleDestroy {
     } finally {
       this.processing.delete(snapshot.combatId);
     }
+  }
+
+  private async waitForCombatRelease(characterId: string): Promise<PlayerSession | undefined> {
+    const deadline = Date.now() + COMBAT_RELEASE_WAIT_MS;
+    while (Date.now() <= deadline) {
+      const session = this.world.getByCharacterId(characterId);
+      if (!session) {
+        this.logger.warn(
+          `Defeated character ${characterId} could not be transferred because its world session is unavailable.`,
+        );
+        return undefined;
+      }
+      if (session.combatState === 'IDLE') return session;
+      await new Promise((resolve) => setTimeout(resolve, COMBAT_RELEASE_POLL_MS));
+    }
+
+    this.logger.warn(
+      `Defeated character ${characterId} remained in combat state and was not transferred to the hospital.`,
+    );
+    return undefined;
   }
 
   private remember(combatId: string): void {
