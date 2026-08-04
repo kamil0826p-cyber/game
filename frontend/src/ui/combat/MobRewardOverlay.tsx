@@ -55,8 +55,12 @@ export function MobRewardOverlay(): React.JSX.Element | null {
               {locale === 'pl' ? 'Tym razem nic nie wypadło.' : 'No items dropped this time.'}
             </p>
           ) : null}
-          {reward.loot.map((item) => (
-            <ItemTooltip key={item.itemKey} item={item} currentLevel={reward.self.level}>
+          {reward.loot.map((item, index) => (
+            <ItemTooltip
+              key={`${item.itemKey}:${index}`}
+              item={item}
+              currentLevel={reward.self.level}
+            >
               <div className={`flex items-center gap-3 rounded border bg-black/30 p-3 ${rarityClasses(item.rarity)}`}>
                 <span className="text-2xl">{item.icon}</span>
                 <div className="min-w-0 flex-1">
@@ -88,10 +92,16 @@ export function MobRewardOverlay(): React.JSX.Element | null {
                 : 'No item was lost. Free inventory space and collect it from the reward queue.'}
             </p>
             <ul className="mt-2 space-y-1">
-              {reward.claimQueuedLoot.map((item) => (
-                <li key={item.itemKey}>
-                  {item.icon} {item.name} ×{item.quantity}
-                </li>
+              {reward.claimQueuedLoot.map((item, index) => (
+                <ItemTooltip
+                  key={`${item.itemKey}:claim:${index}`}
+                  item={item}
+                  currentLevel={reward.self.level}
+                >
+                  <li className={`rounded border bg-black/20 px-2 py-1 ${rarityClasses(item.rarity)}`}>
+                    {item.icon} {item.name} ×{item.quantity}
+                  </li>
+                </ItemTooltip>
               ))}
             </ul>
           </div>
