@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CraftingResult, CraftingSnapshot } from '../src/contracts/crafting';
+import type {
+  CraftOrderMutationResult,
+  CraftingResult,
+  CraftingSnapshot,
+} from '../src/contracts/crafting';
 import type { InventorySnapshot, SocketAck } from '../src/contracts/socket';
 import type { GameSocketClient } from '../src/game/realtime/GameSocketClient';
 import { installCraftingSocketBridge } from '../src/game/realtime/craftingSocketBridge';
@@ -12,6 +16,16 @@ const snapshot: CraftingSnapshot = {
   mapKey: 'greenfields',
   silver: 500,
   recipes: [],
+  orders: {
+    rules: {
+      activeOrderLimit: 10,
+      activeOrderCount: 0,
+      maximumRewardSilver: 10_000_000,
+      ttlMs: 604_800_000,
+    },
+    board: [],
+    mine: [],
+  },
 };
 const result: CraftingResult = {
   snapshot,
@@ -23,11 +37,21 @@ const result: CraftingResult = {
     delivery: 'INVENTORY',
   },
 };
+const orderResult = (kind: 'CREATED' | 'FULFILLED' | 'CANCELLED'): CraftOrderMutationResult => ({
+  snapshot,
+  mutation: {
+    kind,
+    orderId: '00000000-0000-0000-0000-000000000101',
+    outputName: 'Hartowany puklerz chitynowy',
+    rewardSilver: 100,
+    ownerCharacterId: 'character-1',
+  },
+});
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('crafting player flow', () => {
-  it('requests the forge, crafts a recipe and refreshes inventory', async () => {
+  it('requests the forge and supports crafting plus all craft order actions', async () => {
     vi.stubGlobal('window', {
       setTimeout: globalThis.setTimeout,
       clearTimeout: globalThis.clearTimeout,
@@ -40,6 +64,18 @@ describe('crafting player flow', () => {
       else if (event === 'crafting:craft') {
         expect(payload.recipeKey).toBe('tempered-chitin-buckler-v1');
         ack({ ok: true, data: result });
+      } else if (event === 'crafting:orderCreate') {
+        expect(payload).toEqual(expect.objectContaining({
+          recipeKey: 'tempered-chitin-buckler-v1',
+          rewardSilver: 100,
+        }));
+        ack({ ok: true, data: orderResult('CREATED') });
+      } else if (event === 'crafting:orderFulfill') {
+        expect(payload.orderId).toBe('00000000-0000-0000-0000-000000000101');
+        ack({ ok: true, data: orderResult('FULFILLED') });
+      } else if (event === 'crafting:orderCancel') {
+        expect(payload.orderId).toBe('00000000-0000-0000-0000-000000000101');
+        ack({ ok: true, data: orderResult('CANCELLED') });
       } else throw new Error(`Unexpected event ${event}`);
     });
     const client = {
@@ -50,10 +86,16 @@ describe('crafting player flow', () => {
 
     await expect(client.getCrafting()).resolves.toEqual(snapshot);
     await expect(client.craftRecipe('tempered-chitin-buckler-v1')).resolves.toEqual(result);
-    expect(getInventory).toHaveBeenCalledOnce();
+    await expect(client.createCraftOrder('tempered-chitin-buckler-v1', 100))
+      .resolves.toEqual(orderResult('CREATED'));
+    await expect(client.fulfillCraftOrder('00000000-0000-0000-0000-000000000101'))
+      .resolves.toEqual(orderResult('FULFILLED'));
+    await expect(client.cancelCraftOrder('00000000-0000-0000-0000-000000000101'))
+      .resolves.toEqual(orderResult('CANCELLED'));
+    expect(getInventory).toHaveBeenCalledTimes(4);
   });
 
-  it('opens crafting from Borin and exposes all recipe requirements in the UI', () => {
+  it('opens crafting from Borin and exposes the complete order board workflow', () => {
     const interaction = readFileSync(
       fileURLToPath(new URL('../src/ui/npcs/NpcInteractionLayer.tsx', import.meta.url)),
       'utf8',
@@ -66,15 +108,25 @@ describe('crafting player flow', () => {
       fileURLToPath(new URL('../src/ui/modals/crafting/CraftingRecipeDetails.tsx', import.meta.url)),
       'utf8',
     );
+    const ordersPanel = readFileSync(
+      fileURLToPath(new URL('../src/ui/modals/crafting/CraftingOrdersPanel.tsx', import.meta.url)),
+      'utf8',
+    );
 
     expect(interaction).toContain("action.type === 'OPEN_CRAFTING'");
     expect(interaction).toContain('<CraftingModal');
     expect(modal).toContain('connection.getCrafting()');
     expect(modal).toContain('connection.craftRecipe(selected.key)');
-    expect(modal).toContain('confirmCraft');
+    expect(modal).toContain('connection.createCraftOrder(recipeKey, rewardSilver)');
+    expect(modal).toContain('connection.fulfillCraftOrder(orderId)');
+    expect(modal).toContain('connection.cancelCraftOrder(orderId)');
+    expect(modal).toContain('15_000');
     expect(details).toContain('ownedQuantity');
     expect(details).toContain('recipe.availability.canCraft');
-    expect(details).toContain('recipe.output.relic');
-    expect(details).toContain('recipe.output.curse');
+    expect(ordersPanel).toContain('snapshot.orders.board');
+    expect(ordersPanel).toContain('snapshot.orders.mine');
+    expect(ordersPanel).toContain('selected.orderAvailability.canCreate');
+    expect(ordersPanel).toContain('rewardSilver');
+    expect(ordersPanel).toContain('totalEscrowSilver');
   });
 });
