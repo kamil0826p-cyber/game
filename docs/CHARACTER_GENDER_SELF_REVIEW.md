@@ -9,10 +9,11 @@
 
 ## Outfit rendering
 
-- The outfit key is now the only input used to resolve player artwork.
-- Every one of the 33 outfit keys resolves directly to its own PNG under `frontend/public/assets/sprites/`.
+- The outfit key is the only runtime input used to resolve player artwork.
+- Every one of the 33 outfit keys resolves to its exact existing PNG under `frontend/public/assets/sprites/male/`.
+- The `male` directory is retained only as the legacy storage location; character gender is not passed to the resolver and does not change the selected file.
 - The character creator, character selection screen, HUD previews, combat previews, and Pixi world renderer share the same canonical resolver.
-- Gender-specific sprite folders, palette variants, and cross-outfit fallback substitutions are not part of the runtime resolution path.
+- Palette variants and cross-outfit fallback substitutions are not part of the runtime resolution path.
 - A missing outfit image fails visibly instead of silently displaying artwork assigned to another level.
 
 ## Security and compatibility
@@ -29,7 +30,7 @@
 - Removed gender from the world renderer's appearance cache key.
 - Removed the fallback that substituted a different outfit image from the same class.
 - Corrected stale frontend tests that expected ten outfits and multiple level-one variants.
-- Added regression coverage proving that all 33 outfits use unique, exact image paths.
+- Added regression coverage proving that all 33 outfit URLs point to existing exact asset files.
 
 ## Verification
 
