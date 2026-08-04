@@ -34,12 +34,20 @@ const buttons: Array<{
   { key: 'settings', icon: '⚙', hotkey: 'O' },
 ];
 
+const claimsBlockedByModal = (modal: ModalKey): boolean =>
+  modal === 'trade' ||
+  modal === 'combat' ||
+  modal === 'npc-dialogue' ||
+  modal === 'merchant';
+
 export function HudButtons(): React.JSX.Element {
   const { t, locale } = useI18n();
   const connection = useGameConnection();
   const state = useGameState();
   const [rewardCount, setRewardCount] = useState(0);
   const [expiringSoonCount, setExpiringSoonCount] = useState(0);
+  const rewardsBlocked =
+    state.self?.combatState !== 'IDLE' || claimsBlockedByModal(state.activeModal);
 
   useEffect(() => {
     const updated = (event: Event) => {
@@ -80,11 +88,13 @@ export function HudButtons(): React.JSX.Element {
                   ? 'Ustawienia'
                   : 'Settings'
                 : t(button.labelKey!);
+        const disabled = button.key === 'rewards' && rewardsBlocked;
         return (
           <button
             key={button.key}
             type="button"
             className="hud-window-button hud-tooltip-anchor relative"
+            disabled={disabled}
             onClick={() => {
               if (button.key === 'settings') {
                 window.dispatchEvent(new Event(CLOSE_GUILD_WINDOW_EVENT));
@@ -95,6 +105,7 @@ export function HudButtons(): React.JSX.Element {
                 window.dispatchEvent(new Event(CLOSE_REWARD_CLAIMS_WINDOW_EVENT));
                 window.dispatchEvent(new Event(TOGGLE_GUILD_WINDOW_EVENT));
               } else if (button.key === 'rewards') {
+                if (rewardsBlocked) return;
                 window.dispatchEvent(new Event(CLOSE_SETTINGS_WINDOW_EVENT));
                 window.dispatchEvent(new Event(CLOSE_GUILD_WINDOW_EVENT));
                 gameStore.setActiveModal(null);
