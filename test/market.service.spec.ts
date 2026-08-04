@@ -20,9 +20,12 @@ describe('player item market', () => {
     expect(marketListingFee(1)).toBe(1);
     expect(marketListingFee(100)).toBe(2);
     expect(marketListingFee(149)).toBe(2);
-    expect(marketCommission(1)).toBe(1);
+    expect(marketCommission(1)).toBe(0);
+    expect(marketCommission(2)).toBe(1);
     expect(marketCommission(100)).toBe(5);
     expect(marketCommission(199)).toBe(9);
+    expect(1 - marketCommission(1)).toBe(1);
+    expect(2 - marketCommission(2)).toBe(1);
     expect(marketUnitPrice(300, 3)).toBe(100);
     expect(marketUnitPrice(301, 3)).toBe(100);
   });
