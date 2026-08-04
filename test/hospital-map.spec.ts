@@ -87,7 +87,7 @@ describe('dark hospital map', () => {
       orientation: 'orthogonal',
       infinite: false,
     });
-    expect(map.tilesets.map((tileset) => tileset.source)).toEqual([
+    expect((map.tilesets ?? []).map((tileset) => tileset.source)).toEqual([
       '../assets/tiles/hospital-floor.tsj',
       '../assets/tiles/hospital-structure.tsj',
       '../assets/tiles/hospital-beds.tsj',
