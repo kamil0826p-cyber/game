@@ -13,6 +13,7 @@ import { GuildOverlay } from '../guilds/GuildOverlay';
 import { ModalHost } from '../modals/ModalHost';
 import { NpcInteractionLayer } from '../npcs/NpcInteractionLayer';
 import { PlayerInteractionLayer } from '../interactions/PlayerInteractionLayer';
+import { RewardClaimsOverlay } from '../rewards/RewardClaimsOverlay';
 import { SettingsOverlay } from '../settings/SettingsOverlay';
 import { ActionBar } from './ActionBar';
 import { ChatPanel } from './ChatPanel';
@@ -131,6 +132,7 @@ export function GameHud(): React.JSX.Element | null {
       <ModalHost />
       <SettingsOverlay />
       <GuildOverlay />
+      <RewardClaimsOverlay />
       <NpcInteractionLayer />
       <PlayerInteractionLayer />
       <MobRewardOverlay />
