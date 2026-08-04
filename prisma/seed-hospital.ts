@@ -16,7 +16,7 @@ const connectionString =
   process.env.DATABASE_URL ?? 'postgresql://game:game@localhost:5432/grid_mmorpg?schema=public';
 const realmSlug = process.env.GAME_REALM_SLUG ?? 'world-1';
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-const hospitalSpawn = { x: 12, y: 15 } as const;
+const hospitalSpawn = { x: 12, y: 9 } as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
