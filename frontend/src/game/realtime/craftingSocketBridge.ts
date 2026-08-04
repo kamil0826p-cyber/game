@@ -95,6 +95,24 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
       return response.data;
     });
 
+  const synchronizeSilver = (snapshot: CraftingSnapshot): CraftingSnapshot => {
+    const self = gameStore.getSnapshot().self;
+    if (self && self.silver !== snapshot.silver) {
+      gameStore.updateCurrency({
+        characterId: self.characterId,
+        currency: 'SILVER',
+        amount: snapshot.silver - self.silver,
+        balance: snapshot.silver,
+      });
+    }
+    return snapshot;
+  };
+
+  const synchronizeResult = <T extends CraftingResult | CraftOrderMutationResult>(result: T): T => {
+    synchronizeSilver(result.snapshot);
+    return result;
+  };
+
   const refreshInventory = async <T>(result: T): Promise<T> => {
     await client.getInventory();
     return result;
@@ -107,7 +125,7 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
         { requestId: createRequestId('crafting-get') },
         acknowledgement,
       ),
-    );
+    ).then(synchronizeSilver);
 
   client.craftRecipe = (recipeKey) =>
     withAck<CraftingResult>((socket, acknowledgement) =>
@@ -116,7 +134,9 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
         { requestId: createRequestId('crafting-craft'), recipeKey },
         acknowledgement,
       ),
-    ).then(refreshInventory);
+    )
+      .then(synchronizeResult)
+      .then(refreshInventory);
 
   client.createCraftOrder = (recipeKey, rewardSilver) =>
     withAck<CraftOrderMutationResult>((socket, acknowledgement) =>
@@ -129,7 +149,9 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
         },
         acknowledgement,
       ),
-    ).then(refreshInventory);
+    )
+      .then(synchronizeResult)
+      .then(refreshInventory);
 
   client.fulfillCraftOrder = (orderId) =>
     withAck<CraftOrderMutationResult>((socket, acknowledgement) =>
@@ -138,7 +160,9 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
         { requestId: createRequestId('craft-order-fulfill'), orderId },
         acknowledgement,
       ),
-    ).then(refreshInventory);
+    )
+      .then(synchronizeResult)
+      .then(refreshInventory);
 
   client.cancelCraftOrder = (orderId) =>
     withAck<CraftOrderMutationResult>((socket, acknowledgement) =>
@@ -147,7 +171,9 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
         { requestId: createRequestId('craft-order-cancel'), orderId },
         acknowledgement,
       ),
-    ).then(refreshInventory);
+    )
+      .then(synchronizeResult)
+      .then(refreshInventory);
 
   client.closeCrafting = async () => {
     const socket = bridge.socket;
