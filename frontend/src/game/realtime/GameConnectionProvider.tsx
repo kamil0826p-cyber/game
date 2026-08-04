@@ -14,6 +14,7 @@ import { GameSocketClient } from './GameSocketClient';
 import { installGroupSocketBridge } from './groupSocketBridge';
 import { installGuildSocketBridge } from './guildSocketBridge';
 import { installItemizationSocketBridge } from './itemizationSocketBridge';
+import { installMarketSocketBridge } from './marketSocketBridge';
 import { installMobSocketBridge } from './mobSocketBridge';
 import { installCharacterProgressionSocketBridge } from './progressionSocketBridge';
 
@@ -32,6 +33,7 @@ export function GameConnectionProvider({ user, children }: GameConnectionProvide
     installCharacterProgressionSocketBridge(clientRef.current);
     installItemizationSocketBridge(clientRef.current);
     installCraftingSocketBridge(clientRef.current);
+    installMarketSocketBridge(clientRef.current);
   }
   useEffect(() => {
     const client = clientRef.current!;
