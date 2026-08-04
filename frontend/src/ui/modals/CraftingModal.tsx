@@ -83,7 +83,7 @@ export function CraftingModal({ npcName, onClose }: CraftingModalProps): React.J
     if (!selected || busy || !selected.availability.canCraft || !confirmCraft()) return;
     setBusy(true);
     try {
-      const result = await connection.craftRecipe(selected.key);
+      const result = await connection.craftRecipe(selected.key, selected.version);
       applySnapshot(result.snapshot);
       setLastCraft(result.crafted);
       setLastOrder(undefined);
