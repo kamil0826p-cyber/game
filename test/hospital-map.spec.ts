@@ -38,6 +38,9 @@ const tileLayer = (map: TiledMapJson, name: string): TiledTileLayer => {
   return layer;
 };
 
+const gidAt = (layer: TiledTileLayer, x: number, y: number): number =>
+  layer.data[y * layer.width + x] ?? 0;
+
 const reachable = (
   collision: Uint8Array,
   width: number,
@@ -118,12 +121,64 @@ describe('dark hospital map', () => {
     ).toBe(true);
   });
 
-  it('contains four complete beds and blocks the perimeter outside the portal', async () => {
+  it('uses a deliberate two-ward layout without ambiguous bedside clutter', async () => {
+    const map = await resolveTilesets(await readJson(backendPath), backendPath);
+    const ground = tileLayer(map, 'Ground');
+    const furniture = tileLayer(map, 'Beds and Furniture');
+    const tall = tileLayer(map, 'Tall Props and Door');
+
+    const expectedBeds = [
+      { x: 4, top: 4 },
+      { x: 19, top: 4 },
+      { x: 4, top: 10 },
+      { x: 19, top: 10 },
+    ];
+    for (const bed of expectedBeds) {
+      expect([
+        gidAt(furniture, bed.x, bed.top),
+        gidAt(furniture, bed.x, bed.top + 1),
+        gidAt(furniture, bed.x, bed.top + 2),
+      ]).toEqual([11, 12, 13]);
+    }
+    expect(furniture.data.filter((gid) => gid >= 11 && gid <= 16)).toHaveLength(12);
+
+    const intentionallyUnusedProps = new Set([17, 19, 20, 21, 23]);
+    expect(
+      [...furniture.data, ...tall.data].filter((gid) => intentionallyUnusedProps.has(gid)),
+    ).toHaveLength(0);
+
+    expect(tall.data.filter((gid) => gid === 18)).toHaveLength(2);
+    expect(gidAt(tall, 11, 2)).toBe(18);
+    expect(gidAt(tall, 12, 2)).toBe(18);
+
+    const braziers = [
+      { x: 2, y: 2 },
+      { x: 21, y: 2 },
+      { x: 2, y: 14 },
+      { x: 21, y: 14 },
+    ];
+    expect(furniture.data.filter((gid) => gid === 22)).toHaveLength(braziers.length);
+    for (const position of braziers) {
+      expect(gidAt(furniture, position.x, position.y)).toBe(22);
+    }
+
+    expect([
+      gidAt(furniture, 2, 15),
+      gidAt(furniture, 3, 15),
+      gidAt(furniture, 4, 15),
+      gidAt(furniture, 19, 15),
+      gidAt(furniture, 20, 15),
+      gidAt(furniture, 21, 15),
+    ]).toEqual([24, 24, 25, 25, 24, 24]);
+
+    expect(ground.data.filter((gid) => gid === 5)).toHaveLength(1);
+    expect(gidAt(ground, 12, 8)).toBe(5);
+    expect(new Set(ground.data)).toEqual(new Set([1, 2, 5]));
+  });
+
+  it('blocks the perimeter outside the portal', async () => {
     const map = await resolveTilesets(await readJson(backendPath), backendPath);
     const collision = compileCollisionGrid(map);
-    const furniture = tileLayer(map, 'Beds and Furniture');
-    const bedSegments = furniture.data.filter((gid) => gid >= 11 && gid <= 16);
-    expect(bedSegments).toHaveLength(12);
 
     for (let x = 0; x < map.width; x += 1) {
       expect(collision[x]).toBe(1);
