@@ -70,14 +70,16 @@ describe('equipment resource and combat safety', () => {
     expect(equip).toEqual({
       ok: false,
       error: expect.objectContaining({
-        code: GAME_ERROR_CODES.COMBAT_ACTION_INVALID,
+        code: GAME_ERROR_CODES.ITEM_LOADOUT_LOCKED,
+        message: 'errors.items.combatLocked',
         details: { reason: 'EQUIPMENT_LOCKED_DURING_COMBAT' },
       }),
     });
     expect(unequip).toEqual({
       ok: false,
       error: expect.objectContaining({
-        code: GAME_ERROR_CODES.COMBAT_ACTION_INVALID,
+        code: GAME_ERROR_CODES.ITEM_LOADOUT_LOCKED,
+        message: 'errors.items.combatLocked',
         details: { reason: 'EQUIPMENT_LOCKED_DURING_COMBAT' },
       }),
     });
@@ -96,7 +98,8 @@ describe('equipment resource and combat safety', () => {
     expect(response).toEqual({
       ok: false,
       error: expect.objectContaining({
-        code: GAME_ERROR_CODES.COMBAT_ACTION_INVALID,
+        code: GAME_ERROR_CODES.ITEM_LOADOUT_LOCKED,
+        message: 'errors.items.combatLocked',
         details: { reason: 'EQUIPMENT_LOCKED_DURING_COMBAT' },
       }),
     });
