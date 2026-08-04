@@ -3,6 +3,7 @@ import { CharacterModule } from '../characters/character.module.js';
 import { MovementModule } from '../movement/movement.module.js';
 import { NpcModule } from '../npcs/npc.module.js';
 import { WorldModule } from '../world/world.module.js';
+import { CraftOrderExpirationService } from './craft-order-expiration.service.js';
 import { CraftOrderService } from './craft-order.service.js';
 import { CraftingGateway } from './crafting.gateway.js';
 import { CraftingService } from './crafting.service.js';
@@ -22,6 +23,7 @@ import { ItemService } from './item.service.js';
     ItemInventoryService,
     ItemEconomyService,
     CraftOrderService,
+    CraftOrderExpirationService,
     CraftingService,
     ItemCurseRuntimeService,
     MerchantItemizedItemService,
