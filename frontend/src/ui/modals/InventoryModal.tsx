@@ -114,6 +114,12 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
         ? `Rozłożyć „${item.name}” na materiały?\n\nPrzedmiot zostanie bezpowrotnie zniszczony, a odzyskane materiały trafią do plecaka. Tej operacji nie można cofnąć.`
         : `Salvage “${item.name}” into materials?\n\nThe item will be permanently destroyed and recovered materials will be added to your backpack. This cannot be undone.`,
     );
+  const confirmDestroy = (item: InventoryItemPayload): boolean =>
+    window.confirm(
+      locale === 'pl'
+        ? `Zniszczyć 1 × „${item.name}”?\n\nNie otrzymasz żadnych materiałów. Tej operacji nie można cofnąć.`
+        : `Destroy 1 × “${item.name}”?\n\nYou will not receive any materials. This cannot be undone.`,
+    );
   const equipItem = (item: InventoryItemPayload): void => {
     if (!canEquip(item) || !confirmCurse(item)) return;
     const confirmationHash = item.itemization?.requiresEquipConfirmation
@@ -124,6 +130,10 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
   const salvageItem = (item: InventoryItemPayload): void => {
     if (!canSalvage(item) || !confirmSalvage(item)) return;
     void mutate(() => connection.salvageInventoryItem(item.id));
+  };
+  const destroyItem = (item: InventoryItemPayload): void => {
+    if (item.equippedSlot || !confirmDestroy(item)) return;
+    void mutate(() => destroyInventoryItem(item.id));
   };
 
   return (
@@ -400,7 +410,7 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                 <button
                   className="hud-utility-button"
                   disabled={busy || Boolean(selected.equippedSlot)}
-                  onClick={() => void mutate(() => destroyInventoryItem(selected.id))}
+                  onClick={() => destroyItem(selected)}
                 >
                   {locale === 'pl' ? 'Zniszcz 1' : 'Destroy 1'}
                 </button>
