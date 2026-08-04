@@ -3,8 +3,9 @@ import type {
   EquipmentSlot,
   ItemCategory,
   ItemRarity,
-  ItemStatBonuses,
 } from './socket';
+
+export type MarketStatBonuses = Record<string, number | undefined>;
 
 export interface MarketItemPayload {
   definitionKey: string;
@@ -16,13 +17,13 @@ export interface MarketItemPayload {
   equipmentSlot?: EquipmentSlot;
   requiredClass?: CharacterClass;
   minimumLevel: number;
-  statBonuses: ItemStatBonuses;
+  statBonuses: MarketStatBonuses;
   powerLevel: number;
   craftQuality: number;
   affixes: Array<{
     name: string;
     tier: number;
-    statBonuses: ItemStatBonuses;
+    statBonuses: MarketStatBonuses;
   }>;
   relic?: { key: string; name: string; description: string };
   curse?: { key: string; name: string; description: string; preview: string };
