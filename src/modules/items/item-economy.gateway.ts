@@ -23,20 +23,6 @@ const characterOperation = z.object({ requestId }).strict();
 const salvageSchema = z
   .object({ requestId, itemId: z.string().uuid() })
   .strict();
-const marketQuerySchema = z
-  .object({ requestId, itemKey: z.string().trim().min(1).max(96).optional() })
-  .strict();
-const marketListSchema = z
-  .object({
-    requestId,
-    itemId: z.string().uuid(),
-    quantity: z.number().int().min(1).max(9999),
-    priceSilver: z.number().int().min(1).max(2_147_483_647),
-  })
-  .strict();
-const marketActionSchema = z
-  .object({ requestId, listingId: z.string().uuid() })
-  .strict();
 const claimActionSchema = z
   .object({ requestId, claimId: z.string().uuid() })
   .strict();
@@ -75,67 +61,6 @@ export class ItemEconomyGateway {
         payload.requestId,
       ),
     );
-  }
-
-  @SubscribeMessage('itemization:market:get')
-  market(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, marketQuerySchema, raw, (_session, payload) =>
-      this.economy.market(payload.itemKey),
-    );
-  }
-
-  @SubscribeMessage('itemization:market:list')
-  listMarketItem(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, marketListSchema, raw, (session, payload) =>
-      this.economy.createMarketListing(
-        session.userId,
-        session.characterId,
-        payload.itemId,
-        payload.quantity,
-        payload.priceSilver,
-        payload.requestId,
-      ),
-    );
-  }
-
-  @SubscribeMessage('itemization:market:buy')
-  buyMarketItem(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, marketActionSchema, raw, async (session, payload) => {
-      const result = await this.economy.buyMarketListing(
-        session.userId,
-        session.characterId,
-        payload.listingId,
-        payload.requestId,
-      );
-      this.syncSilver(session, result);
-      return result;
-    });
-  }
-
-  @SubscribeMessage('itemization:market:cancel')
-  cancelMarketItem(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, marketActionSchema, raw, async (session, payload) => {
-      const result = await this.economy.cancelMarketListing(
-        session.userId,
-        session.characterId,
-        payload.listingId,
-        payload.requestId,
-      );
-      this.syncSilver(session, result);
-      return result;
-    });
   }
 
   @SubscribeMessage('itemization:claims:get')

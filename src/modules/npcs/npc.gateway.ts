@@ -6,6 +6,7 @@ import type { GameSocket, NpcDialogueChoiceResult, NpcDialogueSnapshot, SocketAc
 import { npcDialogueChoiceSchema, npcDialogueEndSchema, npcDialogueStartSchema } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
 import type { CraftingStationSession } from '../items/crafting.contracts.js';
+import type { MarketStationSession } from '../items/market.contracts.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
@@ -15,6 +16,7 @@ interface DialogueActionPayload {
   type: string;
   npcId: string;
   workstationKey?: string;
+  marketKey?: string;
 }
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
@@ -29,6 +31,7 @@ export class NpcGateway {
       client.data.activeNpcDialogue = { npcId: payload.npcId, nodeId: dialogue.node.id };
       client.data.merchantNpcId = undefined;
       client.data.craftingStation = undefined;
+      client.data.marketStation = undefined;
       return dialogue;
     });
   }
@@ -48,6 +51,10 @@ export class NpcGateway {
         client.data.craftingStation =
           action.type === 'OPEN_CRAFTING' && action.workstationKey
             ? ({ npcId: payload.npcId, workstationKey: action.workstationKey } satisfies CraftingStationSession)
+            : undefined;
+        client.data.marketStation =
+          action.type === 'OPEN_MARKET' && action.marketKey
+            ? ({ npcId: payload.npcId, marketKey: action.marketKey } satisfies MarketStationSession)
             : undefined;
       }
       this.publishQuestReward(client, session, result);

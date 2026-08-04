@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OpenCraftingDialogueAction } from '../../contracts/crafting';
+import type { OpenMarketDialogueAction } from '../../contracts/market';
 import type { NpcDialogueSnapshot, NpcStatePayload } from '../../contracts/socket';
 import { NPC_CONTEXT_EVENT } from '../../game/engine/NpcView';
 import { canInteractWithNpc } from '../../game/npc/npcInteraction';
@@ -10,6 +11,7 @@ import { gameStore, useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import { ActorContextMenu } from '../interactions/ActorContextMenu';
 import { CraftingModal } from '../modals/CraftingModal';
+import { MarketModal } from '../modals/MarketModal';
 import { MerchantModal } from '../modals/MerchantModal';
 import { NpcDialogueModal } from './NpcDialogueModal';
 
@@ -20,10 +22,12 @@ interface NpcContextState {
 }
 interface ActiveMerchant { id: string; name: string; }
 interface ActiveCrafting { name: string; workstationKey: string; }
+interface ActiveMarket { name: string; marketKey: string; }
 
 type DialogueAction =
   | { type: 'OPEN_MERCHANT' | 'CLOSE'; npcId: string }
-  | OpenCraftingDialogueAction;
+  | OpenCraftingDialogueAction
+  | OpenMarketDialogueAction;
 
 export function NpcInteractionLayer(): React.JSX.Element | null {
   const connection = useGameConnection();
@@ -33,6 +37,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
   const [dialogue, setDialogue] = useState<NpcDialogueSnapshot>();
   const [merchant, setMerchant] = useState<ActiveMerchant>();
   const [crafting, setCrafting] = useState<ActiveCrafting>();
+  const [market, setMarket] = useState<ActiveMarket>();
   const [busy, setBusy] = useState(false);
 
   const refreshQuestMarkers = useCallback(async () => {
@@ -76,7 +81,11 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
       setCrafting(undefined);
       void connection.closeCrafting();
     }
-  }, [connection, crafting, dialogue, merchant, state.activeModal]);
+    if (market && state.activeModal !== 'merchant') {
+      setMarket(undefined);
+      void connection.closeMarket();
+    }
+  }, [connection, crafting, dialogue, market, merchant, state.activeModal]);
 
   const closeDialogue = () => {
     const npcId = dialogue?.npc.id;
@@ -92,6 +101,11 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
     setCrafting(undefined);
     gameStore.setActiveModal(null);
     void connection.closeCrafting();
+  }, [connection]);
+  const closeMarket = useCallback(() => {
+    setMarket(undefined);
+    gameStore.setActiveModal(null);
+    void connection.closeMarket();
   }, [connection]);
 
   const startDialogue = async () => {
@@ -142,6 +156,10 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
           setCrafting({ name: dialogue.npc.name, workstationKey: action.workstationKey });
           setDialogue(undefined);
           gameStore.setActiveModal('merchant');
+        } else if (action.type === 'OPEN_MARKET') {
+          setMarket({ name: dialogue.npc.name, marketKey: action.marketKey });
+          setDialogue(undefined);
+          gameStore.setActiveModal('merchant');
         } else {
           setDialogue(undefined);
           gameStore.setActiveModal(null);
@@ -156,6 +174,9 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
 
   if (dialogue && state.activeModal === 'npc-dialogue') {
     return <NpcDialogueModal dialogue={dialogue} busy={busy} onChoose={(choiceId) => void choose(choiceId)} onClose={closeDialogue} />;
+  }
+  if (market && state.activeModal === 'merchant') {
+    return <MarketModal npcName={market.name} onClose={closeMarket} />;
   }
   if (crafting && state.activeModal === 'merchant') {
     return <CraftingModal npcName={crafting.name} onClose={closeCrafting} />;

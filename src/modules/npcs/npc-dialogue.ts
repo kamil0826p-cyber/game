@@ -4,6 +4,7 @@ import type { SupportedLocale } from '../../i18n/localization.service.js';
 const dialogueIdentifierSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const questKeySchema = z.string().trim().min(1).max(96).regex(/^[a-z0-9-]+$/);
 const workstationKeySchema = z.string().trim().min(1).max(96).regex(/^[a-z0-9-]+$/);
+const marketKeySchema = z.string().trim().min(1).max(96).regex(/^[a-z0-9-]+$/);
 const questStageKeySchema = z.string().regex(/^\d+$/);
 const localizedTextSchema = z.union([
   z.string().trim().min(1).max(2_000),
@@ -15,7 +16,7 @@ const questDialogueActionSchema = z.object({
 }).strict();
 const dialogueChoiceSchema = z.object({
   id: dialogueIdentifierSchema, label: localizedTextSchema,
-  nextNodeId: dialogueIdentifierSchema.optional(), action: z.enum(['OPEN_MERCHANT', 'OPEN_CRAFTING', 'CLOSE']).optional(),
+  nextNodeId: dialogueIdentifierSchema.optional(), action: z.enum(['OPEN_MERCHANT', 'OPEN_CRAFTING', 'OPEN_MARKET', 'CLOSE']).optional(),
   questAction: questDialogueActionSchema.optional(),
 }).strict().superRefine((choice, context) => {
   if ([choice.nextNodeId, choice.action, choice.questAction].filter(Boolean).length !== 1)
@@ -24,6 +25,7 @@ const dialogueChoiceSchema = z.object({
 const dialogueNodeSchema = z.object({ text: localizedTextSchema, choices: z.array(dialogueChoiceSchema).max(12).default([]) }).strict();
 const merchantConfigurationSchema = z.object({ itemKeys: z.array(z.string().trim().min(1).max(96)).min(1).max(100), infiniteStock: z.boolean().default(true) }).strict();
 const craftingConfigurationSchema = z.object({ workstationKey: workstationKeySchema }).strict();
+const marketConfigurationSchema = z.object({ marketKey: marketKeySchema }).strict();
 const questConfigurationSchema = z.object({
   questKey: questKeySchema,
   rootNodes: z.object({ notStarted: dialogueIdentifierSchema, active: dialogueIdentifierSchema, ready: dialogueIdentifierSchema, rewarded: dialogueIdentifierSchema }).strict(),
@@ -40,6 +42,7 @@ const npcDialogueDefinitionInputSchema = z.object({
   nodes: z.record(dialogueIdentifierSchema, dialogueNodeSchema),
   merchant: merchantConfigurationSchema.optional(),
   crafting: craftingConfigurationSchema.optional(),
+  market: marketConfigurationSchema.optional(),
   quest: questConfigurationSchema.optional(),
 }).strict().superRefine((definition, context) => {
   if (!definition.nodes[definition.rootNodeId]) context.addIssue({ code: 'custom', path: ['rootNodeId'], message: 'The root dialogue node does not exist.' });
@@ -57,6 +60,7 @@ const npcDialogueDefinitionInputSchema = z.object({
     if (choice.nextNodeId && !definition.nodes[choice.nextNodeId]) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: `Dialogue node "${choice.nextNodeId}" does not exist.` });
     if (choice.action === 'OPEN_MERCHANT' && !definition.merchant) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: 'OPEN_MERCHANT requires a merchant configuration.' });
     if (choice.action === 'OPEN_CRAFTING' && !definition.crafting) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: 'OPEN_CRAFTING requires a crafting configuration.' });
+    if (choice.action === 'OPEN_MARKET' && !definition.market) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: 'OPEN_MARKET requires a market configuration.' });
     if (choice.questAction) {
       if (!definition.quest) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: 'Quest actions require a quest configuration.' });
       if (definition.quest && choice.questAction.questKey !== definition.quest.questKey) context.addIssue({ code: 'custom', path: ['nodes', nodeId, 'choices'], message: 'Quest action key must match the NPC quest binding.' });

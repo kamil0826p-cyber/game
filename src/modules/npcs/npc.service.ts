@@ -19,6 +19,14 @@ type CraftingDialogueResult = {
     workstationKey: string;
   };
 };
+type MarketDialogueResult = {
+  type: 'ACTION';
+  action: {
+    type: 'OPEN_MARKET';
+    npcId: string;
+    marketKey: string;
+  };
+};
 const tileKey = (x: number, y: number): string => `${x},${y}`;
 
 @Injectable()
@@ -83,6 +91,14 @@ export class NpcService {
         type: 'ACTION',
         action: { type: 'OPEN_CRAFTING', npcId: npc.id, workstationKey },
       } as unknown as NpcDialogueResult & CraftingDialogueResult;
+    }
+    if (choice.action === 'OPEN_MARKET') {
+      const marketKey = dialogue.market?.marketKey;
+      if (!marketKey) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_STATE_INVALID, 'errors.npcs.dialogueStateInvalid');
+      return {
+        type: 'ACTION',
+        action: { type: 'OPEN_MARKET', npcId: npc.id, marketKey },
+      } as unknown as NpcDialogueResult & MarketDialogueResult;
     }
     return { type: 'ACTION', action: { type: choice.action!, npcId: npc.id } };
   }

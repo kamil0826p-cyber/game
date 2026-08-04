@@ -13,6 +13,10 @@ import { ItemEconomyService } from './item-economy.service.js';
 import { ItemGateway } from './item.gateway.js';
 import { ItemInventoryService } from './item-inventory.service.js';
 import { ItemizationCatalogService } from './itemization-catalog.service.js';
+import { MarketExpirationService } from './market-expiration.service.js';
+import { MarketGateway } from './market.gateway.js';
+import { MarketNpcBootstrapService } from './market-npc-bootstrap.service.js';
+import { MarketService } from './market.service.js';
 import { MerchantItemizedItemService } from './merchant-itemized-item.service.js';
 import { ItemService } from './item.service.js';
 
@@ -25,12 +29,16 @@ import { ItemService } from './item.service.js';
     CraftOrderService,
     CraftOrderExpirationService,
     CraftingService,
+    MarketService,
+    MarketExpirationService,
+    MarketNpcBootstrapService,
     ItemCurseRuntimeService,
     MerchantItemizedItemService,
     { provide: ItemService, useExisting: MerchantItemizedItemService },
     ItemGateway,
     ItemEconomyGateway,
     CraftingGateway,
+    MarketGateway,
   ],
   exports: [
     ItemService,
@@ -38,6 +46,7 @@ import { ItemService } from './item.service.js';
     ItemEconomyService,
     CraftOrderService,
     CraftingService,
+    MarketService,
     ItemizationCatalogService,
     ItemCurseRuntimeService,
   ],
