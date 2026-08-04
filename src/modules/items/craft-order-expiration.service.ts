@@ -4,6 +4,8 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service.js';
+import { WorldStateService } from '../world/world-state.service.js';
 import { CraftOrderService } from './craft-order.service.js';
 
 const EXPIRATION_SWEEP_INTERVAL_MS = 60_000;
@@ -14,7 +16,11 @@ export class CraftOrderExpirationService implements OnModuleInit, OnModuleDestro
   private timer: NodeJS.Timeout | undefined;
   private sweepRunning = false;
 
-  constructor(private readonly craftOrders: CraftOrderService) {}
+  constructor(
+    private readonly craftOrders: CraftOrderService,
+    private readonly prisma: PrismaService,
+    private readonly worldState: WorldStateService,
+  ) {}
 
   onModuleInit(): void {
     void this.sweep();
@@ -32,9 +38,12 @@ export class CraftOrderExpirationService implements OnModuleInit, OnModuleDestro
     this.sweepRunning = true;
     try {
       let expired: number;
+      let totalExpired = 0;
       do {
         expired = await this.craftOrders.expireOrders(100);
+        totalExpired += expired;
       } while (expired === 100);
+      if (totalExpired > 0) await this.syncOnlineSilver();
     } catch (error) {
       this.logger.error(
         'Craft order expiration sweep failed.',
@@ -42,6 +51,25 @@ export class CraftOrderExpirationService implements OnModuleInit, OnModuleDestro
       );
     } finally {
       this.sweepRunning = false;
+    }
+  }
+
+  private async syncOnlineSilver(): Promise<void> {
+    const sessions = this.worldState.listSessions();
+    if (sessions.length === 0) return;
+    const balances = await this.prisma.character.findMany({
+      where: { id: { in: sessions.map((session) => session.characterId) } },
+      select: { id: true, silver: true },
+    });
+    const silverByCharacterId = new Map(
+      balances.map((character) => [character.id, character.silver]),
+    );
+    for (const session of sessions) {
+      const silver = silverByCharacterId.get(session.characterId);
+      if (silver === undefined || silver === session.silver) continue;
+      session.silver = silver;
+      session.stateRevision += 1;
+      session.dirty = true;
     }
   }
 }
