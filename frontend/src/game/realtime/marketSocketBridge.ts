@@ -6,6 +6,7 @@ import type {
   SocketAck,
 } from '../../contracts/socket';
 import { createRequestId } from '../../utils/requestId';
+import { invalidateRewardClaims } from '../rewards/rewardClaimsUiEvents';
 import { gameStore } from '../state/gameStore';
 import type { GameSocketClient } from './GameSocketClient';
 
@@ -102,6 +103,7 @@ export function installMarketSocketBridge(client: GameSocketClient): void {
 
   const synchronizeResult = (result: MarketMutationResult): MarketMutationResult => {
     synchronizeSilver(result.snapshot);
+    if (result.mutation.delivery === 'CLAIMS') invalidateRewardClaims();
     return result;
   };
 
