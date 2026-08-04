@@ -92,6 +92,9 @@ export class RewardClaimsGateway {
       if (!session || !session.activeInWorld || client.data.sessionState !== 'IN_WORLD') {
         throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
       }
+      if (session.combatState !== 'IDLE') {
+        throw new GameError(GAME_ERROR_CODES.COMBAT_FORBIDDEN, 'errors.combat.forbidden');
+      }
       const data = await this.movementCoordinator.runSerialized(session, () =>
         operation(session, payload),
       );
