@@ -36,6 +36,19 @@ export interface RolledItemAffixPayload {
   statBonuses: ItemStatBonuses;
 }
 
+export interface InventorySalvagePreviewPayload {
+  profileKey: string;
+  deterministic: Array<{
+    itemKey: string;
+    quantity: number;
+  }>;
+  rare?: {
+    itemKey: string;
+    chance: number;
+    guaranteedAfterMisses: number;
+  };
+}
+
 export interface InventoryItemizationPayload {
   snapshotVersion: number;
   powerLevel: number;
@@ -71,6 +84,7 @@ export interface InventoryItemizationPayload {
   bindPolicy: ItemBindPolicy;
   tradePolicy: ItemTradePolicy;
   salvagePolicy: ItemSalvagePolicy;
+  salvage?: InventorySalvagePreviewPayload;
   boundCharacterId?: string;
   equipConfirmationHash: string;
   requiresEquipConfirmation: boolean;

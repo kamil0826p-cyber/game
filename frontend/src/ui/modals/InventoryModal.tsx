@@ -31,6 +31,23 @@ const slotLabels: Record<EquipmentSlot, { en: string; pl: string }> = {
   RING: { en: 'Ring', pl: 'Pierścień' },
 };
 
+const salvageMaterialLabels: Record<string, { en: string; pl: string }> = {
+  'rabbit-fur': { en: 'Rabbit fur', pl: 'Królicze futro' },
+  'rabbit-foot': { en: 'Rabbit foot', pl: 'Królicza łapka' },
+  'scorpion-chitin': { en: 'Scorpion chitin', pl: 'Chityna skorpiona' },
+  'scorpion-stinger': { en: 'Scorpion stinger', pl: 'Żądło skorpiona' },
+  'venom-sac': { en: 'Venom sac', pl: 'Woreczek jadowy' },
+};
+
+const fallbackMaterialLabel = (itemKey: string): string =>
+  itemKey
+    .split('-')
+    .filter(Boolean)
+    .map((part, index) =>
+      index === 0 ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : part,
+    )
+    .join(' ');
+
 export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const { t, locale } = useI18n();
   const connection = useGameConnection();
@@ -79,6 +96,40 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
   const tooltipItem = (item: InventoryItemPayload) => item;
   const canEquip = (item: InventoryItemPayload | undefined): boolean =>
     Boolean(item?.equipmentSlot && item.minimumLevel <= level);
+  const canSalvage = (item: InventoryItemPayload | undefined): boolean =>
+    Boolean(
+      item &&
+        item.itemization?.salvagePolicy === 'ALLOWED' &&
+        item.itemization.salvage &&
+        !item.equippedSlot &&
+        item.quantity === 1,
+    );
+  const materialLabel = (itemKey: string): string =>
+    salvageMaterialLabels[itemKey]?.[locale] ?? fallbackMaterialLabel(itemKey);
+  const salvageRewardText = (item: InventoryItemPayload): string => {
+    const salvage = item.itemization?.salvage;
+    if (!salvage) {
+      return locale === 'pl'
+        ? 'Dokładny zwrot materiałów jest niedostępny.'
+        : 'The exact material return is unavailable.';
+    }
+    const guaranteed = salvage.deterministic
+      .map((output) => `• ${output.quantity} × ${materialLabel(output.itemKey)}`)
+      .join('\n');
+    const rare = salvage.rare;
+    const rareText = rare
+      ? locale === 'pl'
+        ? `\n\nMożliwy rzadki odzysk:\n• 1 × ${materialLabel(rare.itemKey)} — ${Math.round(
+            rare.chance * 100,
+          )}% szansy; gwarancja po ${rare.guaranteedAfterMisses} nieudanych próbach.`
+        : `\n\nPossible rare recovery:\n• 1 × ${materialLabel(rare.itemKey)} — ${Math.round(
+            rare.chance * 100,
+          )}% chance; guaranteed after ${rare.guaranteedAfterMisses} failed attempts.`
+      : '';
+    return locale === 'pl'
+      ? `Gwarantowany odzysk:\n${guaranteed}${rareText}`
+      : `Guaranteed recovery:\n${guaranteed}${rareText}`;
+  };
   const startDrag = (event: React.DragEvent, item: InventoryItemPayload): void => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/item-id', item.id);
@@ -101,12 +152,36 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
         : `Cursed item: ${curse.name}\n\n${curse.description}\n\n${curse.preview}\n\nThe cost remains active while the item is equipped. Equip the item?`,
     );
   };
+  const confirmSalvage = (item: InventoryItemPayload): boolean =>
+    window.confirm(
+      locale === 'pl'
+        ? `Rozłożyć „${item.name}” na materiały?\n\n${salvageRewardText(
+            item,
+          )}\n\nPrzedmiot zostanie bezpowrotnie zniszczony. Tej operacji nie można cofnąć.`
+        : `Salvage “${item.name}” into materials?\n\n${salvageRewardText(
+            item,
+          )}\n\nThe item will be permanently destroyed. This cannot be undone.`,
+    );
+  const confirmDestroy = (item: InventoryItemPayload): boolean =>
+    window.confirm(
+      locale === 'pl'
+        ? `Zniszczyć 1 × „${item.name}”?\n\nNie otrzymasz żadnych materiałów. Tej operacji nie można cofnąć.`
+        : `Destroy 1 × “${item.name}”?\n\nYou will not receive any materials. This cannot be undone.`,
+    );
   const equipItem = (item: InventoryItemPayload): void => {
     if (!canEquip(item) || !confirmCurse(item)) return;
     const confirmationHash = item.itemization?.requiresEquipConfirmation
       ? item.itemization.equipConfirmationHash
       : undefined;
     void mutate(() => connection.equipInventoryItem(item.id, confirmationHash));
+  };
+  const salvageItem = (item: InventoryItemPayload): void => {
+    if (!canSalvage(item) || !confirmSalvage(item)) return;
+    void mutate(() => connection.salvageInventoryItem(item.id));
+  };
+  const destroyItem = (item: InventoryItemPayload): void => {
+    if (item.equippedSlot || !confirmDestroy(item)) return;
+    void mutate(() => destroyInventoryItem(item.id));
   };
 
   return (
@@ -360,10 +435,34 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                     {locale === 'pl' ? 'Zdejmij' : 'Unequip'}
                   </button>
                 ) : null}
+                {selected.itemization?.salvagePolicy === 'ALLOWED' ? (
+                  <button
+                    className="hud-utility-button"
+                    disabled={busy || !canSalvage(selected)}
+                    title={
+                      selected.equippedSlot
+                        ? locale === 'pl'
+                          ? 'Najpierw zdejmij przedmiot.'
+                          : 'Unequip the item first.'
+                        : selected.quantity !== 1
+                          ? locale === 'pl'
+                            ? 'Rozkładać można wyłącznie pojedyncze przedmioty.'
+                            : 'Only single-item stacks can be salvaged.'
+                          : !selected.itemization.salvage
+                            ? locale === 'pl'
+                              ? 'Brak danych profilu odzysku.'
+                              : 'Salvage profile data is unavailable.'
+                            : undefined
+                    }
+                    onClick={() => salvageItem(selected)}
+                  >
+                    {locale === 'pl' ? 'Rozłóż na materiały' : 'Salvage'}
+                  </button>
+                ) : null}
                 <button
                   className="hud-utility-button"
                   disabled={busy || Boolean(selected.equippedSlot)}
-                  onClick={() => void mutate(() => destroyInventoryItem(selected.id))}
+                  onClick={() => destroyItem(selected)}
                 >
                   {locale === 'pl' ? 'Zniszcz 1' : 'Destroy 1'}
                 </button>
