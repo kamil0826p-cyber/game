@@ -31,6 +31,23 @@ const slotLabels: Record<EquipmentSlot, { en: string; pl: string }> = {
   RING: { en: 'Ring', pl: 'Pierścień' },
 };
 
+const salvageMaterialLabels: Record<string, { en: string; pl: string }> = {
+  'rabbit-fur': { en: 'Rabbit fur', pl: 'Królicze futro' },
+  'rabbit-foot': { en: 'Rabbit foot', pl: 'Królicza łapka' },
+  'scorpion-chitin': { en: 'Scorpion chitin', pl: 'Chityna skorpiona' },
+  'scorpion-stinger': { en: 'Scorpion stinger', pl: 'Żądło skorpiona' },
+  'venom-sac': { en: 'Venom sac', pl: 'Woreczek jadowy' },
+};
+
+const fallbackMaterialLabel = (itemKey: string): string =>
+  itemKey
+    .split('-')
+    .filter(Boolean)
+    .map((part, index) =>
+      index === 0 ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : part,
+    )
+    .join(' ');
+
 export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const { t, locale } = useI18n();
   const connection = useGameConnection();
@@ -83,9 +100,36 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
     Boolean(
       item &&
         item.itemization?.salvagePolicy === 'ALLOWED' &&
+        item.itemization.salvage &&
         !item.equippedSlot &&
         item.quantity === 1,
     );
+  const materialLabel = (itemKey: string): string =>
+    salvageMaterialLabels[itemKey]?.[locale] ?? fallbackMaterialLabel(itemKey);
+  const salvageRewardText = (item: InventoryItemPayload): string => {
+    const salvage = item.itemization?.salvage;
+    if (!salvage) {
+      return locale === 'pl'
+        ? 'Dokładny zwrot materiałów jest niedostępny.'
+        : 'The exact material return is unavailable.';
+    }
+    const guaranteed = salvage.deterministic
+      .map((output) => `• ${output.quantity} × ${materialLabel(output.itemKey)}`)
+      .join('\n');
+    const rare = salvage.rare;
+    const rareText = rare
+      ? locale === 'pl'
+        ? `\n\nMożliwy rzadki odzysk:\n• 1 × ${materialLabel(rare.itemKey)} — ${Math.round(
+            rare.chance * 100,
+          )}% szansy; gwarancja po ${rare.guaranteedAfterMisses} nieudanych próbach.`
+        : `\n\nPossible rare recovery:\n• 1 × ${materialLabel(rare.itemKey)} — ${Math.round(
+            rare.chance * 100,
+          )}% chance; guaranteed after ${rare.guaranteedAfterMisses} failed attempts.`
+      : '';
+    return locale === 'pl'
+      ? `Gwarantowany odzysk:\n${guaranteed}${rareText}`
+      : `Guaranteed recovery:\n${guaranteed}${rareText}`;
+  };
   const startDrag = (event: React.DragEvent, item: InventoryItemPayload): void => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/item-id', item.id);
@@ -111,8 +155,12 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
   const confirmSalvage = (item: InventoryItemPayload): boolean =>
     window.confirm(
       locale === 'pl'
-        ? `Rozłożyć „${item.name}” na materiały?\n\nPrzedmiot zostanie bezpowrotnie zniszczony, a odzyskane materiały trafią do plecaka. Tej operacji nie można cofnąć.`
-        : `Salvage “${item.name}” into materials?\n\nThe item will be permanently destroyed and recovered materials will be added to your backpack. This cannot be undone.`,
+        ? `Rozłożyć „${item.name}” na materiały?\n\n${salvageRewardText(
+            item,
+          )}\n\nPrzedmiot zostanie bezpowrotnie zniszczony. Tej operacji nie można cofnąć.`
+        : `Salvage “${item.name}” into materials?\n\n${salvageRewardText(
+            item,
+          )}\n\nThe item will be permanently destroyed. This cannot be undone.`,
     );
   const confirmDestroy = (item: InventoryItemPayload): boolean =>
     window.confirm(
@@ -400,7 +448,11 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                           ? locale === 'pl'
                             ? 'Rozkładać można wyłącznie pojedyncze przedmioty.'
                             : 'Only single-item stacks can be salvaged.'
-                          : undefined
+                          : !selected.itemization.salvage
+                            ? locale === 'pl'
+                              ? 'Brak danych profilu odzysku.'
+                              : 'Salvage profile data is unavailable.'
+                            : undefined
                     }
                     onClick={() => salvageItem(selected)}
                   >
