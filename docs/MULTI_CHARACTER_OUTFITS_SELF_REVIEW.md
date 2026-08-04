@@ -6,7 +6,8 @@
 - Character names remain unique inside a realm.
 - The pre-world screen loads the full owned roster and allows switching the selected character.
 - Outfit changes are persisted before entering the world and are accepted only for an owned character and an outfit unlocked at its level.
-- Every class has ten catalog entries. Two are available at level 1; the remaining variants unlock progressively.
+- Every class has eleven catalog entries: the starting image at level 1 and a new image every ten levels through level 100.
+- Each outfit key resolves to its own canonical PNG; the client does not recolor a shared base image.
 
 ## Authority and security review
 
@@ -21,9 +22,10 @@
 ## Compatibility review
 
 - Existing accounts keep all character rows and the earliest character remains the initially highlighted selection.
-- Existing outfit keys (`mage-apprentice`, `mage-archmage`, `warrior-recruit`, `warrior-champion`, `archer-scout`, `archer-ranger`) remain valid.
-- Existing character creation payloads remain accepted because `outfitKey` is optional server-side; the new client saves the chosen level-1 outfit immediately after creation.
+- Existing outfit keys remain valid.
+- Existing character creation payloads remain accepted because `outfitKey` is optional server-side; the client saves the chosen level-1 outfit immediately after creation.
 - `world:enter`, movement, combat, trade, inventory, persistence, and skill payloads are unchanged.
+- Stored gender values remain compatible but no longer select a palette or alternate outfit image.
 
 ## Race and lifecycle review
 
@@ -33,18 +35,19 @@
 - Active in-world sessions cannot use roster selection or pre-world outfit mutation.
 - Existing exclusive character claims still prevent the same character from being active on two sockets.
 
-## Tests added
+## Tests
 
 - Backend catalog count, uniqueness, default/unlocked rules, maximum roster constant, and Zod schemas.
-- Frontend catalog count, uniqueness, creation availability, and unlock ordering.
+- Frontend catalog count, uniqueness, exact ten-level unlock ordering, canonical asset paths, and physical sprite-file existence.
+- Regression coverage rejects gender palette folders and cross-outfit fallback substitutions.
 
-## Remaining validation
+## Validation
 
 Run the repository checks in a dependency-backed environment:
 
 ```bash
 npm ci
-npm --prefix frontend install
+npm --prefix frontend ci
 npm run prisma:validate
 npm run check:all
 ```
