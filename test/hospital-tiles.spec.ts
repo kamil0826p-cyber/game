@@ -6,7 +6,7 @@ const descriptors = {
   'hospital-floor.tsj': 5,
   'hospital-structure.tsj': 5,
   'hospital-beds.tsj': 6,
-  'hospital-props.tsj': 9,
+  'hospital-props.tsj': 12,
 } as const;
 
 const frontendRoot = resolve('frontend', 'public', 'assets', 'tiles');
@@ -84,7 +84,7 @@ describe('dark hospital Tiled assets', () => {
       }
     }
 
-    expect(referencedImages.size).toBe(25);
+    expect(referencedImages.size).toBe(28);
   });
 
   it('models beds as two three-piece objects', async () => {
