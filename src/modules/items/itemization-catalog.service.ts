@@ -1,11 +1,17 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
+import { ITEM_RELICS } from './itemization.catalog.js';
 import type { ItemDefinitionMetadata } from './itemization.types.js';
 
 type CatalogDatabase = Pick<Prisma.TransactionClient, 'itemDefinition'>;
 
-interface ItemCatalogEntry {
+type LegacyPowerRow = {
+  id: string;
+  instanceData: Prisma.JsonValue;
+};
+
+export interface ItemCatalogEntry {
   key: string;
   name: string;
   description: string;
@@ -13,7 +19,48 @@ interface ItemCatalogEntry {
   metadata: ItemDefinitionMetadata;
 }
 
-const ITEMIZED_CATALOG: readonly ItemCatalogEntry[] = [
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+const migrateLegacyAshenLens = (
+  value: Prisma.JsonValue,
+): Prisma.InputJsonValue | undefined => {
+  const root = asRecord(value);
+  const itemization = asRecord(root?.itemization);
+  const relic = asRecord(itemization?.relic);
+  const modifier = asRecord(relic?.modifier);
+  if (
+    !root ||
+    !itemization ||
+    !relic ||
+    relic.key !== 'ashen-lens-v1' ||
+    modifier?.type !== 'SET_TARGETING' ||
+    modifier.targeting !== 'BACK_ROW'
+  ) {
+    return undefined;
+  }
+  const current = ITEM_RELICS['ashen-lens-v1'];
+  if (!current) return undefined;
+  const migrated = {
+    ...root,
+    itemization: {
+      ...itemization,
+      relic: {
+        ...current,
+        modifier: { ...current.modifier },
+        rulesVersion:
+          typeof relic.rulesVersion === 'number' && Number.isInteger(relic.rulesVersion)
+            ? relic.rulesVersion
+            : 1,
+      },
+    },
+  };
+  return JSON.parse(JSON.stringify(migrated)) as Prisma.InputJsonValue;
+};
+
+export const ITEMIZED_CATALOG: readonly ItemCatalogEntry[] = [
   {
     key: 'traveler-sword',
     name: 'Traveler Sword',
@@ -134,7 +181,7 @@ const ITEMIZED_CATALOG: readonly ItemCatalogEntry[] = [
   {
     key: 'ashen-reliquary-focus',
     name: 'Popielne ognisko relikwiarza',
-    description: 'Przeklęty fokus, który zagina tor prostych zaklęć ku tylnej linii.',
+    description: 'Przeklęty fokus rozszczepiający Arcane Spark pomiędzy wszystkich przeciwników.',
     stackLimit: 1,
     metadata: {
       category: 'EQUIPMENT',
@@ -162,6 +209,38 @@ const ITEMIZED_CATALOG: readonly ItemCatalogEntry[] = [
       },
     },
   },
+  {
+    key: 'executioners-hookblade',
+    name: 'Hakowe ostrze Egzekutora',
+    description:
+      'Przeklęta broń kata. Obniża koszt Execution, osłabia otrzymywane leczenie i wiąże się z właścicielem po założeniu.',
+    stackLimit: 1,
+    metadata: {
+      category: 'EQUIPMENT',
+      rarity: 'MYTHIC',
+      icon: '†',
+      equipmentSlot: 'MAIN_HAND',
+      requiredClass: 'WARRIOR',
+      minimumLevel: 40,
+      statBonuses: { strength: 6, maxHp: 12 },
+      buyPriceSilver: 0,
+      sellPriceSilver: 420,
+      mechanics: {
+        version: 1,
+        archetypeKey: 'cursed-executioner-main-hand',
+        powerLevel: 40,
+        powerBudget: 8,
+        affixPoolKey: 'martial-main-hand-v1',
+        affixCount: { minimum: 1, maximum: 2 },
+        relicKey: 'executioners-hook-v1',
+        curseKey: 'starved-veins-v1',
+        bindPolicy: 'ON_EQUIP',
+        tradePolicy: 'TRADEABLE',
+        salvagePolicy: 'ALLOWED',
+        salvageProfileKey: 'executioners-hookblade-v1',
+      },
+    },
+  },
 ];
 
 @Injectable()
@@ -170,6 +249,7 @@ export class ItemizationCatalogService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.ensure(this.prisma);
+    await this.migrateLegacyPowerSnapshots();
   }
 
   async ensure(database: CatalogDatabase = this.prisma): Promise<void> {
@@ -192,5 +272,34 @@ export class ItemizationCatalogService implements OnModuleInit {
         },
       });
     }
+  }
+
+  private async migrateLegacyPowerSnapshots(): Promise<void> {
+    const [inventoryRows, claimRows] = await Promise.all([
+      this.prisma.inventoryItem.findMany({ select: { id: true, instanceData: true } }),
+      this.prisma.itemClaim.findMany({ select: { id: true, instanceData: true } }),
+    ]);
+    await Promise.all([
+      ...inventoryRows.map((row) => this.migrateInventoryRow(row)),
+      ...claimRows.map((row) => this.migrateClaimRow(row)),
+    ]);
+  }
+
+  private async migrateInventoryRow(row: LegacyPowerRow): Promise<void> {
+    const instanceData = migrateLegacyAshenLens(row.instanceData);
+    if (!instanceData) return;
+    await this.prisma.inventoryItem.update({
+      where: { id: row.id },
+      data: { instanceData },
+    });
+  }
+
+  private async migrateClaimRow(row: LegacyPowerRow): Promise<void> {
+    const instanceData = migrateLegacyAshenLens(row.instanceData);
+    if (!instanceData) return;
+    await this.prisma.itemClaim.update({
+      where: { id: row.id },
+      data: { instanceData },
+    });
   }
 }
