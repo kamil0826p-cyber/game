@@ -1,5 +1,9 @@
 import type { Socket } from 'socket.io-client';
-import type { CraftingResult, CraftingSnapshot } from '../../contracts/crafting';
+import type {
+  CraftOrderMutationResult,
+  CraftingResult,
+  CraftingSnapshot,
+} from '../../contracts/crafting';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -17,6 +21,18 @@ interface CraftingClientEvents {
   'crafting:craft': (
     payload: { requestId: string; recipeKey: string },
     acknowledgement: (response: SocketAck<CraftingResult>) => void,
+  ) => void;
+  'crafting:orderCreate': (
+    payload: { requestId: string; recipeKey: string; rewardSilver: number },
+    acknowledgement: (response: SocketAck<CraftOrderMutationResult>) => void,
+  ) => void;
+  'crafting:orderFulfill': (
+    payload: { requestId: string; orderId: string },
+    acknowledgement: (response: SocketAck<CraftOrderMutationResult>) => void,
+  ) => void;
+  'crafting:orderCancel': (
+    payload: { requestId: string; orderId: string },
+    acknowledgement: (response: SocketAck<CraftOrderMutationResult>) => void,
   ) => void;
   'crafting:close': (
     payload: { requestId: string },
@@ -37,6 +53,12 @@ declare module './GameSocketClient' {
   interface GameSocketClient {
     getCrafting(): Promise<CraftingSnapshot>;
     craftRecipe(recipeKey: string): Promise<CraftingResult>;
+    createCraftOrder(
+      recipeKey: string,
+      rewardSilver: number,
+    ): Promise<CraftOrderMutationResult>;
+    fulfillCraftOrder(orderId: string): Promise<CraftOrderMutationResult>;
+    cancelCraftOrder(orderId: string): Promise<CraftOrderMutationResult>;
     closeCrafting(): Promise<void>;
   }
 }
@@ -73,6 +95,11 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
       return response.data;
     });
 
+  const refreshInventory = async <T>(result: T): Promise<T> => {
+    await client.getInventory();
+    return result;
+  };
+
   client.getCrafting = () =>
     withAck<CraftingSnapshot>((socket, acknowledgement) =>
       socket.emit(
@@ -82,17 +109,45 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
       ),
     );
 
-  client.craftRecipe = async (recipeKey) => {
-    const result = await withAck<CraftingResult>((socket, acknowledgement) =>
+  client.craftRecipe = (recipeKey) =>
+    withAck<CraftingResult>((socket, acknowledgement) =>
       socket.emit(
         'crafting:craft',
         { requestId: createRequestId('crafting-craft'), recipeKey },
         acknowledgement,
       ),
-    );
-    await client.getInventory();
-    return result;
-  };
+    ).then(refreshInventory);
+
+  client.createCraftOrder = (recipeKey, rewardSilver) =>
+    withAck<CraftOrderMutationResult>((socket, acknowledgement) =>
+      socket.emit(
+        'crafting:orderCreate',
+        {
+          requestId: createRequestId('craft-order-create'),
+          recipeKey,
+          rewardSilver,
+        },
+        acknowledgement,
+      ),
+    ).then(refreshInventory);
+
+  client.fulfillCraftOrder = (orderId) =>
+    withAck<CraftOrderMutationResult>((socket, acknowledgement) =>
+      socket.emit(
+        'crafting:orderFulfill',
+        { requestId: createRequestId('craft-order-fulfill'), orderId },
+        acknowledgement,
+      ),
+    ).then(refreshInventory);
+
+  client.cancelCraftOrder = (orderId) =>
+    withAck<CraftOrderMutationResult>((socket, acknowledgement) =>
+      socket.emit(
+        'crafting:orderCancel',
+        { requestId: createRequestId('craft-order-cancel'), orderId },
+        acknowledgement,
+      ),
+    ).then(refreshInventory);
 
   client.closeCrafting = async () => {
     const socket = bridge.socket;
@@ -103,6 +158,8 @@ export function installCraftingSocketBridge(client: GameSocketClient): void {
         { requestId: createRequestId('crafting-close') },
         acknowledgement,
       ),
-    ).then(() => undefined).catch(() => undefined);
+    )
+      .then(() => undefined)
+      .catch(() => undefined);
   };
 }
