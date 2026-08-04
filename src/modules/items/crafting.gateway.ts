@@ -27,12 +27,14 @@ import type {
 import { CraftingService } from './crafting.service.js';
 
 const requestId = z.string().trim().min(1).max(96);
+const recipeVersion = z.number().int().min(1).max(2_147_483_647);
 const orderId = z.string().uuid();
 const craftingRequestSchema = z.object({ requestId }).strict();
 const craftingCraftSchema = z
   .object({
     requestId,
     recipeKey: z.string().trim().min(1).max(96),
+    recipeVersion,
   })
   .strict();
 const craftOrderCreateSchema = z
@@ -82,8 +84,24 @@ export class CraftingGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CraftingResult>> {
     return this.handle(client, craftingCraftSchema, raw, async (session, payload) => {
+      this.assertMutationAllowed(session);
       const station = await this.requireStation(client, session);
-      this.crafting.assertStationRecipe(station.workstationKey, payload.recipeKey);
+      const recipe = this.crafting.assertStationRecipe(
+        station.workstationKey,
+        payload.recipeKey,
+      );
+      if (recipe.version !== payload.recipeVersion) {
+        throw new GameError(
+          GAME_ERROR_CODES.INVALID_PAYLOAD,
+          'errors.payload.invalid',
+          {
+            reason: 'RECIPE_VERSION_MISMATCH',
+            recipeKey: recipe.key,
+            expectedVersion: recipe.version,
+            receivedVersion: payload.recipeVersion,
+          },
+        );
+      }
       const result = await this.crafting.craft(
         session.userId,
         session.characterId,
@@ -103,6 +121,7 @@ export class CraftingGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CraftOrderMutationResult>> {
     return this.handle(client, craftOrderCreateSchema, raw, async (session, payload) => {
+      this.assertMutationAllowed(session);
       const station = await this.requireStation(client, session);
       const result = await this.crafting.createOrder(
         session.userId,
@@ -124,6 +143,7 @@ export class CraftingGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CraftOrderMutationResult>> {
     return this.handle(client, craftOrderActionSchema, raw, async (session, payload) => {
+      this.assertMutationAllowed(session);
       const station = await this.requireStation(client, session);
       const result = await this.crafting.fulfillOrder(
         session.userId,
@@ -145,6 +165,7 @@ export class CraftingGateway {
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<CraftOrderMutationResult>> {
     return this.handle(client, craftOrderActionSchema, raw, async (session, payload) => {
+      this.assertMutationAllowed(session);
       const station = await this.requireStation(client, session);
       const result = await this.crafting.cancelOrder(
         session.userId,
@@ -168,6 +189,15 @@ export class CraftingGateway {
       client.data.craftingStation = undefined;
       return { closed };
     });
+  }
+
+  private assertMutationAllowed(session: PlayerSession): void {
+    if (session.combatState === 'IDLE') return;
+    throw new GameError(
+      GAME_ERROR_CODES.COMBAT_ACTION_INVALID,
+      'errors.combat.actionInvalid',
+      { reason: 'CRAFTING_BLOCKED_DURING_COMBAT' },
+    );
   }
 
   private async requireStation(
