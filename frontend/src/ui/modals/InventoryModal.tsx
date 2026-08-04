@@ -79,6 +79,13 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
   const tooltipItem = (item: InventoryItemPayload) => item;
   const canEquip = (item: InventoryItemPayload | undefined): boolean =>
     Boolean(item?.equipmentSlot && item.minimumLevel <= level);
+  const canSalvage = (item: InventoryItemPayload | undefined): boolean =>
+    Boolean(
+      item &&
+        item.itemization?.salvagePolicy === 'ALLOWED' &&
+        !item.equippedSlot &&
+        item.quantity === 1,
+    );
   const startDrag = (event: React.DragEvent, item: InventoryItemPayload): void => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/item-id', item.id);
@@ -101,12 +108,22 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
         : `Cursed item: ${curse.name}\n\n${curse.description}\n\n${curse.preview}\n\nThe cost remains active while the item is equipped. Equip the item?`,
     );
   };
+  const confirmSalvage = (item: InventoryItemPayload): boolean =>
+    window.confirm(
+      locale === 'pl'
+        ? `Rozłożyć „${item.name}” na materiały?\n\nPrzedmiot zostanie bezpowrotnie zniszczony, a odzyskane materiały trafią do plecaka. Tej operacji nie można cofnąć.`
+        : `Salvage “${item.name}” into materials?\n\nThe item will be permanently destroyed and recovered materials will be added to your backpack. This cannot be undone.`,
+    );
   const equipItem = (item: InventoryItemPayload): void => {
     if (!canEquip(item) || !confirmCurse(item)) return;
     const confirmationHash = item.itemization?.requiresEquipConfirmation
       ? item.itemization.equipConfirmationHash
       : undefined;
     void mutate(() => connection.equipInventoryItem(item.id, confirmationHash));
+  };
+  const salvageItem = (item: InventoryItemPayload): void => {
+    if (!canSalvage(item) || !confirmSalvage(item)) return;
+    void mutate(() => connection.salvageInventoryItem(item.id));
   };
 
   return (
@@ -358,6 +375,26 @@ export function InventoryModal({ onClose }: { onClose: () => void }): React.JSX.
                     onClick={() => void mutate(() => connection.unequipInventoryItem(selected.id))}
                   >
                     {locale === 'pl' ? 'Zdejmij' : 'Unequip'}
+                  </button>
+                ) : null}
+                {selected.itemization?.salvagePolicy === 'ALLOWED' ? (
+                  <button
+                    className="hud-utility-button"
+                    disabled={busy || !canSalvage(selected)}
+                    title={
+                      selected.equippedSlot
+                        ? locale === 'pl'
+                          ? 'Najpierw zdejmij przedmiot.'
+                          : 'Unequip the item first.'
+                        : selected.quantity !== 1
+                          ? locale === 'pl'
+                            ? 'Rozkładać można wyłącznie pojedyncze przedmioty.'
+                            : 'Only single-item stacks can be salvaged.'
+                          : undefined
+                    }
+                    onClick={() => salvageItem(selected)}
+                  >
+                    {locale === 'pl' ? 'Rozłóż na materiały' : 'Salvage'}
                   </button>
                 ) : null}
                 <button
