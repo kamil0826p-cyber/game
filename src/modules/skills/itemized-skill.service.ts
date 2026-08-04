@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
-import { applyEquippedRelicsToLoadout, parseItemDefinitionMetadata, readItemInstanceSnapshot } from '../items/itemization.rules.js';
+import {
+  cacheEquippedItemCurseModifiers,
+  itemCurseModifiersFromSnapshots,
+} from '../items/item-curse-runtime.service.js';
+import {
+  applyEquippedRelicsToLoadout,
+  parseItemDefinitionMetadata,
+  readItemInstanceSnapshot,
+} from '../items/itemization.rules.js';
 import { SkillService } from './skill.service.js';
 import type { SkillCombatLoadout } from './skill.buildcraft.types.js';
 
@@ -32,6 +40,10 @@ export class ItemizedSkillService extends SkillService {
         metadata,
       });
     });
+    cacheEquippedItemCurseModifiers(
+      characterId,
+      itemCurseModifiersFromSnapshots(snapshots),
+    );
     return applyEquippedRelicsToLoadout(loadout, snapshots);
   }
 }
