@@ -55,7 +55,7 @@ describe('item salvage player flow', () => {
     expect(getInventory).toHaveBeenCalledOnce();
   });
 
-  it('exposes a confirmed salvage action in the inventory modal', () => {
+  it('exposes confirmed salvage and destroy actions in the inventory modal', () => {
     const modalPath = fileURLToPath(
       new URL('../src/ui/modals/InventoryModal.tsx', import.meta.url),
     );
@@ -65,5 +65,7 @@ describe('item salvage player flow', () => {
     expect(source).toContain('Rozłóż na materiały');
     expect(source).toContain('confirmSalvage');
     expect(source).toContain('connection.salvageInventoryItem(item.id)');
+    expect(source).toContain('confirmDestroy');
+    expect(source).toContain('Nie otrzymasz żadnych materiałów');
   });
 });
