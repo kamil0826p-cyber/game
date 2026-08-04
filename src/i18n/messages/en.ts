@@ -25,6 +25,7 @@ export const englishMessages = {
   'errors.items.levelRequired': 'Your character level is too low to equip this item.',
   'errors.items.loadoutLocked': 'Equipment cannot be changed while an expedition is being prepared or is active.',
   'errors.items.effectNotNeeded': 'This consumable would not restore anything right now.',
+  'errors.items.curseRestriction': 'An equipped curse prevents the use of healing consumables.',
   'errors.items.merchantUnavailable': 'Move closer to a merchant to trade.',
   'errors.npcs.notAvailable': 'Move closer to the NPC to talk.',
   'errors.npcs.dialogueUnavailable': 'This NPC cannot talk right now.',

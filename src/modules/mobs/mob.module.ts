@@ -11,6 +11,7 @@ import { TradeModule } from '../player/trade/trade.module.js';
 import { QuestModule } from '../quests/quest.module.js';
 import { SkillModule } from '../skills/skill.module.js';
 import { WorldModule } from '../world/world.module.js';
+import { ItemizedMobRewardService } from './itemized-mob-reward.service.js';
 import { MobCoordinatorService } from './mob-coordinator.service.js';
 import { MobGateway } from './mob.gateway.js';
 import { MobRewardService } from './mob-reward.service.js';
@@ -32,7 +33,8 @@ import { PveCombatService } from './pve-combat.service.js';
   ],
   providers: [
     KeyedSerialExecutor,
-    MobRewardService,
+    ItemizedMobRewardService,
+    { provide: MobRewardService, useExisting: ItemizedMobRewardService },
     MobCoordinatorService,
     PveCombatService,
     MobGateway,

@@ -7,6 +7,7 @@ import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { CharacterProgressionService } from '../characters/progression/character-progression.service.js';
 import { CanonicalItemService } from './canonical-item.service.js';
+import { ItemCurseRuntimeService } from './item-curse-runtime.service.js';
 import type { InventoryItemizationPayload } from './itemization.contracts.js';
 import { ItemInventoryService } from './item-inventory.service.js';
 import { ItemizationCatalogService } from './itemization-catalog.service.js';
@@ -28,6 +29,7 @@ export class ItemizedItemService extends CanonicalItemService {
     private readonly characterProgression: CharacterProgressionService,
     private readonly catalog: ItemizationCatalogService,
     private readonly inventoryOperations: ItemInventoryService,
+    private readonly curseRuntime: ItemCurseRuntimeService,
   ) {
     super(itemizationDatabase, characterProgression);
   }
@@ -214,6 +216,7 @@ export class ItemizedItemService extends CanonicalItemService {
     characterId: string,
     itemId: string,
   ): Promise<InventorySnapshot> {
+    await this.curseRuntime.assertHealingConsumableAllowed(userId, characterId, itemId);
     const snapshot = await super.use(userId, characterId, itemId);
     await this.catalog.ensure();
     return this.enrichInventory(userId, characterId, snapshot);

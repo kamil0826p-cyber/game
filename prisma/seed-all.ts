@@ -26,21 +26,34 @@ function runSeed(scriptName: string): void {
   }
 }
 
-async function verifyQuestContent(): Promise<void> {
+async function verifySeedContent(): Promise<void> {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   try {
     const realm = await prisma.realm.findUnique({ where: { slug: realmSlug } });
     if (!realm) throw new Error(`Seed verification failed: realm ${realmSlug} does not exist.`);
 
-    const map = await prisma.map.findUnique({
-      where: { realmId_key: { realmId: realm.id, key: 'greenfields' } },
-    });
-    if (!map) throw new Error('Seed verification failed: Greenfields does not exist.');
+    const [greenfields, hospital] = await Promise.all([
+      prisma.map.findUnique({
+        where: { realmId_key: { realmId: realm.id, key: 'greenfields' } },
+      }),
+      prisma.map.findUnique({
+        where: { realmId_key: { realmId: realm.id, key: 'hospital' } },
+        include: { sourcePortals: true },
+      }),
+    ]);
+    if (!greenfields) throw new Error('Seed verification failed: Greenfields does not exist.');
+    if (!hospital) throw new Error('Seed verification failed: hospital does not exist.');
+    if (
+      hospital.sourcePortals.length !== 1 ||
+      hospital.sourcePortals[0]?.destinationMapId !== greenfields.id
+    ) {
+      throw new Error('Seed verification failed: hospital portal does not lead to Greenfields.');
+    }
 
     const [quest, npc] = await Promise.all([
       prisma.questDefinition.findUnique({ where: { key: 'rabbit-fur-for-mira' } }),
       prisma.npcDefinition.findUnique({
-        where: { mapId_key: { mapId: map.id, key: 'mira-tanner' } },
+        where: { mapId_key: { mapId: greenfields.id, key: 'mira-tanner' } },
       }),
     ]);
 
@@ -56,7 +69,7 @@ async function verifyQuestContent(): Promise<void> {
     }
 
     console.log(
-      `Verified quest NPC ${npc.name} (${npc.key}) on Greenfields at ${npc.x},${npc.y}, connected to ${quest.key}.`,
+      `Verified ${hospital.name} with a Greenfields portal and quest NPC ${npc.name} (${npc.key}), connected to ${quest.key}.`,
     );
   } finally {
     await prisma.$disconnect();
@@ -65,8 +78,9 @@ async function verifyQuestContent(): Promise<void> {
 
 async function main(): Promise<void> {
   runSeed('seed.ts');
+  runSeed('seed-hospital.ts');
   runSeed('seed-quests.ts');
-  await verifyQuestContent();
+  await verifySeedContent();
 }
 
 main().catch((error: unknown) => {

@@ -92,4 +92,8 @@ declare module './socket' {
   interface InventoryItemPayload {
     itemization?: InventoryItemizationPayload;
   }
+
+  interface MerchantItemPayload {
+    itemization?: InventoryItemizationPayload;
+  }
 }
