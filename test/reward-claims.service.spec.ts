@@ -84,7 +84,7 @@ describe('reward claims service', () => {
     const statusCheck = source.indexOf("if (claim.status !== 'OPEN')", repeatedEvent);
     const expiryUpdate = source.indexOf("data: { status: 'EXPIRED' }", statusCheck);
     const expiryResolution = source.indexOf("return { type: 'EXPIRED'", expiryUpdate);
-    const outsideError = source.indexOf("if (resolution.type === 'EXPIRED')", expiryResolution);
+    const outsideError = source.indexOf("if (resolution.type === 'EXPIRED')");
 
     expect(characterLock).toBeGreaterThan(0);
     expect(claimLock).toBeGreaterThan(characterLock);
