@@ -1,0 +1,77 @@
+{
+  "columns": 0,
+  "name": "hospital-floor",
+  "tilecount": 5,
+  "tileheight": 32,
+  "tilewidth": 32,
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.11.0",
+  "tiles": [
+    {
+      "id": 0,
+      "image": "hospital-floor-stone-a.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "floor"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "image": "hospital-floor-stone-b.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "floor"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "image": "hospital-floor-cracked.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "floor"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "image": "hospital-floor-blood.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "decal"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "image": "hospital-floor-sigil.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "decal"
+        }
+      ]
+    }
+  ]
+}

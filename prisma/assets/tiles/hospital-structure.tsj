@@ -1,0 +1,120 @@
+{
+  "columns": 0,
+  "name": "hospital-structure",
+  "tilecount": 5,
+  "tileheight": 32,
+  "tilewidth": 32,
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.11.0",
+  "tiles": [
+    {
+      "id": 0,
+      "image": "hospital-wall-base.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "wall"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "image": "hospital-wall-damaged.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "wall"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "image": "hospital-wall-cap.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "wall-cap"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "image": "hospital-wall-pillar.svg",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "collides",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "wall"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "image": "hospital-door-closed.svg",
+      "imageheight": 64,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "door"
+        }
+      ],
+      "objectgroup": {
+        "draworder": "index",
+        "id": 1,
+        "name": "Collision",
+        "objects": [
+          {
+            "height": 32,
+            "id": 1,
+            "name": "Footprint",
+            "rotation": 0,
+            "type": "collision",
+            "visible": true,
+            "width": 32,
+            "x": 0,
+            "y": 32
+          }
+        ],
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}
