@@ -1,7 +1,6 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import type { Prisma } from '../../generated/prisma/client.js';
 import {
   parseItemDefinitionMetadata,
   readItemInstanceSnapshot,
@@ -44,11 +43,6 @@ const cloneModifiers = (
   corruptionByTrigger: { ...value.corruptionByTrigger },
 });
 
-const record = (value: Prisma.JsonValue): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-
 export const itemCurseModifiersFromSnapshots = (
   snapshots: readonly ItemInstanceSnapshot[],
 ): EquippedItemCurseModifiers => {
@@ -90,6 +84,12 @@ export const cachedEquippedItemCurseModifiers = (
     ? cloneModifiers(modifiersByCharacterId.get(characterId) ?? emptyModifiers())
     : emptyModifiers();
 
+export const registerItemCurseCorruptionWriter = (
+  writer: CorruptionWriter | undefined,
+): void => {
+  corruptionWriter = writer;
+};
+
 export const queueItemCurseCorruption = (
   characterId: string | undefined,
   amount: number,
@@ -123,8 +123,9 @@ export const drainItemCurseCorruptionWrites = async (): Promise<void> => {
 @Injectable()
 export class ItemCurseRuntimeService implements OnModuleDestroy {
   constructor(private readonly database: PrismaService) {
-    corruptionWriter = (characterId, amount, operationId) =>
-      this.persistCorruption(characterId, amount, operationId);
+    registerItemCurseCorruptionWriter((characterId, amount, operationId) =>
+      this.persistCorruption(characterId, amount, operationId),
+    );
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -177,6 +178,17 @@ export class ItemCurseRuntimeService implements OnModuleDestroy {
     );
   }
 
+  async getCorruption(characterId: string): Promise<number> {
+    const events = await this.database.itemEconomyEvent.findMany({
+      where: { characterId, eventType: 'ITEM_CURSE_CORRUPTION' },
+      select: { quantity: true },
+    });
+    return Math.min(
+      2_147_483_647,
+      events.reduce((sum, event) => sum + Math.max(0, event.quantity), 0),
+    );
+  }
+
   async persistCorruption(
     characterId: string,
     amount: number,
@@ -196,43 +208,35 @@ export class ItemCurseRuntimeService implements OnModuleDestroy {
           select: { id: true },
         });
         if (existing) return 0;
-        const character = await transaction.character.findUnique({
-          where: { id: characterId },
-          select: { progressionData: true },
+        const previousEvents = await transaction.itemEconomyEvent.findMany({
+          where: { characterId, eventType: 'ITEM_CURSE_CORRUPTION' },
+          select: { quantity: true },
         });
-        if (!character) return 0;
-        const progression = record(character.progressionData);
-        const current =
-          typeof progression.corruption === 'number' &&
-          Number.isFinite(progression.corruption)
-            ? Math.max(0, Math.trunc(progression.corruption))
-            : 0;
+        const current = Math.min(
+          2_147_483_647,
+          previousEvents.reduce(
+            (sum, event) => sum + Math.max(0, event.quantity),
+            0,
+          ),
+        );
         const next = Math.min(2_147_483_647, current + normalizedAmount);
-        await transaction.character.update({
-          where: { id: characterId },
-          data: {
-            progressionData: {
-              ...progression,
-              corruption: next,
-            } as Prisma.InputJsonValue,
-            lastSavedAt: new Date(),
-          },
-        });
+        const applied = next - current;
+        if (applied <= 0) return 0;
         await transaction.itemEconomyEvent.create({
           data: {
             characterId,
             operationId: normalizedOperationId,
             eventType: 'ITEM_CURSE_CORRUPTION',
-            quantity: normalizedAmount,
+            quantity: applied,
             silverDelta: 0,
             metadata: {
-              amount: normalizedAmount,
+              amount: applied,
               corruptionBefore: current,
               corruptionAfter: next,
-            } as Prisma.InputJsonValue,
+            },
           },
         });
-        return normalizedAmount;
+        return applied;
       });
     } catch (error) {
       if (
