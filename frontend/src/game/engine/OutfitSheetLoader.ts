@@ -1,5 +1,5 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
-import type { CharacterGender, Direction } from '../../contracts/game';
+import type { Direction } from '../../contracts/game';
 import { outfitImageCandidates } from '../../mock/outfitCatalog';
 
 export interface OutfitSheetFrames {
@@ -21,15 +21,19 @@ const createFrames = (baseTexture: Texture): OutfitSheetFrames => {
       const row = directionRows[direction];
       return [
         direction,
-        Array.from({ length: 4 }, (_, column) => new Texture({
-          source: baseTexture.source,
-          frame: new Rectangle(
-            column * FRAME_WIDTH,
-            row * FRAME_HEIGHT,
-            FRAME_WIDTH,
-            FRAME_HEIGHT,
-          ),
-        })),
+        Array.from(
+          { length: 4 },
+          (_, column) =>
+            new Texture({
+              source: baseTexture.source,
+              frame: new Rectangle(
+                column * FRAME_WIDTH,
+                row * FRAME_HEIGHT,
+                FRAME_WIDTH,
+                FRAME_HEIGHT,
+              ),
+            }),
+        ),
       ];
     }),
   ) as Record<Direction, Texture[]>;
@@ -37,13 +41,10 @@ const createFrames = (baseTexture: Texture): OutfitSheetFrames => {
   return { frameDurationMs: 120, frames };
 };
 
-const loadFrames = async (
-  outfitKey: string,
-  gender: CharacterGender,
-): Promise<OutfitSheetFrames> => {
+const loadFrames = async (outfitKey: string): Promise<OutfitSheetFrames> => {
   const errors: unknown[] = [];
 
-  for (const url of outfitImageCandidates(outfitKey, gender)) {
+  for (const url of outfitImageCandidates(outfitKey)) {
     try {
       const baseTexture = await Assets.load<Texture>(url);
       if (baseTexture.source.width !== SHEET_WIDTH || baseTexture.source.height !== SHEET_HEIGHT) {
@@ -55,26 +56,24 @@ const loadFrames = async (
       return createFrames(baseTexture);
     } catch (error) {
       errors.push(error);
-      console.warn(`Outfit candidate failed for ${outfitKey} (${gender}): ${url}`, error);
+      console.warn(`Outfit candidate failed for ${outfitKey}: ${url}`, error);
     }
   }
 
-  throw new AggregateError(errors, `No outfit image candidate could be loaded for ${outfitKey} (${gender}).`);
+  throw new AggregateError(errors, `No outfit image candidate could be loaded for ${outfitKey}.`);
 };
 
 export const getOutfitSheetFrames = (
   outfitKey: string,
-  gender: CharacterGender = 'MALE',
 ): Promise<OutfitSheetFrames | undefined> => {
-  const cacheKey = `${gender}:${outfitKey}`;
-  const cached = frameCache.get(cacheKey);
+  const cached = frameCache.get(outfitKey);
   if (cached) return cached;
 
-  const loading = loadFrames(outfitKey, gender).catch((error: unknown) => {
-    frameCache.delete(cacheKey);
-    console.error(`Failed to load outfit ${outfitKey} (${gender}).`, error);
+  const loading = loadFrames(outfitKey).catch((error: unknown) => {
+    frameCache.delete(outfitKey);
+    console.error(`Failed to load outfit ${outfitKey}.`, error);
     return undefined;
   });
-  frameCache.set(cacheKey, loading);
+  frameCache.set(outfitKey, loading);
   return loading;
 };
