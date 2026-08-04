@@ -55,13 +55,17 @@ describe('item salvage player flow', () => {
     expect(getInventory).toHaveBeenCalledOnce();
   });
 
-  it('exposes confirmed salvage and destroy actions in the inventory modal', () => {
+  it('exposes exact salvage rewards and confirmed destructive actions in the inventory modal', () => {
     const modalPath = fileURLToPath(
       new URL('../src/ui/modals/InventoryModal.tsx', import.meta.url),
     );
     const source = readFileSync(modalPath, 'utf8');
 
     expect(source).toContain("itemization?.salvagePolicy === 'ALLOWED'");
+    expect(source).toContain('item.itemization?.salvage');
+    expect(source).toContain('Gwarantowany odzysk');
+    expect(source).toContain('Możliwy rzadki odzysk');
+    expect(source).toContain('guaranteedAfterMisses');
     expect(source).toContain('Rozłóż na materiały');
     expect(source).toContain('confirmSalvage');
     expect(source).toContain('connection.salvageInventoryItem(item.id)');
