@@ -1,4 +1,5 @@
 import type { CharacterClass, SelfCharacterState } from './game';
+import type { InventoryItemizationPayload } from './itemization';
 import type {
   CombatSnapshot,
   EquipmentSlot,
@@ -35,6 +36,7 @@ export interface MobLootRewardPayload {
   minimumLevel: number;
   statBonuses: ItemStatBonuses;
   effect?: { hp?: number; energy?: number };
+  itemization?: InventoryItemizationPayload;
 }
 
 export interface MobRewardPayload {
