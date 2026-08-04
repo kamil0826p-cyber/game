@@ -9,14 +9,15 @@ import { PersistenceModule } from '../persistence/persistence.module.js';
 import { TradeModule } from '../player/trade/trade.module.js';
 import { SkillModule } from '../skills/skill.module.js';
 import { WorldModule } from '../world/world.module.js';
-import { CombatOccupancyService } from './combat-occupancy.service.js';
 import { CombatGateway } from './combat.gateway.js';
+import { CombatOccupancyModule } from './combat-occupancy.module.js';
 import './item-curse-combat.patch.js';
 import { CombatService } from './combat.service.js';
 import { DefeatRecoveryService } from './defeat-recovery.service.js';
 
 @Module({
   imports: [
+    CombatOccupancyModule,
     GroupModule,
     ItemModule,
     MapModule,
@@ -29,11 +30,10 @@ import { DefeatRecoveryService } from './defeat-recovery.service.js';
   ],
   providers: [
     KeyedSerialExecutor,
-    CombatOccupancyService,
     CombatService,
     DefeatRecoveryService,
     CombatGateway,
   ],
-  exports: [CombatOccupancyService, CombatService],
+  exports: [CombatOccupancyModule, CombatService],
 })
 export class CombatModule {}
