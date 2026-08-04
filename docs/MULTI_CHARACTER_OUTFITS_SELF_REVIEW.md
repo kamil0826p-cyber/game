@@ -7,7 +7,8 @@
 - The pre-world screen loads the full owned roster and allows switching the selected character.
 - Outfit changes are persisted before entering the world and are accepted only for an owned character and an outfit unlocked at its level.
 - Every class has eleven catalog entries: the starting image at level 1 and a new image every ten levels through level 100.
-- Each outfit key resolves to its own canonical PNG; the client does not recolor a shared base image.
+- Each outfit key resolves to one exact existing PNG; the client does not recolor a shared base image at runtime.
+- Existing PNGs remain in the legacy `sprites/male` storage directory, but the resolver ignores character gender.
 
 ## Authority and security review
 
@@ -39,7 +40,7 @@
 
 - Backend catalog count, uniqueness, default/unlocked rules, maximum roster constant, and Zod schemas.
 - Frontend catalog count, uniqueness, exact ten-level unlock ordering, canonical asset paths, and physical sprite-file existence.
-- Regression coverage rejects gender palette folders and cross-outfit fallback substitutions.
+- Regression coverage verifies a single gender-independent asset URL and rejects cross-outfit fallback substitutions.
 
 ## Validation
 

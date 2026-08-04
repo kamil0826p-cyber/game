@@ -81,10 +81,11 @@ export const CLASS_PRESENTATION: Readonly<
   },
 };
 
-const OUTFIT_ASSET_VERSION = 16;
+const OUTFIT_ASSET_VERSION = 17;
+const CANONICAL_OUTFIT_ASSET_DIRECTORY = 'assets/sprites/male';
 
 export const outfitImageUrl = (outfitKey: string): string =>
-  `${import.meta.env.BASE_URL}assets/sprites/${encodeURIComponent(outfitKey)}.png?v=${OUTFIT_ASSET_VERSION}`;
+  `${import.meta.env.BASE_URL}${CANONICAL_OUTFIT_ASSET_DIRECTORY}/${encodeURIComponent(outfitKey)}.png?v=${OUTFIT_ASSET_VERSION}`;
 
 export const outfitImageCandidates = (outfitKey: string): readonly string[] => [
   outfitImageUrl(outfitKey),

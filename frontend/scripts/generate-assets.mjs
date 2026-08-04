@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const assetsRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'assets');
 const tilesetPath = resolve(assetsRoot, 'tiles', 'tiled-world.svg');
+const canonicalOutfitDirectory = 'male';
 
 const outfitRows = {
   MAGE: [
@@ -62,13 +63,13 @@ const tileDefinition = {
 };
 
 const manifest = {
-  version: 16,
+  version: 17,
   tilesets: { greenfields: tileDefinition, 'crystal-cave': tileDefinition },
   outfits: Object.fromEntries(
     Object.entries(outfits).map(([key, definition]) => [
       key,
       {
-        image: `/assets/sprites/${key}.png?v=16`,
+        image: `/assets/sprites/${canonicalOutfitDirectory}/${key}.png?v=17`,
         frameWidth: 32,
         frameHeight: 48,
         columns: 4,
@@ -85,5 +86,8 @@ const manifest = {
 
 await mkdir(assetsRoot, { recursive: true });
 await access(tilesetPath);
+for (const key of Object.keys(outfits)) {
+  await access(resolve(assetsRoot, 'sprites', canonicalOutfitDirectory, `${key}.png`));
+}
 await writeFile(resolve(assetsRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log('Generated the canonical asset manifest with one image per outfit.');
