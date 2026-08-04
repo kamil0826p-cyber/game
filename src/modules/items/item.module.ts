@@ -6,8 +6,8 @@ import { ItemEconomyGateway } from './item-economy.gateway.js';
 import { ItemEconomyService } from './item-economy.service.js';
 import { ItemGateway } from './item.gateway.js';
 import { ItemInventoryService } from './item-inventory.service.js';
-import { ItemizedItemService } from './itemized-item.service.js';
 import { ItemizationCatalogService } from './itemization-catalog.service.js';
+import { MerchantItemizedItemService } from './merchant-itemized-item.service.js';
 import { ItemService } from './item.service.js';
 
 @Module({
@@ -16,8 +16,8 @@ import { ItemService } from './item.service.js';
     ItemizationCatalogService,
     ItemInventoryService,
     ItemEconomyService,
-    ItemizedItemService,
-    { provide: ItemService, useExisting: ItemizedItemService },
+    MerchantItemizedItemService,
+    { provide: ItemService, useExisting: MerchantItemizedItemService },
     ItemGateway,
     ItemEconomyGateway,
   ],
