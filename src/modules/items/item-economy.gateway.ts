@@ -23,9 +23,6 @@ const characterOperation = z.object({ requestId }).strict();
 const salvageSchema = z
   .object({ requestId, itemId: z.string().uuid() })
   .strict();
-const claimActionSchema = z
-  .object({ requestId, claimId: z.string().uuid() })
-  .strict();
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class ItemEconomyGateway {
@@ -63,33 +60,6 @@ export class ItemEconomyGateway {
     );
   }
 
-  @SubscribeMessage('itemization:claims:get')
-  claims(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, characterOperation, raw, (session) =>
-      this.economy.claims(session.userId, session.characterId),
-    );
-  }
-
-  @SubscribeMessage('itemization:claims:claim')
-  claim(
-    @ConnectedSocket() client: GameSocket,
-    @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, claimActionSchema, raw, async (session, payload) => {
-      const result = await this.economy.claim(
-        session.userId,
-        session.characterId,
-        payload.claimId,
-        payload.requestId,
-      );
-      this.syncSilver(session, result);
-      return result;
-    });
-  }
-
   private async handle<TPayload, TResult>(
     client: GameSocket,
     schema: ZodType<TPayload>,
@@ -108,19 +78,6 @@ export class ItemEconomyGateway {
       return { ok: true, data };
     } catch (error) {
       return { ok: false, error: this.toSocketError(error, client) };
-    }
-  }
-
-  private syncSilver(session: PlayerSession, value: unknown): void {
-    if (
-      value &&
-      typeof value === 'object' &&
-      'silver' in value &&
-      typeof (value as { silver?: unknown }).silver === 'number'
-    ) {
-      session.silver = (value as { silver: number }).silver;
-      session.stateRevision += 1;
-      session.dirty = true;
     }
   }
 
