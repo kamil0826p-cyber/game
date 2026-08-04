@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { MerchantSnapshot } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { CharacterProgressionService } from '../characters/progression/character-progression.service.js';
+import { ItemCurseRuntimeService } from './item-curse-runtime.service.js';
 import { ItemInventoryService } from './item-inventory.service.js';
 import { ItemizedItemService } from './itemized-item.service.js';
 import { ItemizationCatalogService } from './itemization-catalog.service.js';
@@ -20,8 +21,9 @@ export class MerchantItemizedItemService extends ItemizedItemService {
     progression: CharacterProgressionService,
     catalog: ItemizationCatalogService,
     inventory: ItemInventoryService,
+    curseRuntime: ItemCurseRuntimeService,
   ) {
-    super(merchantDatabase, progression, catalog, inventory);
+    super(merchantDatabase, progression, catalog, inventory, curseRuntime);
   }
 
   override async getMerchant(
