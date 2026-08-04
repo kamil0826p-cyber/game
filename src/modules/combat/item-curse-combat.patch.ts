@@ -114,6 +114,7 @@ const applyGuardTriggers = (
   runtime: CombatRuntime,
   event: CombatActionResolutionPayload,
 ): void => {
+  if (event.action !== 'BASIC_ATTACK' && event.action !== 'SKILL') return;
   event.results.forEach((result, index) => {
     if (result.hpDelta >= 0 && result.shieldAbsorbed <= 0) return;
     const target = playerActor(runtime, result.targetActorId);
