@@ -40,7 +40,7 @@ const finishedSnapshot = (): CombatSnapshot => ({
 });
 
 describe('DefeatRecoveryService', () => {
-  it('moves only defeated players to the hospital and deduplicates terminal snapshots', async () => {
+  it('waits for combat release, moves only defeated players and deduplicates terminal snapshots', async () => {
     const hospital = {
       id: 'hospital-id',
       key: 'hospital',
@@ -57,7 +57,7 @@ describe('DefeatRecoveryService', () => {
       characterId: 'dead',
       locale: 'pl',
       activeInWorld: true,
-      combatState: 'IDLE',
+      combatState: 'IN_BATTLE',
       mapId: 'greenfields-id',
       x: 8,
       y: 8,
@@ -71,6 +71,7 @@ describe('DefeatRecoveryService', () => {
       socketId: 'socket-alive',
       connectionId: 'connection-alive',
       characterId: 'alive',
+      combatState: 'IDLE',
       x: 9,
     };
 
@@ -138,6 +139,9 @@ describe('DefeatRecoveryService', () => {
     );
 
     const snapshot = finishedSnapshot();
+    setTimeout(() => {
+      deadSession.combatState = 'IDLE';
+    }, 5);
     await Promise.all([
       service.processCombatUpdate(snapshot),
       service.processCombatUpdate(snapshot),
