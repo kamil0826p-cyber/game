@@ -52,7 +52,7 @@ export function RewardClaimsOverlay(): React.JSX.Element | null {
       setOpen((current) => !current);
     };
     const keyboard = (event: KeyboardEvent) => {
-      if (editable(event.target)) return;
+      if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key === 'Escape' && open) {
         event.preventDefault();
         setOpen(false);
