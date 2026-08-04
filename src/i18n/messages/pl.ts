@@ -26,6 +26,7 @@ export const polishMessages = {
   'errors.items.levelRequired': 'Poziom twojej postaci jest zbyt niski, aby założyć ten przedmiot.',
   'errors.items.loadoutLocked': 'Nie możesz zmieniać wyposażenia podczas przygotowania lub trwania wyprawy.',
   'errors.items.effectNotNeeded': 'Ten przedmiot niczego teraz nie odnowi.',
+  'errors.items.curseRestriction': 'Założona klątwa blokuje używanie przedmiotów leczących.',
   'errors.items.merchantUnavailable': 'Podejdź bliżej do handlarza, aby handlować.',
   'errors.npcs.notAvailable': 'Podejdź bliżej do NPC, aby porozmawiać.',
   'errors.npcs.dialogueUnavailable': 'Ten NPC nie może teraz rozmawiać.',
