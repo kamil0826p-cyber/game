@@ -17,7 +17,9 @@ import { MovementCoordinatorService } from '../movement/movement-coordinator.ser
 import { NpcService } from '../npcs/npc.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
+import { CRAFT_ORDER_MAX_REWARD_SILVER } from './craft-order.service.js';
 import type {
+  CraftOrderMutationResult,
   CraftingResult,
   CraftingSnapshot,
   CraftingStationSession,
@@ -25,6 +27,7 @@ import type {
 import { CraftingService } from './crafting.service.js';
 
 const requestId = z.string().trim().min(1).max(96);
+const orderId = z.string().uuid();
 const craftingRequestSchema = z.object({ requestId }).strict();
 const craftingCraftSchema = z
   .object({
@@ -32,6 +35,14 @@ const craftingCraftSchema = z
     recipeKey: z.string().trim().min(1).max(96),
   })
   .strict();
+const craftOrderCreateSchema = z
+  .object({
+    requestId,
+    recipeKey: z.string().trim().min(1).max(96),
+    rewardSilver: z.number().int().min(0).max(CRAFT_ORDER_MAX_REWARD_SILVER),
+  })
+  .strict();
+const craftOrderActionSchema = z.object({ requestId, orderId }).strict();
 
 type CraftingRequestPayload = z.infer<typeof craftingRequestSchema>;
 
@@ -54,12 +65,14 @@ export class CraftingGateway {
   ): Promise<SocketAck<CraftingSnapshot>> {
     return this.handle(client, craftingRequestSchema, raw, async (session) => {
       const station = await this.requireStation(client, session);
-      return this.crafting.getSnapshot(
+      const result = await this.crafting.getSnapshot(
         session.userId,
         session.characterId,
         station,
         await this.stationName(station.npcId),
       );
+      this.syncSilver(client, session, result.silver);
+      return result;
     });
   }
 
@@ -79,9 +92,68 @@ export class CraftingGateway {
         payload.recipeKey,
         payload.requestId,
       );
-      session.silver = result.snapshot.silver;
-      session.stateRevision += 1;
-      session.dirty = true;
+      this.syncSilver(client, session, result.snapshot.silver);
+      return result;
+    });
+  }
+
+  @SubscribeMessage('crafting:orderCreate')
+  createOrder(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<CraftOrderMutationResult>> {
+    return this.handle(client, craftOrderCreateSchema, raw, async (session, payload) => {
+      const station = await this.requireStation(client, session);
+      const result = await this.crafting.createOrder(
+        session.userId,
+        session.characterId,
+        station,
+        await this.stationName(station.npcId),
+        payload.recipeKey,
+        payload.rewardSilver,
+        payload.requestId,
+      );
+      this.syncSilver(client, session, result.snapshot.silver);
+      return result;
+    });
+  }
+
+  @SubscribeMessage('crafting:orderFulfill')
+  fulfillOrder(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<CraftOrderMutationResult>> {
+    return this.handle(client, craftOrderActionSchema, raw, async (session, payload) => {
+      const station = await this.requireStation(client, session);
+      const result = await this.crafting.fulfillOrder(
+        session.userId,
+        session.characterId,
+        station,
+        await this.stationName(station.npcId),
+        payload.orderId,
+        payload.requestId,
+      );
+      this.syncSilver(client, session, result.snapshot.silver);
+      this.notifyOrderOwner(client, result);
+      return result;
+    });
+  }
+
+  @SubscribeMessage('crafting:orderCancel')
+  cancelOrder(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<CraftOrderMutationResult>> {
+    return this.handle(client, craftOrderActionSchema, raw, async (session, payload) => {
+      const station = await this.requireStation(client, session);
+      const result = await this.crafting.cancelOrder(
+        session.userId,
+        session.characterId,
+        station,
+        await this.stationName(station.npcId),
+        payload.orderId,
+      );
+      this.syncSilver(client, session, result.snapshot.silver);
       return result;
     });
   }
@@ -121,6 +193,41 @@ export class CraftingGateway {
   private async stationName(npcId: string): Promise<string> {
     const npc = await this.npcs.getNpcIdentity(npcId);
     return npc.name;
+  }
+
+  private syncSilver(
+    client: GameSocket,
+    session: PlayerSession,
+    balance: number,
+  ): void {
+    const previous = session.silver;
+    if (previous === balance) return;
+    session.silver = balance;
+    session.stateRevision += 1;
+    session.dirty = true;
+    client.emit('character:currencyUpdated', {
+      characterId: session.characterId,
+      currency: 'SILVER',
+      amount: balance - previous,
+      balance,
+    });
+  }
+
+  private notifyOrderOwner(
+    client: GameSocket,
+    result: CraftOrderMutationResult,
+  ): void {
+    if (result.mutation.kind !== 'FULFILLED') return;
+    const owner = this.worldState.getByCharacterId(result.mutation.ownerCharacterId);
+    if (!owner) return;
+    const message =
+      owner.locale === 'pl'
+        ? `Zlecenie ukończone: ${result.mutation.outputName}. Przedmiot został dostarczony.`
+        : `Craft order completed: ${result.mutation.outputName}. The item was delivered.`;
+    client.nsp.to(owner.socketId).emit('notification', {
+      code: 'CRAFT_ORDER_COMPLETED',
+      message,
+    });
   }
 
   private async handle<TPayload extends CraftingRequestPayload, TResult>(

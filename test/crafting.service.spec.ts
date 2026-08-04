@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PrismaService } from '../src/database/prisma.service.js';
 import type { Prisma } from '../src/generated/prisma/client.js';
+import type { CraftOrderService } from '../src/modules/items/craft-order.service.js';
 import { CraftingService } from '../src/modules/items/crafting.service.js';
 import type { ItemEconomyService } from '../src/modules/items/item-economy.service.js';
 import { ITEM_RECIPES } from '../src/modules/items/itemization.catalog.js';
@@ -35,6 +36,14 @@ const materialDefinitions = [
 
 const economy = (craft = vi.fn().mockResolvedValue(undefined)) =>
   ({ craft }) as unknown as ItemEconomyService;
+const orders = (overrides: Partial<CraftOrderService> = {}) =>
+  ({
+    expireOrders: vi.fn().mockResolvedValue(0),
+    rewardForEscrow: vi.fn((escrow: number, recipeKey: string) =>
+      Math.max(0, escrow - ITEM_RECIPES[recipeKey]!.silverCost),
+    ),
+    ...overrides,
+  }) as unknown as CraftOrderService;
 const npcs = (clearMapCache = vi.fn()) =>
   ({ clearMapCache }) as unknown as NpcService;
 
@@ -66,7 +75,7 @@ describe('CraftingService', () => {
       },
     } as unknown as PrismaService;
     const clearMapCache = vi.fn();
-    const service = new CraftingService(prisma, economy(), npcs(clearMapCache));
+    const service = new CraftingService(prisma, economy(), orders(), npcs(clearMapCache));
 
     await service.onModuleInit();
 
@@ -79,7 +88,7 @@ describe('CraftingService', () => {
     expect(clearMapCache).toHaveBeenCalledOnce();
   });
 
-  it('returns craftable recipes with authoritative inventory counts and item powers', async () => {
+  it('returns recipes, order creation availability and the realm order board', async () => {
     const quantities = new Map([
       ['scorpion-chitin', 20],
       ['rabbit-fur', 10],
@@ -90,10 +99,17 @@ describe('CraftingService', () => {
     const prisma = {
       character: {
         findFirst: vi.fn().mockResolvedValue({
-          level: 40,
+          id: 'character-1',
+          name: 'Owner',
+          realmId: 'realm-1',
+          level: 4,
           silver: 2_000,
           map: { key: 'greenfields' },
         }),
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'character-1', name: 'Owner' },
+          { id: 'character-2', name: 'Smith' },
+        ]),
       },
       itemDefinition: {
         findMany: vi.fn().mockResolvedValue([...outputDefinitions, ...materialDefinitions]),
@@ -103,8 +119,29 @@ describe('CraftingService', () => {
           [...quantities].map(([key, quantity]) => ({ quantity, itemDefinition: { key } })),
         ),
       },
+      itemCraftOrder: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              id: '00000000-0000-0000-0000-000000000101',
+              ownerCharacterId: 'character-2',
+              crafterCharacterId: null,
+              recipeKey: 'tempered-chitin-buckler-v1',
+              recipeVersion: 1,
+              status: 'OPEN',
+              silverEscrow: 240,
+              outputQuantity: 1,
+              expiresAt: new Date(Date.now() + 60_000),
+              createdAt: new Date(),
+              completedAt: null,
+              cancelledAt: null,
+            },
+          ])
+          .mockResolvedValueOnce([]),
+      },
     } as unknown as PrismaService;
-    const service = new CraftingService(prisma, economy(), npcs());
+    const service = new CraftingService(prisma, economy(), orders(), npcs());
 
     const snapshot = await service.getSnapshot(
       'user-1',
@@ -114,7 +151,8 @@ describe('CraftingService', () => {
     );
 
     expect(snapshot.recipes).toHaveLength(3);
-    expect(snapshot.recipes.every((recipe) => recipe.availability.canCraft)).toBe(true);
+    expect(snapshot.recipes.every((recipe) => recipe.orderAvailability.canCreate)).toBe(true);
+    expect(snapshot.recipes.some((recipe) => recipe.availability.canCraft)).toBe(false);
     expect(snapshot.recipes.find((recipe) => recipe.key === 'tempered-chitin-buckler-v1')?.inputs)
       .toEqual(expect.arrayContaining([
         expect.objectContaining({ itemKey: 'scorpion-chitin', ownedQuantity: 20, requiredQuantity: 8 }),
@@ -124,5 +162,13 @@ describe('CraftingService', () => {
         relic: expect.objectContaining({ key: 'ashen-lens-v1' }),
         curse: expect.objectContaining({ key: 'hollow-shell-v1' }),
       }));
+    expect(snapshot.orders.board).toEqual([
+      expect.objectContaining({
+        owner: { characterId: 'character-2', name: 'Smith' },
+        rewardSilver: 100,
+        canFulfill: false,
+        fulfillBlockers: expect.arrayContaining(['LEVEL_REQUIRED']),
+      }),
+    ]);
   });
 });

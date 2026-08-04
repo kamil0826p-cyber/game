@@ -53,6 +53,15 @@ export interface CraftingAvailabilityPayload {
   canCraft: boolean;
 }
 
+export interface CraftOrderCreationAvailabilityPayload {
+  regionMet: boolean;
+  workstationMet: boolean;
+  baseSilverMet: boolean;
+  materialsMet: boolean;
+  activeOrderLimitMet: boolean;
+  canCreate: boolean;
+}
+
 export interface CraftingRecipePayload {
   key: string;
   version: number;
@@ -67,6 +76,52 @@ export interface CraftingRecipePayload {
   inputs: CraftingMaterialPayload[];
   output: CraftingOutputPayload;
   availability: CraftingAvailabilityPayload;
+  orderAvailability: CraftOrderCreationAvailabilityPayload;
+}
+
+export type CraftOrderStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+export type CraftOrderFulfillBlocker =
+  | 'OWN_ORDER'
+  | 'LEVEL_REQUIRED'
+  | 'REGION_REQUIRED'
+  | 'WRONG_WORKSTATION'
+  | 'RECIPE_VERSION_MISMATCH'
+  | 'ORDER_CLOSED';
+
+export interface CraftOrderPayload {
+  id: string;
+  recipeKey: string;
+  recipeVersion: number;
+  recipeName: string;
+  owner: { characterId: string; name: string };
+  crafter?: { characterId: string; name: string };
+  output: CraftingOutputPayload;
+  outputQuantity: number;
+  requiredLevel: number;
+  craftCostSilver: number;
+  rewardSilver: number;
+  totalEscrowSilver: number;
+  status: CraftOrderStatus;
+  createdAt: number;
+  expiresAt: number;
+  completedAt?: number;
+  cancelledAt?: number;
+  canFulfill: boolean;
+  canCancel: boolean;
+  fulfillBlockers: CraftOrderFulfillBlocker[];
+}
+
+export interface CraftOrderRulesPayload {
+  activeOrderLimit: number;
+  activeOrderCount: number;
+  maximumRewardSilver: number;
+  ttlMs: number;
+}
+
+export interface CraftOrderCollectionPayload {
+  rules: CraftOrderRulesPayload;
+  board: CraftOrderPayload[];
+  mine: CraftOrderPayload[];
 }
 
 export interface CraftingSnapshot {
@@ -79,6 +134,7 @@ export interface CraftingSnapshot {
   mapKey: string;
   silver: number;
   recipes: CraftingRecipePayload[];
+  orders: CraftOrderCollectionPayload;
 }
 
 export interface CraftingResult {
@@ -89,6 +145,20 @@ export interface CraftingResult {
     name: string;
     quantity: number;
     delivery: 'INVENTORY' | 'CLAIMS';
+  };
+}
+
+export type CraftOrderMutationKind = 'CREATED' | 'FULFILLED' | 'CANCELLED';
+
+export interface CraftOrderMutationResult {
+  snapshot: CraftingSnapshot;
+  mutation: {
+    kind: CraftOrderMutationKind;
+    orderId: string;
+    outputName: string;
+    rewardSilver: number;
+    ownerCharacterId: string;
+    delivery?: 'INVENTORY' | 'CLAIMS';
   };
 }
 
