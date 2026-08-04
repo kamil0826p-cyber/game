@@ -137,8 +137,8 @@ export class ItemGateway {
       return;
     }
     throw new GameError(
-      GAME_ERROR_CODES.COMBAT_ACTION_INVALID,
-      'errors.combat.actionInvalid',
+      GAME_ERROR_CODES.ITEM_LOADOUT_LOCKED,
+      'errors.items.combatLocked',
       { reason: 'EQUIPMENT_LOCKED_DURING_COMBAT' },
     );
   }
