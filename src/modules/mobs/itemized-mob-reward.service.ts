@@ -1,7 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
-import type { CharacterClass, EquipmentSlot } from '../../common/domain/game.types.js';
-import type { ItemRarity, ItemStatBonuses } from '../../contracts/socket.events.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import type { Prisma } from '../../generated/prisma/client.js';
 import { CharacterProgressionService } from '../characters/progression/character-progression.service.js';
 import { ItemInventoryService } from '../items/item-inventory.service.js';
 import {
@@ -29,24 +28,14 @@ type ItemizedSettledLoot = SettledLoot & {
 
 type RewardItemRow = {
   quantity: number;
-  instanceData: unknown;
+  instanceData: Prisma.JsonValue;
   itemDefinition: {
     key: string;
     name: string;
     description: string;
     stackLimit: number;
-    metadata: unknown;
+    metadata: Prisma.JsonValue;
   };
-};
-
-type RewardMetadata = {
-  rarity?: ItemRarity;
-  icon?: string;
-  equipmentSlot?: EquipmentSlot;
-  requiredClass?: CharacterClass;
-  minimumLevel?: number;
-  statBonuses?: ItemStatBonuses;
-  effect?: { hp?: number; energy?: number };
 };
 
 @Injectable()
@@ -97,15 +86,14 @@ export class ItemizedMobRewardService extends MobRewardService {
   ): ItemizedSettledLoot[] {
     const result: ItemizedSettledLoot[] = [];
     for (const row of rows) {
-      const metadata = parseItemDefinitionMetadata(row.itemDefinition.metadata as never);
+      const metadata = parseItemDefinitionMetadata(row.itemDefinition.metadata);
       if (metadata.category !== 'EQUIPMENT') continue;
       const snapshot = readItemInstanceSnapshot({
-        instanceData: row.instanceData as never,
+        instanceData: row.instanceData,
         definitionKey: row.itemDefinition.key,
         metadata,
       });
       if (!snapshot.origin.operationId.startsWith(`${operationPrefix}:`)) continue;
-      const raw = row.itemDefinition.metadata as RewardMetadata;
       result.push({
         itemKey: row.itemDefinition.key,
         name: row.itemDefinition.name,
@@ -118,7 +106,7 @@ export class ItemizedMobRewardService extends MobRewardService {
         requiredClass: metadata.requiredClass,
         minimumLevel: metadata.minimumLevel ?? 1,
         statBonuses: effectiveItemStatBonuses(metadata, snapshot),
-        effect: raw.effect,
+        effect: metadata.effect,
         itemization: toInventoryItemizationPayload(metadata, snapshot),
       });
     }
