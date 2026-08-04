@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CLOSE_GUILD_WINDOW_EVENT } from '../../game/guilds/guildUiEvents';
 import {
   CLOSE_REWARD_CLAIMS_WINDOW_EVENT,
   TOGGLE_REWARD_CLAIMS_WINDOW_EVENT,
@@ -23,6 +24,7 @@ export function RewardClaimsOverlay(): React.JSX.Element | null {
     const close = () => setOpen(false);
     const toggle = () => {
       window.dispatchEvent(new Event(CLOSE_SETTINGS_WINDOW_EVENT));
+      window.dispatchEvent(new Event(CLOSE_GUILD_WINDOW_EVENT));
       gameStore.setActiveModal(null);
       setOpen((current) => !current);
     };
@@ -37,6 +39,7 @@ export function RewardClaimsOverlay(): React.JSX.Element | null {
       ) {
         event.preventDefault();
         window.dispatchEvent(new Event(CLOSE_SETTINGS_WINDOW_EVENT));
+        window.dispatchEvent(new Event(CLOSE_GUILD_WINDOW_EVENT));
         setOpen((current) => !current);
       }
     };
