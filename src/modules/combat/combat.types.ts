@@ -29,6 +29,13 @@ export interface CombatRuntimeStatus {
   appliedTurn: number;
 }
 
+export interface CombatItemCurseRuntime {
+  healingReceivedMultiplier: number;
+  corruptionOnSkillCast: number;
+  corruptionOnGuardSuccess: number;
+  corruptionOnCombatEnd: number;
+}
+
 export interface CombatRuntimeActor {
   actorId: string;
   teamId: string;
@@ -57,6 +64,10 @@ export interface CombatRuntimeActor {
   controlDrExpiresTurn: number;
   statuses: CombatRuntimeStatus[];
   skills: Map<string, CombatRuntimeSkill>;
+  itemCurse: CombatItemCurseRuntime;
+  pendingCorruption: number;
+  corruptionFlushSequence: number;
+  combatEndCorruptionApplied: boolean;
 }
 
 export interface CombatRuntimeTeam {
@@ -138,11 +149,16 @@ export interface CombatActorInput extends Omit<
   | 'controlDrExpiresTurn'
   | 'fallbackAction'
   | 'disconnectedAt'
+  | 'itemCurse'
+  | 'pendingCorruption'
+  | 'corruptionFlushSequence'
+  | 'combatEndCorruptionApplied'
 > {
   skills: readonly CombatRuntimeSkill[];
   fallbackAction?: CombatFallbackAction;
   magicResistance?: number;
   formationPreference?: CombatFormationLine;
+  itemCurse?: Partial<CombatItemCurseRuntime>;
 }
 
 export interface CombatTeamInput {
