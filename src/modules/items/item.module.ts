@@ -19,6 +19,9 @@ import { MarketNpcBootstrapService } from './market-npc-bootstrap.service.js';
 import { MarketService } from './market.service.js';
 import { MerchantItemizedItemService } from './merchant-itemized-item.service.js';
 import { ItemService } from './item.service.js';
+import { RewardClaimExpirationService } from './reward-claim-expiration.service.js';
+import { RewardClaimsGateway } from './reward-claims.gateway.js';
+import { RewardClaimsService } from './reward-claims.service.js';
 
 @Module({
   imports: [WorldModule, MovementModule, CharacterModule, NpcModule],
@@ -32,6 +35,8 @@ import { ItemService } from './item.service.js';
     MarketService,
     MarketExpirationService,
     MarketNpcBootstrapService,
+    RewardClaimsService,
+    RewardClaimExpirationService,
     ItemCurseRuntimeService,
     MerchantItemizedItemService,
     { provide: ItemService, useExisting: MerchantItemizedItemService },
@@ -39,6 +44,7 @@ import { ItemService } from './item.service.js';
     ItemEconomyGateway,
     CraftingGateway,
     MarketGateway,
+    RewardClaimsGateway,
   ],
   exports: [
     ItemService,
@@ -47,6 +53,7 @@ import { ItemService } from './item.service.js';
     CraftOrderService,
     CraftingService,
     MarketService,
+    RewardClaimsService,
     ItemizationCatalogService,
     ItemCurseRuntimeService,
   ],
