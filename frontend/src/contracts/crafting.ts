@@ -1,5 +1,5 @@
+import type { CharacterClass } from './game';
 import type {
-  CharacterClass,
   EquipmentSlot,
   ItemCategory,
   ItemRarity,
