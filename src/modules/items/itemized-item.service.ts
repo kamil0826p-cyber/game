@@ -131,6 +131,7 @@ export class ItemizedItemService extends CanonicalItemService {
         include: { itemDefinition: true, character: true },
       });
       if (!item) this.rejectItemizationItem({ reason: 'ITEM_UNAVAILABLE_OR_OFFERED' });
+      const resourceState = { hp: item.character.hp, energy: item.character.energy };
       const metadata = parseItemDefinitionMetadata(item.itemDefinition.metadata);
       if (metadata.category !== 'EQUIPMENT' || !metadata.equipmentSlot) {
         this.rejectItemizationItem();
@@ -172,7 +173,9 @@ export class ItemizedItemService extends CanonicalItemService {
         snapshot,
       );
 
-      await this.characterProgression.recomputeInTransaction(transaction, characterId);
+      await this.characterProgression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
       await transaction.inventoryItem.updateMany({
         where: {
           characterId,
@@ -199,7 +202,15 @@ export class ItemizedItemService extends CanonicalItemService {
           metadata: { bindPolicy: snapshot.bindPolicy, tradePolicy: snapshot.tradePolicy },
         });
       }
-      await this.characterProgression.recomputeInTransaction(transaction, characterId);
+      await this.characterProgression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
+      await this.restoreAbsoluteResources(
+        transaction,
+        characterId,
+        resourceState.hp,
+        resourceState.energy,
+      );
     });
     return this.getInventory(userId, characterId);
   }
@@ -209,9 +220,36 @@ export class ItemizedItemService extends CanonicalItemService {
     characterId: string,
     itemId: string,
   ): Promise<InventorySnapshot> {
-    await this.catalog.ensure();
-    const snapshot = await super.unequip(userId, characterId, itemId);
-    return this.enrichInventory(userId, characterId, snapshot);
+    await this.itemizationDatabase.$transaction(async (transaction) => {
+      const item = await transaction.inventoryItem.findFirst({
+        where: {
+          id: itemId,
+          characterId,
+          character: { userId },
+          tradeOfferItems: { none: {} },
+        },
+        include: { character: true },
+      });
+      if (!item) this.rejectItemizationItem({ reason: 'ITEM_UNAVAILABLE_OR_OFFERED' });
+      const resourceState = { hp: item.character.hp, energy: item.character.energy };
+      await this.characterProgression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
+      await transaction.inventoryItem.update({
+        where: { id: item.id },
+        data: { equippedSlot: null },
+      });
+      await this.characterProgression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
+      await this.restoreAbsoluteResources(
+        transaction,
+        characterId,
+        resourceState.hp,
+        resourceState.energy,
+      );
+    });
+    return this.getInventory(userId, characterId);
   }
 
   override async use(
@@ -296,6 +334,30 @@ export class ItemizedItemService extends CanonicalItemService {
         };
       }),
     };
+  }
+
+  private async restoreAbsoluteResources(
+    transaction: Prisma.TransactionClient,
+    characterId: string,
+    hp: number,
+    energy: number,
+  ): Promise<void> {
+    const character = await transaction.character.findUniqueOrThrow({
+      where: { id: characterId },
+      select: { hp: true, maxHp: true, energy: true, maxEnergy: true },
+    });
+    const nextHp = Math.min(character.maxHp, Math.max(0, hp));
+    const nextEnergy = Math.min(character.maxEnergy, Math.max(0, energy));
+    if (character.hp === nextHp && character.energy === nextEnergy) return;
+    await transaction.character.update({
+      where: { id: characterId },
+      data: {
+        hp: nextHp,
+        energy: nextEnergy,
+        stateVersion: { increment: 1 },
+        lastSavedAt: new Date(),
+      },
+    });
   }
 
   private async assertRelicLimit(
