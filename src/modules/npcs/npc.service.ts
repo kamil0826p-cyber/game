@@ -11,6 +11,14 @@ import { localizeDialogueText, parseNpcDialogueDefinition, type NpcDialogueDefin
 interface NpcDialogue { type?: unknown; }
 interface NpcInteractionPosition { characterId?: string; userId?: string; mapId: string; x: number; y: number; }
 export type NpcDialogueResult = NpcDialogueChoiceResult & { questUpdate?: QuestMutationResult };
+type CraftingDialogueResult = {
+  type: 'ACTION';
+  action: {
+    type: 'OPEN_CRAFTING';
+    npcId: string;
+    workstationKey: string;
+  };
+};
 const tileKey = (x: number, y: number): string => `${x},${y}`;
 
 @Injectable()
@@ -22,6 +30,22 @@ export class NpcService {
   async getOccupiedTiles(mapId: string): Promise<ReadonlySet<string>> { let loading = this.occupiedTileCache.get(mapId); if (!loading) { loading = this.getMapNpcs(mapId).then((npcs) => new Set(npcs.map((npc) => tileKey(npc.x, npc.y)))); this.occupiedTileCache.set(mapId, loading); } return loading; }
   async isTileOccupied(mapId: string, x: number, y: number): Promise<boolean> { return (await this.getOccupiedTiles(mapId)).has(tileKey(x, y)); }
   clearMapCache(mapId?: string): void { if (mapId) { this.mapNpcCache.delete(mapId); this.occupiedTileCache.delete(mapId); return; } this.mapNpcCache.clear(); this.occupiedTileCache.clear(); }
+
+  async getNpcIdentity(npcId: string): Promise<{ id: string; key: string; name: string }> {
+    const npc = await this.prisma.npcDefinition.findUnique({
+      where: { id: npcId },
+      select: { id: true, key: true, name: true },
+    });
+    if (!npc) throw new GameError(GAME_ERROR_CODES.NPC_NOT_AVAILABLE, 'errors.npcs.notAvailable');
+    return npc;
+  }
+
+  async assertInteractionAvailable(
+    npcId: string,
+    position: NpcInteractionPosition,
+  ): Promise<void> {
+    await this.requireAvailableNpc(npcId, position);
+  }
 
   async startDialogue(npcId: string, position: NpcInteractionPosition, locale: SupportedLocale): Promise<NpcDialogueSnapshot> {
     const { npc, dialogue } = await this.requireAvailableNpc(npcId, position);
@@ -51,6 +75,14 @@ export class NpcService {
       const questUpdate = choice.questAction.type === 'ACCEPT' ? await this.quests.accept(session, choice.questAction.questKey) : await this.quests.turnIn(session, choice.questAction.questKey, locale);
       const targetNodeId = questUpdate.completed ? choice.questAction.successNodeId : choice.questAction.type === 'TURN_IN' ? choice.questAction.incompleteNodeId ?? choice.questAction.successNodeId : choice.questAction.successNodeId;
       return { type: 'NODE', dialogue: this.toDialogueSnapshot(npc, dialogue, targetNodeId, locale), questUpdate };
+    }
+    if (choice.action === 'OPEN_CRAFTING') {
+      const workstationKey = dialogue.crafting?.workstationKey;
+      if (!workstationKey) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_STATE_INVALID, 'errors.npcs.dialogueStateInvalid');
+      return {
+        type: 'ACTION',
+        action: { type: 'OPEN_CRAFTING', npcId: npc.id, workstationKey },
+      } as unknown as NpcDialogueResult & CraftingDialogueResult;
     }
     return { type: 'ACTION', action: { type: choice.action!, npcId: npc.id } };
   }
