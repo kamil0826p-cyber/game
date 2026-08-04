@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CharacterModule } from '../characters/character.module.js';
 import { MovementModule } from '../movement/movement.module.js';
 import { WorldModule } from '../world/world.module.js';
+import { ItemCurseRuntimeService } from './item-curse-runtime.service.js';
 import { ItemEconomyGateway } from './item-economy.gateway.js';
 import { ItemEconomyService } from './item-economy.service.js';
 import { ItemGateway } from './item.gateway.js';
@@ -16,6 +17,7 @@ import { ItemService } from './item.service.js';
     ItemizationCatalogService,
     ItemInventoryService,
     ItemEconomyService,
+    ItemCurseRuntimeService,
     MerchantItemizedItemService,
     { provide: ItemService, useExisting: MerchantItemizedItemService },
     ItemGateway,
@@ -26,6 +28,7 @@ import { ItemService } from './item.service.js';
     ItemInventoryService,
     ItemEconomyService,
     ItemizationCatalogService,
+    ItemCurseRuntimeService,
   ],
 })
 export class ItemModule {}
