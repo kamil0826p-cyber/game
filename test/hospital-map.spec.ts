@@ -99,10 +99,10 @@ describe('dark hospital map', () => {
     expect(tileLayer(map, 'Ground').data.every((gid) => gid !== 0)).toBe(true);
   });
 
-  it('keeps the defeat spawn walkable and connected to the Greenfields portal', async () => {
+  it('respawns the player in the center and keeps the portal reachable', async () => {
     const map = await resolveTilesets(await readJson(backendPath), backendPath);
     const collision = compileCollisionGrid(map);
-    const spawn = { x: 12, y: 15 };
+    const spawn = { x: 12, y: 9 };
     const [portal] = extractEmbeddedPortals(map);
     expect(portal).toEqual({
       sourceX: 12,
@@ -121,17 +121,16 @@ describe('dark hospital map', () => {
     ).toBe(true);
   });
 
-  it('uses a deliberate two-ward layout without ambiguous bedside clutter', async () => {
+  it('uses the new bed tileset and denser, readable furnishing layout', async () => {
     const map = await resolveTilesets(await readJson(backendPath), backendPath);
-    const ground = tileLayer(map, 'Ground');
     const furniture = tileLayer(map, 'Beds and Furniture');
     const tall = tileLayer(map, 'Tall Props and Door');
 
     const expectedBeds = [
       { x: 4, top: 4 },
-      { x: 19, top: 4 },
+      { x: 18, top: 4 },
       { x: 4, top: 10 },
-      { x: 19, top: 10 },
+      { x: 18, top: 10 },
     ];
     for (const bed of expectedBeds) {
       expect([
@@ -142,38 +141,63 @@ describe('dark hospital map', () => {
     }
     expect(furniture.data.filter((gid) => gid >= 11 && gid <= 16)).toHaveLength(12);
 
-    const intentionallyUnusedProps = new Set([17, 19, 20, 21, 23]);
-    expect(
-      [...furniture.data, ...tall.data].filter((gid) => intentionallyUnusedProps.has(gid)),
-    ).toHaveLength(0);
-
-    expect(tall.data.filter((gid) => gid === 18)).toHaveLength(2);
-    expect(gidAt(tall, 11, 2)).toBe(18);
-    expect(gidAt(tall, 12, 2)).toBe(18);
-
-    const braziers = [
-      { x: 2, y: 2 },
-      { x: 21, y: 2 },
-      { x: 2, y: 14 },
-      { x: 21, y: 14 },
+    const bedsideCabinets = [
+      [6, 5],
+      [6, 11],
+      [16, 5],
+      [16, 11],
+      [3, 5],
+      [3, 11],
+      [19, 5],
+      [19, 11],
     ];
-    expect(furniture.data.filter((gid) => gid === 22)).toHaveLength(braziers.length);
-    for (const position of braziers) {
-      expect(gidAt(furniture, position.x, position.y)).toBe(22);
-    }
+    for (const [x, y] of bedsideCabinets) expect(gidAt(furniture, x!, y!)).toBe(17);
 
+    expect([gidAt(tall, 11, 2), gidAt(tall, 12, 2)]).toEqual([18, 18]);
     expect([
-      gidAt(furniture, 2, 15),
-      gidAt(furniture, 3, 15),
-      gidAt(furniture, 4, 15),
-      gidAt(furniture, 19, 15),
-      gidAt(furniture, 20, 15),
-      gidAt(furniture, 21, 15),
-    ]).toEqual([24, 24, 25, 25, 24, 24]);
+      gidAt(tall, 10, 2),
+      gidAt(tall, 13, 2),
+      gidAt(tall, 8, 2),
+      gidAt(tall, 15, 2),
+    ]).toEqual([26, 26, 26, 26]);
+    expect([gidAt(furniture, 9, 2), gidAt(furniture, 14, 2)]).toEqual([27, 27]);
+    expect([
+      gidAt(furniture, 2, 7),
+      gidAt(furniture, 2, 9),
+      gidAt(furniture, 21, 7),
+      gidAt(furniture, 21, 9),
+    ]).toEqual([28, 28, 28, 28]);
+  });
 
-    expect(ground.data.filter((gid) => gid === 5)).toHaveLength(1);
-    expect(gidAt(ground, 12, 8)).toBe(5);
-    expect(new Set(ground.data)).toEqual(new Set([1, 2, 5]));
+  it('does not block empty central walkways or bedside aisles', async () => {
+    const map = await resolveTilesets(await readJson(backendPath), backendPath);
+    const collision = compileCollisionGrid(map);
+    const walkable = [
+      [12, 9],
+      [12, 8],
+      [12, 10],
+      [11, 9],
+      [13, 9],
+      [12, 15],
+      [12, 16],
+      [11, 16],
+      [13, 16],
+      [5, 5],
+      [17, 5],
+      [5, 11],
+      [17, 11],
+      [7, 5],
+      [15, 5],
+      [7, 11],
+      [15, 11],
+      [10, 9],
+      [14, 9],
+      [9, 8],
+      [15, 8],
+    ];
+    for (const [x, y] of walkable) {
+      expect(collision[y! * map.width + x!], `expected walkable at ${x},${y}`).toBe(0);
+    }
   });
 
   it('blocks the perimeter outside the portal', async () => {
