@@ -3,6 +3,7 @@ import { CharacterModule } from '../characters/character.module.js';
 import { MovementModule } from '../movement/movement.module.js';
 import { NpcModule } from '../npcs/npc.module.js';
 import { WorldModule } from '../world/world.module.js';
+import { CraftOrderService } from './craft-order.service.js';
 import { CraftingGateway } from './crafting.gateway.js';
 import { CraftingService } from './crafting.service.js';
 import { ItemCurseRuntimeService } from './item-curse-runtime.service.js';
@@ -20,6 +21,7 @@ import { ItemService } from './item.service.js';
     ItemizationCatalogService,
     ItemInventoryService,
     ItemEconomyService,
+    CraftOrderService,
     CraftingService,
     ItemCurseRuntimeService,
     MerchantItemizedItemService,
@@ -32,6 +34,7 @@ import { ItemService } from './item.service.js';
     ItemService,
     ItemInventoryService,
     ItemEconomyService,
+    CraftOrderService,
     CraftingService,
     ItemizationCatalogService,
     ItemCurseRuntimeService,
