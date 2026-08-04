@@ -17,6 +17,7 @@ import { installItemizationSocketBridge } from './itemizationSocketBridge';
 import { installMarketSocketBridge } from './marketSocketBridge';
 import { installMobSocketBridge } from './mobSocketBridge';
 import { installCharacterProgressionSocketBridge } from './progressionSocketBridge';
+import { installRewardClaimsSocketBridge } from './rewardClaimsSocketBridge';
 
 const GameConnectionContext = createContext<GameSocketClient | undefined>(undefined);
 interface GameConnectionProviderProps extends PropsWithChildren { user: User; }
@@ -34,6 +35,7 @@ export function GameConnectionProvider({ user, children }: GameConnectionProvide
     installItemizationSocketBridge(clientRef.current);
     installCraftingSocketBridge(clientRef.current);
     installMarketSocketBridge(clientRef.current);
+    installRewardClaimsSocketBridge(clientRef.current);
   }
   useEffect(() => {
     const client = clientRef.current!;

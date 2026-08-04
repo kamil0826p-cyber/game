@@ -16,61 +16,95 @@ import { LocalizationService } from '../../i18n/localization.service.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
-import { ItemEconomyService } from './item-economy.service.js';
+import type {
+  RewardClaimMutationResult,
+  RewardClaimsSnapshot,
+} from './reward-claims.contracts.js';
+import { RewardClaimsService } from './reward-claims.service.js';
 
 const requestId = z.string().trim().min(1).max(96);
-const characterOperation = z.object({ requestId }).strict();
-const salvageSchema = z
-  .object({ requestId, itemId: z.string().uuid() })
+const claimsRequestSchema = z.object({ requestId }).strict();
+const claimOneSchema = z
+  .object({ requestId, claimId: z.string().uuid() })
   .strict();
 
+type ClaimsRequestPayload = z.infer<typeof claimsRequestSchema>;
+
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
-export class ItemEconomyGateway {
-  private readonly logger = new Logger(ItemEconomyGateway.name);
+export class RewardClaimsGateway {
+  private readonly logger = new Logger(RewardClaimsGateway.name);
 
   constructor(
-    private readonly economy: ItemEconomyService,
+    private readonly claims: RewardClaimsService,
     private readonly worldState: WorldStateService,
     private readonly movementCoordinator: MovementCoordinatorService,
     private readonly localization: LocalizationService,
   ) {}
 
-  @SubscribeMessage('itemization:get')
+  @SubscribeMessage('claims:get')
   get(
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, characterOperation, raw, (session) =>
-      this.economy.snapshot(session.userId, session.characterId),
+  ): Promise<SocketAck<RewardClaimsSnapshot>> {
+    return this.handle(client, claimsRequestSchema, raw, (session) =>
+      this.claims.getSnapshot(session.userId, session.characterId),
     );
   }
 
-  @SubscribeMessage('itemization:salvage')
-  salvage(
+  @SubscribeMessage('claims:claim')
+  claim(
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
-  ): Promise<SocketAck<unknown>> {
-    return this.handle(client, salvageSchema, raw, (session, payload) =>
-      this.economy.salvage(
-        session.userId,
-        session.characterId,
-        payload.itemId,
-        payload.requestId,
-      ),
+  ): Promise<SocketAck<RewardClaimMutationResult>> {
+    return this.handle(
+      client,
+      claimOneSchema,
+      raw,
+      (session, payload) =>
+        this.claims.claimOne(
+          session.userId,
+          session.characterId,
+          payload.claimId,
+          payload.requestId,
+        ),
+      true,
     );
   }
 
-  private async handle<TPayload, TResult>(
+  @SubscribeMessage('claims:claimAll')
+  claimAll(
+    @ConnectedSocket() client: GameSocket,
+    @MessageBody() raw: unknown,
+  ): Promise<SocketAck<RewardClaimMutationResult>> {
+    return this.handle(
+      client,
+      claimsRequestSchema,
+      raw,
+      (session, payload) =>
+        this.claims.claimAll(
+          session.userId,
+          session.characterId,
+          payload.requestId,
+        ),
+      true,
+    );
+  }
+
+  private async handle<TPayload extends ClaimsRequestPayload, TResult>(
     client: GameSocket,
     schema: ZodType<TPayload>,
     raw: unknown,
     operation: (session: PlayerSession, payload: TPayload) => Promise<TResult>,
+    requiresIdle = false,
   ): Promise<SocketAck<TResult>> {
     try {
       const payload = schema.parse(raw);
       const session = this.worldState.getBySocketId(client.id);
       if (!session || !session.activeInWorld || client.data.sessionState !== 'IN_WORLD') {
         throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
+      }
+      if (requiresIdle && session.combatState !== 'IDLE') {
+        throw new GameError(GAME_ERROR_CODES.COMBAT_FORBIDDEN, 'errors.combat.forbidden');
       }
       const data = await this.movementCoordinator.runSerialized(session, () =>
         operation(session, payload),
@@ -97,28 +131,13 @@ export class ItemEconomyGateway {
         details: { issues: error.issues },
       };
     }
-    if (this.isUniqueOperationError(error)) {
-      return {
-        code: GAME_ERROR_CODES.INVALID_PAYLOAD,
-        message: this.localization.translate('errors.payload.invalid', locale),
-      };
-    }
     this.logger.error(
-      'Unhandled item economy gateway error.',
+      'Unhandled reward claims gateway error.',
       error instanceof Error ? error.stack : undefined,
     );
     return {
       code: GAME_ERROR_CODES.INTERNAL_ERROR,
       message: this.localization.translate('errors.internal', locale),
     };
-  }
-
-  private isUniqueOperationError(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'P2002'
-    );
   }
 }

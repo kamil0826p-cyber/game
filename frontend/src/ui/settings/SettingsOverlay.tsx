@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CLOSE_GUILD_WINDOW_EVENT } from '../../game/guilds/guildUiEvents';
+import { CLOSE_REWARD_CLAIMS_WINDOW_EVENT } from '../../game/rewards/rewardClaimsUiEvents';
 import { gameStore, type ModalKey } from '../../game/state/gameStore';
 import { SettingsModal } from './SettingsModal';
 import {
@@ -24,6 +25,7 @@ export function SettingsOverlay(): React.JSX.Element | null {
     const activeModal = gameStore.getSnapshot().activeModal;
     if (blockedModal(activeModal)) return;
     window.dispatchEvent(new Event(CLOSE_GUILD_WINDOW_EVENT));
+    window.dispatchEvent(new Event(CLOSE_REWARD_CLAIMS_WINDOW_EVENT));
     if (activeModal) {
       gameStore.setActiveModal(null);
       setOpen(true);
