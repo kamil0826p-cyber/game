@@ -41,7 +41,9 @@ export class CanonicalItemService extends ItemService {
         this.rejectInvalidItem();
       }
 
-      await this.progression.recomputeInTransaction(transaction, characterId);
+      await this.progression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
       await transaction.inventoryItem.updateMany({
         where: {
           characterId,
@@ -54,7 +56,9 @@ export class CanonicalItemService extends ItemService {
         where: { id: item.id },
         data: { equippedSlot: metadata.equipmentSlot },
       });
-      await this.progression.recomputeInTransaction(transaction, characterId);
+      await this.progression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
     });
     return this.getInventory(userId, characterId);
   }
@@ -66,12 +70,16 @@ export class CanonicalItemService extends ItemService {
   ): Promise<InventorySnapshot> {
     await this.database.$transaction(async (transaction) => {
       const item = await this.requireEquipment(transaction, userId, characterId, itemId);
-      await this.progression.recomputeInTransaction(transaction, characterId);
+      await this.progression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
       await transaction.inventoryItem.update({
         where: { id: item.id },
         data: { equippedSlot: null },
       });
-      await this.progression.recomputeInTransaction(transaction, characterId);
+      await this.progression.recomputeInTransaction(transaction, characterId, {
+        preserveAbsoluteResources: true,
+      });
     });
     return this.getInventory(userId, characterId);
   }
