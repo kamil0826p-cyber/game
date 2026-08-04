@@ -56,13 +56,18 @@ export class RewardClaimsGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<RewardClaimMutationResult>> {
-    return this.handle(client, claimOneSchema, raw, (session, payload) =>
-      this.claims.claimOne(
-        session.userId,
-        session.characterId,
-        payload.claimId,
-        payload.requestId,
-      ),
+    return this.handle(
+      client,
+      claimOneSchema,
+      raw,
+      (session, payload) =>
+        this.claims.claimOne(
+          session.userId,
+          session.characterId,
+          payload.claimId,
+          payload.requestId,
+        ),
+      true,
     );
   }
 
@@ -71,12 +76,17 @@ export class RewardClaimsGateway {
     @ConnectedSocket() client: GameSocket,
     @MessageBody() raw: unknown,
   ): Promise<SocketAck<RewardClaimMutationResult>> {
-    return this.handle(client, claimsRequestSchema, raw, (session, payload) =>
-      this.claims.claimAll(
-        session.userId,
-        session.characterId,
-        payload.requestId,
-      ),
+    return this.handle(
+      client,
+      claimsRequestSchema,
+      raw,
+      (session, payload) =>
+        this.claims.claimAll(
+          session.userId,
+          session.characterId,
+          payload.requestId,
+        ),
+      true,
     );
   }
 
@@ -85,6 +95,7 @@ export class RewardClaimsGateway {
     schema: ZodType<TPayload>,
     raw: unknown,
     operation: (session: PlayerSession, payload: TPayload) => Promise<TResult>,
+    requiresIdle = false,
   ): Promise<SocketAck<TResult>> {
     try {
       const payload = schema.parse(raw);
@@ -92,7 +103,7 @@ export class RewardClaimsGateway {
       if (!session || !session.activeInWorld || client.data.sessionState !== 'IN_WORLD') {
         throw new GameError(GAME_ERROR_CODES.SESSION_NOT_READY, 'errors.session.notReady');
       }
-      if (session.combatState !== 'IDLE') {
+      if (requiresIdle && session.combatState !== 'IDLE') {
         throw new GameError(GAME_ERROR_CODES.COMBAT_FORBIDDEN, 'errors.combat.forbidden');
       }
       const data = await this.movementCoordinator.runSerialized(session, () =>
