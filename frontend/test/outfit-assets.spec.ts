@@ -6,7 +6,7 @@ import { OUTFIT_CATALOG, outfitImageCandidates, outfitImageUrl } from '../src/mo
 describe('canonical outfit assets', () => {
   const outfits = Object.values(OUTFIT_CATALOG).flat();
 
-  it('uses one exact asset path for every class and level outfit', () => {
+  it('uses one exact existing asset path for every class and level outfit', () => {
     expect(outfits).toHaveLength(33);
 
     const paths = outfits.map((outfit) => outfitImageUrl(outfit.key));
@@ -14,16 +14,15 @@ describe('canonical outfit assets', () => {
 
     for (const outfit of outfits) {
       expect(outfitImageCandidates(outfit.key)).toEqual([outfitImageUrl(outfit.key)]);
-      expect(existsSync(resolve('public/assets/sprites', `${outfit.key}.png`))).toBe(true);
+      expect(existsSync(resolve('public/assets/sprites/male', `${outfit.key}.png`))).toBe(true);
     }
   });
 
-  it('does not resolve gender palettes or copied outfit variants', () => {
+  it('does not choose a sprite from character gender', () => {
     for (const outfit of outfits) {
       const candidates = outfitImageCandidates(outfit.key);
       expect(candidates).toHaveLength(1);
-      expect(candidates[0]).toContain(`/assets/sprites/${outfit.key}.png`);
-      expect(candidates[0]).not.toContain('/sprites/male/');
+      expect(candidates[0]).toContain(`/assets/sprites/male/${outfit.key}.png`);
       expect(candidates[0]).not.toContain('/sprites/female/');
     }
   });
