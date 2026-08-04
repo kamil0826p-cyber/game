@@ -194,12 +194,12 @@ export const ITEM_RELICS: Readonly<Record<string, ItemRelicEffectDefinition>> = 
     key: 'ashen-lens-v1',
     name: 'Soczewka Popielnego Widzenia',
     description:
-      'Arcane Spark może wybrać cel w tylnej linii, lecz jego współczynnik obrażeń spada do 82%.',
+      'Arcane Spark rozszczepia się i trafia wszystkich żywych przeciwników, lecz każdy pocisk zadaje 82% normalnych obrażeń.',
     skillKey: 'mage-arcane-spark',
     modifier: {
       version: 1,
       type: 'SET_TARGETING',
-      targeting: 'BACK_ROW',
+      targeting: 'ALL_ENEMIES',
       coefficientMultiplier: 0.82,
     },
     powerCost: 4,
@@ -208,8 +208,7 @@ export const ITEM_RELICS: Readonly<Record<string, ItemRelicEffectDefinition>> = 
   'executioners-hook-v1': {
     key: 'executioners-hook-v1',
     name: 'Hak Egzekutora',
-    description:
-      'Execution kosztuje o 5 energii mniej, ale przedmiot pozostaje związany po założeniu.',
+    description: 'Execution kosztuje o 5 energii mniej, ale nie może kosztować mniej niż 10.',
     skillKey: 'warrior-execution',
     modifier: { version: 1, type: 'ADJUST_ENERGY_COST', flatDelta: -5, minimum: 10 },
     powerCost: 3,
@@ -230,7 +229,7 @@ export const ITEM_CURSES: Readonly<Record<string, ItemCurseDefinition>> = {
     key: 'starved-veins-v1',
     name: 'Klątwa Głodnych Żył',
     description: 'Przedmiot ogranicza działanie leczenia otrzymywanego w walce.',
-    preview: 'Po założeniu otrzymywane leczenie jest mnożone przez 0.8.',
+    preview: 'Po założeniu otrzymywane leczenie w walce jest zmniejszone o 20%.',
     cost: { type: 'HEALING_RECEIVED_MULTIPLIER', multiplier: 0.8 },
     powerCredit: 3,
   },
@@ -265,6 +264,21 @@ export const ITEM_SALVAGE_PROFILES: Readonly<Record<string, ItemSalvageProfile>>
       chance: 0.15,
       pityKey: 'salvage:ashen-focus:rabbit-foot:v1',
       guaranteedAfterMisses: 5,
+    },
+  },
+  'executioners-hookblade-v1': {
+    key: 'executioners-hookblade-v1',
+    version: 1,
+    deterministic: [
+      { itemKey: 'scorpion-chitin', quantity: 4 },
+      { itemKey: 'scorpion-stinger', quantity: 2 },
+      { itemKey: 'venom-sac', quantity: 1 },
+    ],
+    rare: {
+      itemKey: 'rabbit-foot',
+      chance: 0.2,
+      pityKey: 'salvage:executioners-hookblade:rabbit-foot:v1',
+      guaranteedAfterMisses: 4,
     },
   },
 };
@@ -304,5 +318,23 @@ export const ITEM_RECIPES: Readonly<Record<string, ItemRecipeDefinition>> = {
     regionKey: 'greenfields',
     specializationCost: 2,
     deterministicSeedSalt: 'recipe:ashen-reliquary-focus:v1',
+  },
+  'executioners-hookblade-v1': {
+    key: 'executioners-hookblade-v1',
+    version: 1,
+    name: 'Hakowe ostrze Egzekutora',
+    outputItemKey: 'executioners-hookblade',
+    outputQuantity: 1,
+    silverCost: 900,
+    inputs: [
+      { itemKey: 'scorpion-stinger', quantity: 6 },
+      { itemKey: 'venom-sac', quantity: 4 },
+      { itemKey: 'rabbit-foot', quantity: 2 },
+    ],
+    requiredLevel: 40,
+    workstationKey: 'quartermaster-forge',
+    regionKey: 'greenfields',
+    specializationCost: 3,
+    deterministicSeedSalt: 'recipe:executioners-hookblade:v1',
   },
 };

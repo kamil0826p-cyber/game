@@ -68,9 +68,12 @@ describe('itemization rules', () => {
     expect(first.affixes).toHaveLength(2);
     expect(new Set(first.affixes.map((affix) => affix.kind)).size).toBe(2);
     expect(first.powerSpent).toBeLessThanOrEqual(first.powerBudget);
-    expect(first.affixes.every((affix) =>
-      affix.roll >= affix.minimumRoll && affix.roll <= affix.maximumRoll,
-    )).toBe(true);
+    expect(
+      first.affixes.every(
+        (affix) =>
+          affix.roll >= affix.minimumRoll && affix.roll <= affix.maximumRoll,
+      ),
+    ).toBe(true);
   });
 
   it('rejects a tampered snapshot that exceeds its power budget', () => {
@@ -90,7 +93,7 @@ describe('itemization rules', () => {
     ).toThrow('ITEM_POWER_BUDGET_EXCEEDED');
   });
 
-  it('changes a real skill targeting rule through an equipped relic', () => {
+  it('turns Arcane Spark into a reduced-coefficient all-enemy attack through a relic', () => {
     const snapshot = createItemInstanceSnapshot({
       definitionKey: 'ashen-reliquary-focus',
       metadata: mageFocus,
@@ -138,7 +141,7 @@ describe('itemization rules', () => {
     };
 
     const modified = applyEquippedRelicsToLoadout(loadout, [snapshot]);
-    expect(modified.definitions[0]?.definition.targeting).toBe('BACK_ROW');
+    expect(modified.definitions[0]?.definition.targeting).toBe('ALL_ENEMIES');
     expect(
       modified.definitions[0]?.definition.effects[0]?.type === 'DAMAGE'
         ? modified.definitions[0].definition.effects[0].coefficient
