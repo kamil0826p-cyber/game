@@ -24,6 +24,13 @@ export const MARKET_COMMISSION_RATE = 0.05;
 export const MARKET_MIN_PRICE_SILVER = 1;
 export const MARKET_MAX_PRICE_SILVER = 2_147_483_647;
 
+export const marketListingFee = (priceSilver: number): number =>
+  Math.max(1, Math.floor(priceSilver * MARKET_LISTING_FEE_RATE));
+export const marketCommission = (priceSilver: number): number =>
+  Math.min(priceSilver, Math.max(1, Math.floor(priceSilver * MARKET_COMMISSION_RATE)));
+export const marketUnitPrice = (priceSilver: number, quantity: number): number =>
+  Math.floor(priceSilver / quantity);
+
 interface MarketMutationContext {
   station: MarketStationSession;
   npcName: string;
@@ -44,6 +51,19 @@ type ListingRecord = {
   closedAt: Date | null;
 };
 
+type PurchaseValue = {
+  listingId: string;
+  sellerCharacterId: string;
+  itemDefinitionId: string;
+  quantity: number;
+  priceSilver: number;
+  delivery: 'INVENTORY' | 'CLAIMS';
+};
+
+type PurchaseResolution =
+  | { type: 'PURCHASED'; value: PurchaseValue }
+  | { type: 'EXPIRED'; listingId: string };
+
 @Injectable()
 export class MarketService {
   constructor(
@@ -57,7 +77,6 @@ export class MarketService {
     station: MarketStationSession,
     npcName: string,
   ): Promise<MarketSnapshot> {
-    await this.expireListings(100);
     const character = await this.requireOwnedCharacter(userId, characterId);
     const realmCharacters = await this.prisma.character.findMany({
       where: { realmId: character.realmId },
@@ -108,8 +127,7 @@ export class MarketService {
       where: { id: { in: definitionIds } },
     });
     const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
-    const definitionKeys = definitions.map((definition) => definition.key);
-    const medians = await this.marketMedians(definitionKeys);
+    const medians = await this.marketMedians(definitions.map((definition) => definition.key));
 
     const toPayload = (listing: ListingRecord): MarketListingPayload => {
       const definition = definitionsById.get(listing.itemDefinitionId);
@@ -120,7 +138,7 @@ export class MarketService {
         definitionKey: definition.key,
         metadata,
       });
-      const commission = this.commission(listing.priceSilver);
+      const commission = marketCommission(listing.priceSilver);
       return {
         id: listing.id,
         seller: {
@@ -136,7 +154,7 @@ export class MarketService {
         item: this.itemPayload(definition, metadata, snapshot),
         quantity: listing.quantity,
         totalPriceSilver: listing.priceSilver,
-        unitPriceSilver: Math.ceil(listing.priceSilver / listing.quantity),
+        unitPriceSilver: marketUnitPrice(listing.priceSilver, listing.quantity),
         listingFeeSilver: listing.listingFeeSilver,
         commissionSilver: commission,
         sellerRevenueSilver: listing.priceSilver - commission,
@@ -164,7 +182,13 @@ export class MarketService {
         definitionKey: item.itemDefinition.key,
         metadata,
       });
-      if (snapshot.tradePolicy !== 'TRADEABLE' || snapshot.boundCharacterId) return [];
+      if (
+        metadata.category === 'QUEST' ||
+        snapshot.tradePolicy !== 'TRADEABLE' ||
+        snapshot.boundCharacterId
+      ) {
+        return [];
+      }
       return [
         {
           inventoryItemId: item.id,
@@ -256,10 +280,14 @@ export class MarketService {
         definitionKey: item.itemDefinition.key,
         metadata,
       });
-      if (snapshot.tradePolicy !== 'TRADEABLE' || snapshot.boundCharacterId) {
+      if (
+        metadata.category === 'QUEST' ||
+        snapshot.tradePolicy !== 'TRADEABLE' ||
+        snapshot.boundCharacterId
+      ) {
         this.invalid({ itemId, reason: 'ITEM_NOT_TRADEABLE' });
       }
-      const listingFee = this.listingFee(priceSilver);
+      const listingFee = marketListingFee(priceSilver);
       const nextSilver = this.debitSilver(character.silver, listingFee);
       await transaction.character.update({
         where: { id: characterId },
@@ -329,7 +357,7 @@ export class MarketService {
     operationId: string,
   ): Promise<MarketMutationResult> {
     const normalizedOperationId = this.operationId(operationId);
-    const purchase = await this.prisma.$transaction(async (transaction) => {
+    const resolution = await this.prisma.$transaction<PurchaseResolution>(async (transaction) => {
       await this.lockOperation(transaction, `market:${listingId}`);
       let listing = await transaction.itemMarketListing.findUnique({ where: { id: listingId } });
       if (!listing) this.invalid({ listingId });
@@ -350,23 +378,29 @@ export class MarketService {
           this.invalid({ reason: 'OPERATION_ID_REUSED' });
         }
         return {
-          listingId,
-          sellerCharacterId: listing.sellerCharacterId,
-          itemDefinitionId: listing.itemDefinitionId,
-          quantity: listing.quantity,
-          priceSilver: listing.priceSilver,
-          delivery: this.metadataString(repeated.metadata, 'delivery') === 'CLAIMS'
-            ? ('CLAIMS' as const)
-            : ('INVENTORY' as const),
+          type: 'PURCHASED',
+          value: {
+            listingId,
+            sellerCharacterId: listing.sellerCharacterId,
+            itemDefinitionId: listing.itemDefinitionId,
+            quantity: listing.quantity,
+            priceSilver: listing.priceSilver,
+            delivery:
+              this.metadataString(repeated.metadata, 'delivery') === 'CLAIMS'
+                ? 'CLAIMS'
+                : 'INVENTORY',
+          },
         };
       }
-      if (listing.status !== 'ACTIVE') this.invalid({ listingId, reason: 'MARKET_LISTING_CLOSED' });
+      if (listing.status !== 'ACTIVE') {
+        this.invalid({ listingId, reason: 'MARKET_LISTING_CLOSED' });
+      }
       if (listing.sellerCharacterId === buyerCharacterId) {
         this.invalid({ listingId, reason: 'MARKET_SELF_TRADE' });
       }
       if (listing.expiresAt.getTime() <= Date.now()) {
         await this.returnListing(transaction, listing as ListingRecord, 'EXPIRED');
-        this.invalid({ listingId, reason: 'MARKET_LISTING_EXPIRED_RETURNED' });
+        return { type: 'EXPIRED', listingId };
       }
       const seller = await transaction.character.findUnique({
         where: { id: listing.sellerCharacterId },
@@ -385,7 +419,7 @@ export class MarketService {
         metadata,
       });
       const buyerSilver = this.debitSilver(buyer.silver, listing.priceSilver);
-      const commission = this.commission(listing.priceSilver);
+      const commission = marketCommission(listing.priceSilver);
       const sellerRevenue = listing.priceSilver - commission;
       const sellerSilver = seller.silver + sellerRevenue;
       await transaction.character.update({
@@ -409,7 +443,7 @@ export class MarketService {
         operationId: `market-delivery:${listing.id}`,
         reason: `MARKET:${listing.id}`,
       });
-      const delivery = grant.claimedQuantity > 0 ? ('CLAIMS' as const) : ('INVENTORY' as const);
+      const delivery = grant.claimedQuantity > 0 ? 'CLAIMS' : 'INVENTORY';
       await transaction.characterCurrencyLedger.create({
         data: {
           characterId: buyerCharacterId,
@@ -442,7 +476,7 @@ export class MarketService {
         data: {
           listingId: listing.id,
           itemDefinitionKey: definition.key,
-          unitPriceSilver: Math.ceil(listing.priceSilver / listing.quantity),
+          unitPriceSilver: marketUnitPrice(listing.priceSilver, listing.quantity),
           quantity: listing.quantity,
         },
       });
@@ -465,14 +499,24 @@ export class MarketService {
         metadata: { listingId, buyerCharacterId, commission },
       });
       return {
-        listingId,
-        sellerCharacterId: seller.id,
-        itemDefinitionId: definition.id,
-        quantity: listing.quantity,
-        priceSilver: listing.priceSilver,
-        delivery,
+        type: 'PURCHASED',
+        value: {
+          listingId,
+          sellerCharacterId: seller.id,
+          itemDefinitionId: definition.id,
+          quantity: listing.quantity,
+          priceSilver: listing.priceSilver,
+          delivery,
+        },
       };
     });
+    if (resolution.type === 'EXPIRED') {
+      this.invalid({
+        listingId: resolution.listingId,
+        reason: 'MARKET_LISTING_EXPIRED_RETURNED',
+      });
+    }
+    const purchase = resolution.value;
     const snapshot = await this.getSnapshot(
       userId,
       buyerCharacterId,
@@ -538,10 +582,13 @@ export class MarketService {
   }
 
   async expireListings(limit = 100): Promise<string[]> {
+    const boundedLimit = Number.isFinite(limit)
+      ? Math.max(1, Math.min(500, Math.trunc(limit)))
+      : 100;
     const listings = await this.prisma.itemMarketListing.findMany({
       where: { status: 'ACTIVE', expiresAt: { lte: new Date() } },
       orderBy: { expiresAt: 'asc' },
-      take: Math.max(1, Math.min(500, Math.trunc(limit))),
+      take: boundedLimit,
     });
     const sellerIds: string[] = [];
     for (const listing of listings) {
@@ -699,14 +746,6 @@ export class MarketService {
         .digest('hex'),
     });
     return next;
-  }
-
-  private listingFee(price: number): number {
-    return Math.max(1, Math.floor(price * MARKET_LISTING_FEE_RATE));
-  }
-
-  private commission(price: number): number {
-    return Math.min(price, Math.max(1, Math.floor(price * MARKET_COMMISSION_RATE)));
   }
 
   private quantity(value: number): void {
