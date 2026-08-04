@@ -58,7 +58,10 @@ export class ItemInventoryService {
 
     const items = await transaction.inventoryItem.findMany({
       where: { characterId: input.characterId },
-      include: { itemDefinition: true },
+      include: {
+        itemDefinition: true,
+        tradeOfferItems: { select: { id: true } },
+      },
       orderBy: { slotIndex: 'asc' },
     });
     const occupied = new Set(items.map((item) => item.slotIndex));
@@ -69,6 +72,7 @@ export class ItemInventoryService {
           remaining <= 0 ||
           stack.itemDefinitionId !== input.definition.id ||
           stack.equippedSlot ||
+          stack.tradeOfferItems.length > 0 ||
           stack.quantity >= input.definition.stackLimit
         ) {
           continue;
@@ -266,11 +270,10 @@ export class ItemInventoryService {
       throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
     }
     if (claim.expiresAt.getTime() <= Date.now()) {
-      await transaction.itemClaim.update({
-        where: { id: claim.id },
-        data: { status: 'EXPIRED' },
+      throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid', {
+        claimId: claim.id,
+        reason: 'REWARD_CLAIM_EXPIRED',
       });
-      throw new GameError(GAME_ERROR_CODES.INVALID_PAYLOAD, 'errors.payload.invalid');
     }
     const definition = await transaction.itemDefinition.findUniqueOrThrow({
       where: { id: claim.itemDefinitionId },
@@ -306,12 +309,12 @@ export class ItemInventoryService {
   }
 
   async listOpenClaims(characterId: string) {
-    await this.prisma.itemClaim.updateMany({
-      where: { characterId, status: 'OPEN', expiresAt: { lte: new Date() } },
-      data: { status: 'EXPIRED' },
-    });
     return this.prisma.itemClaim.findMany({
-      where: { characterId, status: 'OPEN' },
+      where: {
+        characterId,
+        status: 'OPEN',
+        expiresAt: { gt: new Date() },
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
