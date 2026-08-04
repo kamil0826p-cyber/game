@@ -5,10 +5,17 @@ import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import type { GameSocket, NpcDialogueChoiceResult, NpcDialogueSnapshot, SocketAck, SocketErrorPayload } from '../../contracts/socket.events.js';
 import { npcDialogueChoiceSchema, npcDialogueEndSchema, npcDialogueStartSchema } from '../../contracts/socket.schemas.js';
 import { LocalizationService } from '../../i18n/localization.service.js';
+import type { CraftingStationSession } from '../items/crafting.contracts.js';
 import { MovementCoordinatorService } from '../movement/movement-coordinator.service.js';
 import type { PlayerSession } from '../world/player-session.types.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { NpcService, type NpcDialogueResult } from './npc.service.js';
+
+interface DialogueActionPayload {
+  type: string;
+  npcId: string;
+  workstationKey?: string;
+}
 
 @WebSocketGateway({ namespace: '/game', transports: ['websocket'] })
 export class NpcGateway {
@@ -21,6 +28,7 @@ export class NpcGateway {
       const dialogue = await this.npcs.startDialogue(payload.npcId, session, client.data.locale ?? 'en');
       client.data.activeNpcDialogue = { npcId: payload.npcId, nodeId: dialogue.node.id };
       client.data.merchantNpcId = undefined;
+      client.data.craftingStation = undefined;
       return dialogue;
     });
   }
@@ -31,8 +39,17 @@ export class NpcGateway {
       const active = client.data.activeNpcDialogue;
       if (!active || active.npcId !== payload.npcId || active.nodeId !== payload.nodeId) throw new GameError(GAME_ERROR_CODES.NPC_DIALOGUE_STATE_INVALID, 'errors.npcs.dialogueStateInvalid');
       const result = await this.npcs.chooseDialogue(payload.npcId, payload.nodeId, payload.choiceId, session, client.data.locale ?? 'en');
-      if (result.type === 'NODE') client.data.activeNpcDialogue = { npcId: payload.npcId, nodeId: result.dialogue.node.id };
-      else { client.data.activeNpcDialogue = undefined; client.data.merchantNpcId = result.action.type === 'OPEN_MERCHANT' ? payload.npcId : undefined; }
+      if (result.type === 'NODE') {
+        client.data.activeNpcDialogue = { npcId: payload.npcId, nodeId: result.dialogue.node.id };
+      } else {
+        const action = result.action as DialogueActionPayload;
+        client.data.activeNpcDialogue = undefined;
+        client.data.merchantNpcId = action.type === 'OPEN_MERCHANT' ? payload.npcId : undefined;
+        client.data.craftingStation =
+          action.type === 'OPEN_CRAFTING' && action.workstationKey
+            ? ({ npcId: payload.npcId, workstationKey: action.workstationKey } satisfies CraftingStationSession)
+            : undefined;
+      }
       this.publishQuestReward(client, session, result);
       return result;
     });
