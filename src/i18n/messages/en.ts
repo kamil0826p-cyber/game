@@ -63,7 +63,7 @@ export const englishMessages = {
   'errors.group.inviteExpired': 'This group invitation has expired.',
   'errors.group.required': 'Your character does not belong to a group.',
   'errors.group.forbidden': 'Only the group administrator can perform this action.',
-  'errors.group.memberNotFound': 'That character is not a member of this group.',
+  'errors.group.memberNotFound': 'That character is not a member of your group.',
   'errors.group.adminCannotKickSelf': 'The group administrator cannot remove themselves. Leave the group instead.',
   'errors.trade.self': 'You cannot trade with yourself.',
   'errors.trade.busy': 'One of the players is already trading.',
