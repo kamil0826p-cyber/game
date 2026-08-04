@@ -2,40 +2,41 @@
 
 ## Scope
 
-- Added `MALE` and `FEMALE` as a persisted, server-authoritative character property.
-- Existing rows become `MALE` through a non-null database default in the migration.
-- Character creation sends name, class, gender, and starting outfit in one command, so no transient wrong appearance is stored.
-- Roster, selected character, public world state, previews, and Pixi character rendering carry gender.
-- Gender is visual only. It does not affect class templates, combat stats, loot, movement, or progression.
+- `MALE` and `FEMALE` remain persisted, server-authoritative character properties.
+- Existing rows continue to use the database default and all socket contracts remain compatible.
+- Gender does not change class templates, combat statistics, loot, movement, progression, or outfit artwork.
+- Character creation and roster views still display the stored gender, but they do not use it to select or recolor sprites.
 
-## Assets
+## Outfit rendering
 
-Every one of the 33 outfit keys has independent paths under:
-
-- `frontend/public/assets/sprites/male/`
-- `frontend/public/assets/sprites/female/`
-
-Both paths currently point to copies of the existing art. Legacy root files remain fallback candidates, which makes deployment tolerant of stale browser/CDN caches. World and lobby female art can be replaced per outfit without changing keys or resolver code. The combat-specific limitation is documented below.
+- The outfit key is now the only input used to resolve player artwork.
+- Every one of the 33 outfit keys resolves directly to its own PNG under `frontend/public/assets/sprites/`.
+- The character creator, character selection screen, HUD previews, combat previews, and Pixi world renderer share the same canonical resolver.
+- Gender-specific sprite folders, palette variants, and cross-outfit fallback substitutions are not part of the runtime resolution path.
+- A missing outfit image fails visibly instead of silently displaying artwork assigned to another level.
 
 ## Security and compatibility
 
-- The socket schema accepts only `MALE` or `FEMALE`.
-- Older creation clients that omit gender default to `MALE`.
-- Outfit unlock validation remains server-side.
-- Existing character IDs, outfit keys, and class values are unchanged.
-- Missing gender in an old cached payload is rendered as `MALE` on the client.
+- The socket schema still accepts only `MALE` or `FEMALE`.
+- Older creation clients that omit gender continue to default to `MALE`.
+- Outfit unlock validation remains server-side and unchanged.
+- Existing character IDs, gender values, outfit keys, and class values are unchanged.
+- No database migration is required because this change removes client-side presentation behavior only.
 
 ## Review findings fixed
 
-- The old creator selected an outfit and then performed a second update. The new appearance-aware creation event persists gender and outfit atomically.
-- The roster displayed a hard-coded total of 10 outfits despite each class having 11. It now uses the catalog length.
+- Removed gender from `OutfitPreview` and the Pixi outfit sheet loader.
+- Removed gender from the world renderer's appearance cache key.
+- Removed the fallback that substituted a different outfit image from the same class.
+- Corrected stale frontend tests that expected ten outfits and multiple level-one variants.
+- Added regression coverage proving that all 33 outfits use unique, exact image paths.
 
-## Tests added or extended
+## Verification
 
-- Character service: selected gender and legacy male default.
-- Socket schema: default, accepted, and rejected gender values.
-- Frontend catalog: all 33 outfits resolve to separate male/female paths and retain legacy fallback.
+Run the dependency-backed checks in a normal repository checkout:
 
-## Known limitation
-
-Combat participant payloads still identify appearance by outfit key only. This is visually neutral while male and female sprite sheets are identical. Before replacing female sheets with different artwork, gender should also be added to the combat participant contract and passed to `OutfitPreview` in the combat arena.
+```bash
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+```
