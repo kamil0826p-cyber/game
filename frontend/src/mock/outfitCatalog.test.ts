@@ -23,12 +23,12 @@ describe('outfit catalog', () => {
     expect(keys).toHaveLength(33);
     expect(new Set(keys).size).toBe(33);
     expect(new Set(paths).size).toBe(33);
-    expect(paths.every((path) => path.includes('assets/sprites/'))).toBe(true);
-    expect(paths.every((path) => path.endsWith('.png?v=16'))).toBe(true);
+    expect(paths.every((path) => path.includes('assets/sprites/male/'))).toBe(true);
+    expect(paths.every((path) => path.endsWith('.png?v=17'))).toBe(true);
   });
 
   it('encodes outfit keys before building the asset URL', () => {
-    expect(outfitImageUrl('future outfit')).toContain('future%20outfit.png?v=16');
+    expect(outfitImageUrl('future outfit')).toContain('future%20outfit.png?v=17');
   });
 
   it('never substitutes another outfit image', () => {
