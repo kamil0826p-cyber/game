@@ -190,19 +190,17 @@ export class MarketGateway {
       where: { id: sellerCharacterId },
       select: { silver: true },
     });
-    if (!character) return;
+    if (!character || session.silver === character.silver) return;
     const previous = session.silver;
     session.silver = character.silver;
     session.stateRevision += 1;
     session.dirty = true;
-    if (previous !== character.silver) {
-      this.publisher.emit(session.socketId, 'character:currencyUpdated', {
-        characterId: sellerCharacterId,
-        currency: 'SILVER',
-        amount: character.silver - previous,
-        balance: character.silver,
-      });
-    }
+    this.publisher.emit(session.socketId, 'character:currencyUpdated', {
+      characterId: sellerCharacterId,
+      currency: 'SILVER',
+      amount: character.silver - previous,
+      balance: character.silver,
+    });
     this.publisher.emit(session.socketId, 'notification', {
       code: 'MARKET_ITEM_SOLD',
       message:
