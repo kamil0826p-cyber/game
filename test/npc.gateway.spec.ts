@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GameSocket, NpcDialogueSnapshot } from '../src/contracts/socket.events.js';
 import type { LocalizationService } from '../src/i18n/localization.service.js';
+import type { CombatOccupancyService } from '../src/modules/combat/combat-occupancy.service.js';
 import type { ItemService } from '../src/modules/items/item.service.js';
 import { ItemGateway } from '../src/modules/items/item.gateway.js';
 import type { MovementCoordinatorService } from '../src/modules/movement/movement-coordinator.service.js';
@@ -33,6 +34,9 @@ const movement = {
     operation(),
   ),
 } as unknown as MovementCoordinatorService;
+const occupancy = {
+  isOccupied: vi.fn().mockReturnValue(false),
+} as unknown as CombatOccupancyService;
 const worldState = {
   getBySocketId: vi.fn().mockReturnValue(session),
 } as unknown as WorldStateService;
@@ -98,7 +102,7 @@ describe('NPC gateway authorization', () => {
 
   it('blocks merchant calls that were not unlocked by dialogue', async () => {
     const items = { getMerchant: vi.fn() } as unknown as ItemService;
-    const gateway = new ItemGateway(items, worldState, movement, localization);
+    const gateway = new ItemGateway(items, worldState, movement, occupancy, localization);
     const response = await gateway.getMerchant(client(), {
       requestId: 'merchant-1',
       npcId,
