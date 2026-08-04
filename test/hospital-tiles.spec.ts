@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 const descriptors = {
   'hospital-floor.tsj': 5,
-  'hospital-structure.tsj': 5,
+  'hospital-structure.tsj': 6,
   'hospital-beds.tsj': 6,
-  'hospital-props.tsj': 12,
+  'hospital-props.tsj': 18,
 } as const;
 
 const frontendRoot = resolve('frontend', 'public', 'assets', 'tiles');
@@ -43,7 +43,7 @@ const readJson = async <T>(path: string): Promise<T> =>
 const propertyValue = (tile: TiledTile, name: string): unknown =>
   tile.properties?.find((property) => property.name === name)?.value;
 
-describe('dark hospital Tiled assets', () => {
+describe('reference-faithful hospital Tiled assets', () => {
   it('keeps image-collection descriptors synchronized and every graphic separate', async () => {
     const referencedImages = new Set<string>();
 
@@ -72,7 +72,7 @@ describe('dark hospital Tiled assets', () => {
         expect(tile.image).not.toContain('\\');
         expect(referencedImages.has(tile.image)).toBe(false);
         referencedImages.add(tile.image);
-        expect(tile.imagewidth).toBe(32);
+        expect([32, 64, 96]).toContain(tile.imagewidth);
         expect([32, 64]).toContain(tile.imageheight);
         expect(propertyValue(tile, 'assetRole')).toEqual(expect.any(String));
         await expect(access(resolve(frontendRoot, tile.image))).resolves.toBeUndefined();
@@ -84,10 +84,10 @@ describe('dark hospital Tiled assets', () => {
       }
     }
 
-    expect(referencedImages.size).toBe(28);
+    expect(referencedImages.size).toBe(35);
   });
 
-  it('models beds as two three-piece objects', async () => {
+  it('models each bed as three horizontal 32x64 segments with full footprints', async () => {
     const beds = await readJson<TiledTileset>(resolve(frontendRoot, 'hospital-beds.tsj'));
     expect(beds.tiles).toHaveLength(6);
     expect(beds.tiles.map((tile) => propertyValue(tile, 'segment'))).toEqual([
@@ -98,14 +98,30 @@ describe('dark hospital Tiled assets', () => {
       'middle',
       'foot',
     ]);
-    expect(beds.tiles.every((tile) => propertyValue(tile, 'collides') === true)).toBe(true);
+    expect(beds.tiles.map((tile) => propertyValue(tile, 'style'))).toEqual([
+      'clean',
+      'clean',
+      'clean',
+      'used',
+      'used',
+      'used',
+    ]);
+    for (const tile of beds.tiles) {
+      expect(tile.imagewidth).toBe(32);
+      expect(tile.imageheight).toBe(64);
+      expect(propertyValue(tile, 'collisionMode')).toBe('full-footprint');
+      expect(tile.objectgroup).toBeDefined();
+    }
   });
 
-  it('uses bottom-cell collision footprints for every 64-pixel object', async () => {
+  it('uses explicit base footprints only for oversized floor-standing objects', async () => {
     for (const fileName of ['hospital-structure.tsj', 'hospital-props.tsj'] as const) {
       const tileset = await readJson<TiledTileset>(resolve(frontendRoot, fileName));
-      for (const tile of tileset.tiles.filter((candidate) => candidate.imageheight === 64))
-        expect(tile.objectgroup).toBeDefined();
+      for (const tile of tileset.tiles) {
+        const collisionMode = propertyValue(tile, 'collisionMode');
+        if (collisionMode === 'base') expect(tile.objectgroup).toBeDefined();
+        if (collisionMode === 'none') expect(tile.objectgroup).toBeUndefined();
+      }
     }
   });
 });

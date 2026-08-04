@@ -1,7 +1,7 @@
 {
   "columns": 0,
   "name": "hospital-structure",
-  "tilecount": 5,
+  "tilecount": 6,
   "tileheight": 32,
   "tilewidth": 32,
   "type": "tileset",
@@ -89,13 +89,23 @@
         {
           "name": "assetRole",
           "type": "string",
-          "value": "door"
+          "value": "side-door"
+        },
+        {
+          "name": "collisionMode",
+          "type": "string",
+          "value": "footprint"
         }
       ],
       "objectgroup": {
         "draworder": "index",
         "id": 1,
         "name": "Collision",
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0,
         "objects": [
           {
             "height": 32,
@@ -108,13 +118,26 @@
             "x": 0,
             "y": 32
           }
-        ],
-        "opacity": 1,
-        "type": "objectgroup",
-        "visible": true,
-        "x": 0,
-        "y": 0
+        ]
       }
+    },
+    {
+      "id": 5,
+      "image": "hospital-door-main-open.svg",
+      "imageheight": 64,
+      "imagewidth": 32,
+      "properties": [
+        {
+          "name": "assetRole",
+          "type": "string",
+          "value": "portal-door"
+        },
+        {
+          "name": "collisionMode",
+          "type": "string",
+          "value": "none"
+        }
+      ]
     }
   ]
 }

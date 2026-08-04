@@ -10,6 +10,8 @@ import type { TiledMapJson, TiledTileLayer } from '../src/modules/maps/tiled-map
 
 const frontendPath = resolve('frontend', 'public', 'maps', 'hospital.json');
 const backendPath = resolve('prisma', 'maps', 'hospital.json');
+const GID_MASK = 0x0fffffff;
+const FLIPPED_HORIZONTALLY = 0x80000000;
 
 const readJson = async (path: string): Promise<unknown> =>
   JSON.parse(await readFile(path, 'utf8')) as unknown;
@@ -38,8 +40,10 @@ const tileLayer = (map: TiledMapJson, name: string): TiledTileLayer => {
   return layer;
 };
 
-const gidAt = (layer: TiledTileLayer, x: number, y: number): number =>
+const rawGidAt = (layer: TiledTileLayer, x: number, y: number): number =>
   layer.data[y * layer.width + x] ?? 0;
+const gidAt = (layer: TiledTileLayer, x: number, y: number): number =>
+  rawGidAt(layer, x, y) & GID_MASK;
 
 const reachable = (
   collision: Uint8Array,
@@ -77,8 +81,8 @@ const reachable = (
   return false;
 };
 
-describe('dark hospital map', () => {
-  it('is synchronized, finite and composed from the hospital tilesets', async () => {
+describe('reference-faithful hospital map', () => {
+  it('is synchronized, finite and composed from modular hospital tilesets', async () => {
     const [frontend, backend] = await Promise.all([readJson(frontendPath), readJson(backendPath)]);
     expect(frontend).toEqual(backend);
     const map = await resolveTilesets(backend, backendPath);
@@ -97,9 +101,10 @@ describe('dark hospital map', () => {
       '../assets/tiles/hospital-props.tsj',
     ]);
     expect(tileLayer(map, 'Ground').data.every((gid) => gid !== 0)).toBe(true);
+    expect(tileLayer(map, 'Floor Decals')).toBeDefined();
   });
 
-  it('respawns the player in the center and keeps the portal reachable', async () => {
+  it('keeps the existing defeat spawn and the lower exit reachable', async () => {
     const map = await resolveTilesets(await readJson(backendPath), backendPath);
     const collision = compileCollisionGrid(map);
     const spawn = { x: 12, y: 9 };
@@ -121,86 +126,87 @@ describe('dark hospital map', () => {
     ).toBe(true);
   });
 
-  it('uses the new bed tileset and denser, readable furnishing layout', async () => {
+  it('contains exactly eight horizontal multi-tile beds, four on each side', async () => {
+    const map = await resolveTilesets(await readJson(backendPath), backendPath);
+    const furniture = tileLayer(map, 'Beds and Furniture');
+    const rows = [5, 8, 11, 14];
+
+    rows.forEach((y, index) => {
+      const start = index % 2 === 0 ? 12 : 15;
+      expect([gidAt(furniture, 2, y), gidAt(furniture, 3, y), gidAt(furniture, 4, y)]).toEqual([
+        start,
+        start + 1,
+        start + 2,
+      ]);
+      expect([gidAt(furniture, 19, y), gidAt(furniture, 20, y), gidAt(furniture, 21, y)]).toEqual([
+        start + 2,
+        start + 1,
+        start,
+      ]);
+      for (const x of [19, 20, 21]) {
+        expect((rawGidAt(furniture, x, y) & FLIPPED_HORIZONTALLY) !== 0).toBe(true);
+      }
+      expect(gidAt(furniture, 5, y - 1)).toBe(18);
+      expect(gidAt(furniture, 18, y - 1)).toBe(18);
+    });
+
+    expect(furniture.data.filter((rawGid) => {
+      const gid = rawGid & GID_MASK;
+      return gid >= 12 && gid <= 17;
+    })).toHaveLength(24);
+  });
+
+  it('recreates the decorated upper wall, two central stations and lower storage', async () => {
     const map = await resolveTilesets(await readJson(backendPath), backendPath);
     const furniture = tileLayer(map, 'Beds and Furniture');
     const tall = tileLayer(map, 'Tall Props and Door');
 
-    const expectedBeds = [
-      { x: 4, top: 4 },
-      { x: 18, top: 4 },
-      { x: 4, top: 10 },
-      { x: 18, top: 10 },
-    ];
-    for (const bed of expectedBeds) {
-      expect([
-        gidAt(furniture, bed.x, bed.top),
-        gidAt(furniture, bed.x, bed.top + 1),
-        gidAt(furniture, bed.x, bed.top + 2),
-      ]).toEqual([11, 12, 13]);
-    }
-    expect(furniture.data.filter((gid) => gid >= 11 && gid <= 16)).toHaveLength(12);
-
-    const bedsideCabinets = [
-      [6, 5],
-      [6, 11],
-      [16, 5],
-      [16, 11],
-      [3, 5],
-      [3, 11],
-      [19, 5],
-      [19, 11],
-    ];
-    for (const [x, y] of bedsideCabinets) expect(gidAt(furniture, x!, y!)).toBe(17);
-
-    expect([gidAt(tall, 11, 2), gidAt(tall, 12, 2)]).toEqual([18, 18]);
-    expect([
-      gidAt(tall, 10, 2),
-      gidAt(tall, 13, 2),
-      gidAt(tall, 8, 2),
-      gidAt(tall, 15, 2),
-    ]).toEqual([26, 26, 26, 26]);
-    expect([gidAt(furniture, 9, 2), gidAt(furniture, 14, 2)]).toEqual([27, 27]);
-    expect([
-      gidAt(furniture, 2, 7),
-      gidAt(furniture, 2, 9),
-      gidAt(furniture, 21, 7),
-      gidAt(furniture, 21, 9),
-    ]).toEqual([28, 28, 28, 28]);
+    expect([gidAt(furniture, 4, 3), gidAt(furniture, 9, 3), gidAt(furniture, 14, 3)]).toEqual([
+      19,
+      29,
+      19,
+    ]);
+    expect(gidAt(furniture, 17, 3)).toBe(27);
+    expect([gidAt(tall, 2, 2), gidAt(tall, 7, 2), gidAt(tall, 12, 2)]).toEqual([
+      31,
+      32,
+      33,
+    ]);
+    expect([gidAt(furniture, 10, 10), gidAt(furniture, 10, 14)]).toEqual([28, 30]);
+    expect([gidAt(furniture, 2, 16), gidAt(furniture, 16, 16), gidAt(furniture, 18, 16)]).toEqual([
+      34,
+      25,
+      26,
+    ]);
+    expect([gidAt(tall, 6, 16), gidAt(tall, 7, 16)]).toEqual([20, 21]);
+    expect(gidAt(tall, 23, 9)).toBe(10);
+    expect(gidAt(tall, 12, 17)).toBe(11);
   });
 
-  it('does not block empty central walkways or bedside aisles', async () => {
+  it('keeps every bedside aisle and the lower half connected to the spawn', async () => {
     const map = await resolveTilesets(await readJson(backendPath), backendPath);
     const collision = compileCollisionGrid(map);
-    const walkable = [
-      [12, 9],
-      [12, 8],
-      [12, 10],
-      [11, 9],
-      [13, 9],
-      [12, 15],
-      [12, 16],
-      [11, 16],
-      [13, 16],
-      [5, 5],
-      [17, 5],
-      [5, 11],
-      [17, 11],
-      [7, 5],
-      [15, 5],
-      [7, 11],
-      [15, 11],
-      [10, 9],
-      [14, 9],
-      [9, 8],
-      [15, 8],
+    const spawn = { x: 12, y: 9 };
+    const targets = [
+      ...[5, 8, 11, 14].flatMap((y) => [
+        { x: 6, y },
+        { x: 17, y },
+      ]),
+      { x: 14, y: 10 },
+      { x: 14, y: 13 },
+      { x: 13, y: 15 },
+      { x: 12, y: 16 },
+      { x: 9, y: 16 },
+      { x: 12, y: 17 },
     ];
-    for (const [x, y] of walkable) {
-      expect(collision[y! * map.width + x!], `expected walkable at ${x},${y}`).toBe(0);
+
+    for (const target of targets) {
+      expect(collision[target.y * map.width + target.x], `expected walkable at ${target.x},${target.y}`).toBe(0);
+      expect(reachable(collision, map.width, map.height, spawn, target)).toBe(true);
     }
   });
 
-  it('blocks the perimeter outside the portal', async () => {
+  it('blocks the perimeter outside the lower portal and the decorative side door', async () => {
     const map = await resolveTilesets(await readJson(backendPath), backendPath);
     const collision = compileCollisionGrid(map);
 
@@ -212,5 +218,7 @@ describe('dark hospital map', () => {
       expect(collision[y * map.width]).toBe(1);
       expect(collision[y * map.width + map.width - 1]).toBe(1);
     }
+    expect(collision[9 * map.width + 23]).toBe(1);
+    expect(collision[17 * map.width + 12]).toBe(0);
   });
 });
