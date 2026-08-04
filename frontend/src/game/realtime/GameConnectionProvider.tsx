@@ -9,6 +9,7 @@ import {
 import type { User } from 'firebase/auth';
 import { useI18n } from '../../i18n/I18nProvider';
 import { installBuildcraftLocalization } from '../skills/buildcraftLocalization';
+import { installCraftingSocketBridge } from './craftingSocketBridge';
 import { GameSocketClient } from './GameSocketClient';
 import { installGroupSocketBridge } from './groupSocketBridge';
 import { installGuildSocketBridge } from './guildSocketBridge';
@@ -30,6 +31,7 @@ export function GameConnectionProvider({ user, children }: GameConnectionProvide
     installGroupSocketBridge(clientRef.current);
     installCharacterProgressionSocketBridge(clientRef.current);
     installItemizationSocketBridge(clientRef.current);
+    installCraftingSocketBridge(clientRef.current);
   }
   useEffect(() => {
     const client = clientRef.current!;

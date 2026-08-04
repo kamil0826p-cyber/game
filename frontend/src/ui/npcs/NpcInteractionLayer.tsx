@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { OpenCraftingDialogueAction } from '../../contracts/crafting';
 import type { NpcDialogueSnapshot, NpcStatePayload } from '../../contracts/socket';
 import { NPC_CONTEXT_EVENT } from '../../game/engine/NpcView';
 import { canInteractWithNpc } from '../../game/npc/npcInteraction';
@@ -8,6 +9,7 @@ import { useGameConnection } from '../../game/realtime/GameConnectionProvider';
 import { gameStore, useGameState } from '../../game/state/gameStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import { ActorContextMenu } from '../interactions/ActorContextMenu';
+import { CraftingModal } from '../modals/CraftingModal';
 import { MerchantModal } from '../modals/MerchantModal';
 import { NpcDialogueModal } from './NpcDialogueModal';
 
@@ -16,11 +18,12 @@ interface NpcContextState {
   x: number;
   y: number;
 }
+interface ActiveMerchant { id: string; name: string; }
+interface ActiveCrafting { name: string; workstationKey: string; }
 
-interface ActiveMerchant {
-  id: string;
-  name: string;
-}
+type DialogueAction =
+  | { type: 'OPEN_MERCHANT' | 'CLOSE'; npcId: string }
+  | OpenCraftingDialogueAction;
 
 export function NpcInteractionLayer(): React.JSX.Element | null {
   const connection = useGameConnection();
@@ -29,6 +32,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
   const [context, setContext] = useState<NpcContextState>();
   const [dialogue, setDialogue] = useState<NpcDialogueSnapshot>();
   const [merchant, setMerchant] = useState<ActiveMerchant>();
+  const [crafting, setCrafting] = useState<ActiveCrafting>();
   const [busy, setBusy] = useState(false);
 
   const refreshQuestMarkers = useCallback(async () => {
@@ -51,9 +55,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
       if (detail && !gameStore.getSnapshot().activeModal) setContext(detail);
     };
     const dismiss = (event: PointerEvent) => {
-      if (!(event.target as HTMLElement | null)?.closest('[data-actor-context-menu]')) {
-        setContext(undefined);
-      }
+      if (!(event.target as HTMLElement | null)?.closest('[data-actor-context-menu]')) setContext(undefined);
     };
     window.addEventListener(NPC_CONTEXT_EVENT, open);
     window.addEventListener('pointerdown', dismiss);
@@ -70,7 +72,11 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
       void connection.endNpcDialogue(npcId);
     }
     if (merchant && state.activeModal !== 'merchant') setMerchant(undefined);
-  }, [connection, dialogue, merchant, state.activeModal]);
+    if (crafting && state.activeModal !== 'merchant') {
+      setCrafting(undefined);
+      void connection.closeCrafting();
+    }
+  }, [connection, crafting, dialogue, merchant, state.activeModal]);
 
   const closeDialogue = () => {
     const npcId = dialogue?.npc.id;
@@ -82,16 +88,18 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
     setMerchant(undefined);
     gameStore.setActiveModal(null);
   }, []);
+  const closeCrafting = useCallback(() => {
+    setCrafting(undefined);
+    gameStore.setActiveModal(null);
+    void connection.closeCrafting();
+  }, [connection]);
 
   const startDialogue = async () => {
     if (!context || !state.self || busy) return;
     if (!canInteractWithNpc(state.self, context.npc)) {
       gameStore.addNotification({
         code: 'NPC_TOO_FAR',
-        message:
-          locale === 'pl'
-            ? 'Podejdź bliżej do NPC, aby porozmawiać.'
-            : 'Move closer to the NPC to talk.',
+        message: locale === 'pl' ? 'Podejdź bliżej do NPC, aby porozmawiać.' : 'Move closer to the NPC to talk.',
       });
       setContext(undefined);
       return;
@@ -119,22 +127,25 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
     if (!dialogue || busy) return;
     setBusy(true);
     try {
-      const result = await connection.chooseNpcDialogue(
-        dialogue.npc.id,
-        dialogue.node.id,
-        choiceId,
-      );
+      const result = await connection.chooseNpcDialogue(dialogue.npc.id, dialogue.node.id, choiceId);
       await refreshQuestMarkers();
       if (gameStore.getSnapshot().activeModal !== 'npc-dialogue') return;
       if (result.type === 'NODE') {
         setDialogue(result.dialogue);
-      } else if (result.action.type === 'OPEN_MERCHANT') {
-        setMerchant({ id: result.action.npcId, name: dialogue.npc.name });
-        setDialogue(undefined);
-        gameStore.setActiveModal('merchant');
       } else {
-        setDialogue(undefined);
-        gameStore.setActiveModal(null);
+        const action = result.action as DialogueAction;
+        if (action.type === 'OPEN_MERCHANT') {
+          setMerchant({ id: action.npcId, name: dialogue.npc.name });
+          setDialogue(undefined);
+          gameStore.setActiveModal('merchant');
+        } else if (action.type === 'OPEN_CRAFTING') {
+          setCrafting({ name: dialogue.npc.name, workstationKey: action.workstationKey });
+          setDialogue(undefined);
+          gameStore.setActiveModal('merchant');
+        } else {
+          setDialogue(undefined);
+          gameStore.setActiveModal(null);
+        }
       }
     } catch {
       closeDialogue();
@@ -144,19 +155,13 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
   };
 
   if (dialogue && state.activeModal === 'npc-dialogue') {
-    return (
-      <NpcDialogueModal
-        dialogue={dialogue}
-        busy={busy}
-        onChoose={(choiceId) => void choose(choiceId)}
-        onClose={closeDialogue}
-      />
-    );
+    return <NpcDialogueModal dialogue={dialogue} busy={busy} onChoose={(choiceId) => void choose(choiceId)} onClose={closeDialogue} />;
+  }
+  if (crafting && state.activeModal === 'merchant') {
+    return <CraftingModal npcName={crafting.name} onClose={closeCrafting} />;
   }
   if (merchant && state.activeModal === 'merchant') {
-    return (
-      <MerchantModal npcId={merchant.id} npcName={merchant.name} onClose={closeMerchant} />
-    );
+    return <MerchantModal npcId={merchant.id} npcName={merchant.name} onClose={closeMerchant} />;
   }
   if (!context) return null;
   return (
@@ -165,15 +170,7 @@ export function NpcInteractionLayer(): React.JSX.Element | null {
       subtitle="NPC"
       x={context.x}
       y={context.y}
-      actions={[
-        {
-          key: 'talk',
-          label: locale === 'pl' ? 'Rozmawiaj' : 'Talk',
-          icon: '…',
-          disabled: busy,
-          run: startDialogue,
-        },
-      ]}
+      actions={[{ key: 'talk', label: locale === 'pl' ? 'Rozmawiaj' : 'Talk', icon: '…', disabled: busy, run: startDialogue }]}
     />
   );
 }
