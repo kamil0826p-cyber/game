@@ -5,6 +5,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
+import { WorldEventsPublisher } from '../world/world-events.publisher.js';
 import { WorldStateService } from '../world/world-state.service.js';
 import { CraftOrderService } from './craft-order.service.js';
 
@@ -20,6 +21,7 @@ export class CraftOrderExpirationService implements OnModuleInit, OnModuleDestro
     private readonly craftOrders: CraftOrderService,
     private readonly prisma: PrismaService,
     private readonly worldState: WorldStateService,
+    private readonly publisher: WorldEventsPublisher,
   ) {}
 
   onModuleInit(): void {
@@ -67,9 +69,16 @@ export class CraftOrderExpirationService implements OnModuleInit, OnModuleDestro
     for (const session of sessions) {
       const silver = silverByCharacterId.get(session.characterId);
       if (silver === undefined || silver === session.silver) continue;
+      const previous = session.silver;
       session.silver = silver;
       session.stateRevision += 1;
       session.dirty = true;
+      this.publisher.emit(session.socketId, 'character:currencyUpdated', {
+        characterId: session.characterId,
+        currency: 'SILVER',
+        amount: silver - previous,
+        balance: silver,
+      });
     }
   }
 }
