@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { OUTFIT_CATALOG, outfitImageCandidates, outfitImageUrl } from '../src/mock/outfitCatalog';
 
@@ -12,6 +14,7 @@ describe('canonical outfit assets', () => {
 
     for (const outfit of outfits) {
       expect(outfitImageCandidates(outfit.key)).toEqual([outfitImageUrl(outfit.key)]);
+      expect(existsSync(resolve('public/assets/sprites', `${outfit.key}.png`))).toBe(true);
     }
   });
 
