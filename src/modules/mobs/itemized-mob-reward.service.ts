@@ -56,16 +56,47 @@ export class ItemizedMobRewardService extends MobRewardService {
   ): Promise<MobRewardSettlement> {
     const settlement = await super.award(session, mob, context);
     const operationPrefix = context?.operationId ?? `mob:${mob.id}:${session.characterId}`;
-    const [inventoryRows, claimRows] = await Promise.all([
+    const [inventoryRows, claimRecords] = await Promise.all([
       this.rewardDatabase.inventoryItem.findMany({
         where: { characterId: session.characterId },
         include: { itemDefinition: true },
       }),
       this.rewardDatabase.itemClaim.findMany({
         where: { characterId: session.characterId, status: 'OPEN' },
-        include: { itemDefinition: true },
+        select: {
+          quantity: true,
+          instanceData: true,
+          itemDefinitionId: true,
+        },
       }),
     ]);
+    const claimDefinitions = claimRecords.length === 0
+      ? []
+      : await this.rewardDatabase.itemDefinition.findMany({
+          where: {
+            id: { in: [...new Set(claimRecords.map((claim) => claim.itemDefinitionId))] },
+          },
+        });
+    const claimDefinitionsById = new Map(
+      claimDefinitions.map((definition) => [definition.id, definition]),
+    );
+    const claimRows: RewardItemRow[] = claimRecords.flatMap((claim) => {
+      const definition = claimDefinitionsById.get(claim.itemDefinitionId);
+      if (!definition) return [];
+      return [
+        {
+          quantity: claim.quantity,
+          instanceData: claim.instanceData,
+          itemDefinition: {
+            key: definition.key,
+            name: definition.name,
+            description: definition.description,
+            stackLimit: definition.stackLimit,
+            metadata: definition.metadata,
+          },
+        },
+      ];
+    });
 
     return {
       ...settlement,
