@@ -28,11 +28,12 @@ const migrateLegacyAshenLens = (
   value: Prisma.JsonValue,
 ): Prisma.InputJsonValue | undefined => {
   const root = asRecord(value);
-  const itemization = asRecord(root?.itemization);
+  if (!root) return undefined;
+  const wrappedItemization = asRecord(root.itemization);
+  const itemization = wrappedItemization ?? (root.version === 1 ? root : undefined);
   const relic = asRecord(itemization?.relic);
   const modifier = asRecord(relic?.modifier);
   if (
-    !root ||
     !itemization ||
     !relic ||
     relic.key !== 'ashen-lens-v1' ||
@@ -43,20 +44,20 @@ const migrateLegacyAshenLens = (
   }
   const current = ITEM_RELICS['ashen-lens-v1'];
   if (!current) return undefined;
-  const migrated = {
-    ...root,
-    itemization: {
-      ...itemization,
-      relic: {
-        ...current,
-        modifier: { ...current.modifier },
-        rulesVersion:
-          typeof relic.rulesVersion === 'number' && Number.isInteger(relic.rulesVersion)
-            ? relic.rulesVersion
-            : 1,
-      },
+  const migratedItemization = {
+    ...itemization,
+    relic: {
+      ...current,
+      modifier: { ...current.modifier },
+      rulesVersion:
+        typeof relic.rulesVersion === 'number' && Number.isInteger(relic.rulesVersion)
+          ? relic.rulesVersion
+          : 1,
     },
   };
+  const migrated = wrappedItemization
+    ? { ...root, itemization: migratedItemization }
+    : migratedItemization;
   return JSON.parse(JSON.stringify(migrated)) as Prisma.InputJsonValue;
 };
 
