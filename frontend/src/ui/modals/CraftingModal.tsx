@@ -60,7 +60,13 @@ export function CraftingModal({ npcName, onClose }: CraftingModalProps): React.J
       setLastCraft(result.crafted);
       setSelectedKey(selected.key);
     } catch {
-      // The socket bridge reports the authoritative localized error.
+      try {
+        const refreshed = await connection.getCrafting();
+        setSnapshot(refreshed);
+        setLastCraft(undefined);
+      } catch {
+        onClose();
+      }
     } finally {
       setBusy(false);
     }
