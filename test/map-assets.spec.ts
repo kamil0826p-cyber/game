@@ -1,16 +1,34 @@
 import { access, readFile } from 'node:fs/promises';
 import { dirname, extname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { compileCollisionGrid, extractEmbeddedPortals, parseTiledMap } from '../src/modules/maps/tiled-map.parser.js';
+import {
+  compileCollisionGrid,
+  extractEmbeddedPortals,
+  parseTiledMap,
+} from '../src/modules/maps/tiled-map.parser.js';
 
-const mapNames = ['greenfields', 'crystal-cave'] as const;
-const tileDescriptorNames = [
-  'dark-forest-terrain.tsj',
-  'black-pine-trunk.tsj',
-  'black-pine-canopy.tsj',
-  'cave.tsj',
-] as const;
-const expectedTileSources = tileDescriptorNames.map((fileName) => `../assets/tiles/${fileName}`);
+const mapTilesets = {
+  greenfields: [
+    'dark-forest-terrain.tsj',
+    'black-pine-trunk.tsj',
+    'black-pine-canopy.tsj',
+    'cave.tsj',
+  ],
+  'crystal-cave': [
+    'dark-forest-terrain.tsj',
+    'black-pine-trunk.tsj',
+    'black-pine-canopy.tsj',
+    'cave.tsj',
+  ],
+  hospital: [
+    'hospital-floor.tsj',
+    'hospital-structure.tsj',
+    'hospital-beds.tsj',
+    'hospital-props.tsj',
+  ],
+} as const;
+
+const tileDescriptorNames = [...new Set(Object.values(mapTilesets).flat())];
 const frontendTileRoot = resolve('frontend', 'public', 'assets', 'tiles');
 const backendTileRoot = resolve('prisma', 'assets', 'tiles');
 const legacyTileRoots = [
@@ -18,17 +36,34 @@ const legacyTileRoots = [
   resolve('prisma', 'maps', 'tiles'),
 ] as const;
 
-const readJson = async (path: string): Promise<unknown> => JSON.parse(await readFile(path, 'utf8')) as unknown;
+const readJson = async (path: string): Promise<unknown> =>
+  JSON.parse(await readFile(path, 'utf8')) as unknown;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const externalTilesetSources = (value: unknown): string[] => {
-  if (!isRecord(value) || !Array.isArray(value.tilesets)) throw new Error('Map tilesets are malformed.');
+  if (!isRecord(value) || !Array.isArray(value.tilesets)) {
+    throw new Error('Map tilesets are malformed.');
+  }
   return value.tilesets.map((tileset) => {
-    if (!isRecord(tileset) || typeof tileset.source !== 'string')
+    if (!isRecord(tileset) || typeof tileset.source !== 'string') {
       throw new Error('Every committed map tileset must use an external TSJ source.');
+    }
     return tileset.source;
   });
+};
+
+const resolveTilesets = async (value: unknown, mapPath: string): Promise<unknown> => {
+  if (!isRecord(value) || !Array.isArray(value.tilesets)) return value;
+  const tilesets = await Promise.all(
+    value.tilesets.map(async (reference) => {
+      if (!isRecord(reference) || typeof reference.source !== 'string') return reference;
+      const external = await readJson(resolve(dirname(mapPath), reference.source));
+      if (!isRecord(external)) throw new Error('Tileset is malformed.');
+      return { ...external, firstgid: reference.firstgid, source: reference.source };
+    }),
+  );
+  return { ...value, tilesets };
 };
 
 const tilesetImageSources = (value: unknown): string[] => {
@@ -36,18 +71,25 @@ const tilesetImageSources = (value: unknown): string[] => {
   const images: string[] = [];
   if (typeof value.image === 'string') images.push(value.image);
   if (Array.isArray(value.tiles)) {
-    for (const tile of value.tiles)
+    for (const tile of value.tiles) {
       if (isRecord(tile) && typeof tile.image === 'string') images.push(tile.image);
+    }
   }
   return images;
 };
 
 describe('committed Tiled map assets', () => {
-  for (const mapName of mapNames) {
+  for (const [mapName, descriptorNames] of Object.entries(mapTilesets)) {
     it(`${mapName} is valid and synchronized with the browser copy`, async () => {
       const backendPath = resolve('prisma', 'maps', `${mapName}.json`);
       const frontendPath = resolve('frontend', 'public', 'maps', `${mapName}.json`);
-      const [backendSource, frontendSource] = await Promise.all([readJson(backendPath), readJson(frontendPath)]);
+      const [backendSource, frontendSource] = await Promise.all([
+        readJson(backendPath),
+        readJson(frontendPath),
+      ]);
+      const expectedTileSources = descriptorNames.map(
+        (fileName) => `../assets/tiles/${fileName}`,
+      );
 
       expect(frontendSource).toEqual(backendSource);
       expect(externalTilesetSources(frontendSource)).toEqual(expectedTileSources);
@@ -57,7 +99,7 @@ describe('committed Tiled map assets', () => {
         await expect(access(resolve(dirname(backendPath), source))).resolves.toBeUndefined();
       }
 
-      const map = parseTiledMap(backendSource);
+      const map = parseTiledMap(await resolveTilesets(backendSource, backendPath));
       expect(map.width).toBeGreaterThan(0);
       expect(map.height).toBeGreaterThan(0);
       const tileLayers = map.layers.filter((layer) => layer.type === 'tilelayer');
@@ -99,7 +141,8 @@ describe('committed Tiled map assets', () => {
       }
     }
 
-    for (const legacyRoot of legacyTileRoots)
+    for (const legacyRoot of legacyTileRoots) {
       await expect(access(legacyRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
   });
 });
