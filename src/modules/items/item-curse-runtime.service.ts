@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { GAME_ERROR_CODES, GameError } from '../../common/errors/game.error.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -6,6 +6,7 @@ import {
   parseItemDefinitionMetadata,
   readItemInstanceSnapshot,
 } from './itemization.rules.js';
+import type { ItemInstanceSnapshot } from './itemization.types.js';
 
 export type ItemCorruptionTrigger = 'SKILL_CAST' | 'GUARD_SUCCESS' | 'COMBAT_END';
 
@@ -14,6 +15,16 @@ export interface EquippedItemCurseModifiers {
   healingConsumablesLocked: boolean;
   corruptionByTrigger: Record<ItemCorruptionTrigger, number>;
 }
+
+type CorruptionWriter = (
+  characterId: string,
+  amount: number,
+  operationId: string,
+) => Promise<number>;
+
+const modifiersByCharacterId = new Map<string, EquippedItemCurseModifiers>();
+const corruptionWrites = new Map<string, Promise<void>>();
+let corruptionWriter: CorruptionWriter | undefined;
 
 const emptyModifiers = (): EquippedItemCurseModifiers => ({
   healingReceivedMultiplier: 1,
@@ -25,14 +36,100 @@ const emptyModifiers = (): EquippedItemCurseModifiers => ({
   },
 });
 
+const cloneModifiers = (
+  value: EquippedItemCurseModifiers,
+): EquippedItemCurseModifiers => ({
+  healingReceivedMultiplier: value.healingReceivedMultiplier,
+  healingConsumablesLocked: value.healingConsumablesLocked,
+  corruptionByTrigger: { ...value.corruptionByTrigger },
+});
+
 const record = (value: Prisma.JsonValue): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 
+export const itemCurseModifiersFromSnapshots = (
+  snapshots: readonly ItemInstanceSnapshot[],
+): EquippedItemCurseModifiers => {
+  const result = emptyModifiers();
+  for (const snapshot of snapshots) {
+    const cost = snapshot.curse?.cost;
+    if (!cost) continue;
+    switch (cost.type) {
+      case 'HEALING_RECEIVED_MULTIPLIER':
+        result.healingReceivedMultiplier *= Math.max(0, Math.min(1, cost.multiplier));
+        break;
+      case 'CONSUMABLE_LOCK':
+        if (cost.category === 'HEALING') result.healingConsumablesLocked = true;
+        break;
+      case 'CORRUPTION_ON_TRIGGER':
+        result.corruptionByTrigger[cost.trigger] += Math.max(0, Math.trunc(cost.amount));
+        break;
+      case 'STAT_PENALTY':
+        break;
+    }
+  }
+  result.healingReceivedMultiplier = Number(
+    Math.max(0, Math.min(1, result.healingReceivedMultiplier)).toFixed(4),
+  );
+  return result;
+};
+
+export const cacheEquippedItemCurseModifiers = (
+  characterId: string,
+  modifiers: EquippedItemCurseModifiers,
+): void => {
+  modifiersByCharacterId.set(characterId, cloneModifiers(modifiers));
+};
+
+export const cachedEquippedItemCurseModifiers = (
+  characterId: string | undefined,
+): EquippedItemCurseModifiers =>
+  characterId
+    ? cloneModifiers(modifiersByCharacterId.get(characterId) ?? emptyModifiers())
+    : emptyModifiers();
+
+export const queueItemCurseCorruption = (
+  characterId: string | undefined,
+  amount: number,
+  operationId: string,
+): void => {
+  const normalizedAmount = Math.max(0, Math.trunc(amount));
+  if (!characterId || normalizedAmount === 0 || !corruptionWriter) return;
+  const previous = corruptionWrites.get(characterId) ?? Promise.resolve();
+  let write!: Promise<void>;
+  write = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const writer = corruptionWriter;
+      if (!writer) return;
+      try {
+        await writer(characterId, normalizedAmount, operationId);
+      } catch {
+        await writer(characterId, normalizedAmount, operationId).catch(() => undefined);
+      }
+    })
+    .finally(() => {
+      if (corruptionWrites.get(characterId) === write) corruptionWrites.delete(characterId);
+    });
+  corruptionWrites.set(characterId, write);
+};
+
+export const drainItemCurseCorruptionWrites = async (): Promise<void> => {
+  await Promise.allSettled([...corruptionWrites.values()]);
+};
+
 @Injectable()
-export class ItemCurseRuntimeService {
-  constructor(private readonly database: PrismaService) {}
+export class ItemCurseRuntimeService implements OnModuleDestroy {
+  constructor(private readonly database: PrismaService) {
+    corruptionWriter = (characterId, amount, operationId) =>
+      this.persistCorruption(characterId, amount, operationId);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await drainItemCurseCorruptionWrites();
+  }
 
   async getEquippedModifiers(
     userId: string,
@@ -46,33 +143,16 @@ export class ItemCurseRuntimeService {
       },
       include: { itemDefinition: true },
     });
-    const result = emptyModifiers();
-    for (const row of rows) {
+    const snapshots = rows.map((row) => {
       const metadata = parseItemDefinitionMetadata(row.itemDefinition.metadata);
-      const snapshot = readItemInstanceSnapshot({
+      return readItemInstanceSnapshot({
         instanceData: row.instanceData,
         definitionKey: row.itemDefinition.key,
         metadata,
       });
-      const cost = snapshot.curse?.cost;
-      if (!cost) continue;
-      switch (cost.type) {
-        case 'HEALING_RECEIVED_MULTIPLIER':
-          result.healingReceivedMultiplier *= Math.max(0, cost.multiplier);
-          break;
-        case 'CONSUMABLE_LOCK':
-          if (cost.category === 'HEALING') result.healingConsumablesLocked = true;
-          break;
-        case 'CORRUPTION_ON_TRIGGER':
-          result.corruptionByTrigger[cost.trigger] += Math.max(0, Math.trunc(cost.amount));
-          break;
-        case 'STAT_PENALTY':
-          break;
-      }
-    }
-    result.healingReceivedMultiplier = Number(
-      Math.max(0, result.healingReceivedMultiplier).toFixed(4),
-    );
+    });
+    const result = itemCurseModifiersFromSnapshots(snapshots);
+    cacheEquippedItemCurseModifiers(characterId, result);
     return result;
   }
 
