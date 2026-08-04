@@ -37,9 +37,12 @@ export interface MarketItemPayload {
   curse?: Pick<ItemCurseSnapshot, 'key' | 'name' | 'description' | 'preview'>;
 }
 
+export type MarketListingStatus = 'ACTIVE' | 'SOLD' | 'CANCELLED' | 'EXPIRED';
+
 export interface MarketListingPayload {
   id: string;
   seller: { characterId: string; name: string };
+  buyer?: { characterId: string; name: string };
   item: MarketItemPayload;
   quantity: number;
   totalPriceSilver: number;
@@ -48,8 +51,10 @@ export interface MarketListingPayload {
   commissionSilver: number;
   sellerRevenueSilver: number;
   historicalMedianUnitPriceSilver?: number;
+  status: MarketListingStatus;
   createdAt: number;
   expiresAt: number;
+  closedAt?: number;
   canBuy: boolean;
   canCancel: boolean;
 }
