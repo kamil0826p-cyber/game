@@ -14,6 +14,7 @@ describe('reward claims gateway contract', () => {
     expect(source).toContain("@SubscribeMessage('claims:claimAll')");
     expect(source).toContain('this.movementCoordinator.runSerialized');
     expect(source).toContain("client.data.sessionState !== 'IN_WORLD'");
+    expect(source).toContain("session.combatState !== 'IDLE'");
     expect(source).toContain('claimId: z.string().uuid()');
   });
 
