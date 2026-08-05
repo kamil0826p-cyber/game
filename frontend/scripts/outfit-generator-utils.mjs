@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 export const frameWidth = 96;
 export const frameHeight = 144;
-export const assetVersion = 19;
+export const assetVersion = 20;
 export const outline = '#090b0e';
 
 export const esc = (value) =>
