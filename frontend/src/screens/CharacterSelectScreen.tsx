@@ -171,6 +171,7 @@ export function CharacterSelectScreen(): React.JSX.Element {
                   <OutfitPreview
                     outfitKey={character.outfitKey}
                     characterClass={character.characterClass}
+                    gender={character.gender}
                     size="small"
                     animated={false}
                   />
@@ -206,6 +207,7 @@ export function CharacterSelectScreen(): React.JSX.Element {
                   <OutfitPreview
                     outfitKey={selected.outfitKey}
                     characterClass={selected.characterClass}
+                    gender={selected.gender}
                   />
                 </div>
                 <div className="mt-4 flex items-center justify-between gap-3">

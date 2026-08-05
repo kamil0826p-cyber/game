@@ -14,30 +14,42 @@ describe('outfit catalog', () => {
     }
   });
 
-  it('gives every outfit its own directly loadable PNG path', () => {
+  it('gives every outfit and gender its own directly loadable SVG path', () => {
     const keys = Object.values(OUTFIT_CATALOG)
       .flat()
       .map((outfit) => outfit.key);
-    const paths = keys.map(outfitImageUrl);
+    const malePaths = keys.map((key) => outfitImageUrl(key, 'MALE'));
+    const femalePaths = keys.map((key) => outfitImageUrl(key, 'FEMALE'));
 
     expect(keys).toHaveLength(33);
     expect(new Set(keys).size).toBe(33);
-    expect(new Set(paths).size).toBe(33);
-    expect(paths.every((path) => path.includes('assets/sprites/male/'))).toBe(true);
-    expect(paths.every((path) => path.endsWith('.png?v=17'))).toBe(true);
+    expect(new Set([...malePaths, ...femalePaths]).size).toBe(66);
+    expect(malePaths.every((path) => path.includes('assets/sprites/male/'))).toBe(true);
+    expect(femalePaths.every((path) => path.includes('assets/sprites/female/'))).toBe(true);
+    expect([...malePaths, ...femalePaths].every((path) => path.endsWith('.svg?v=18'))).toBe(true);
   });
 
-  it('encodes outfit keys before building the asset URL', () => {
-    expect(outfitImageUrl('future outfit')).toContain('future%20outfit.png?v=17');
+  it('encodes outfit keys before building the gender-specific asset URL', () => {
+    expect(outfitImageUrl('future outfit', 'MALE')).toContain('future%20outfit.svg?v=18');
+    expect(outfitImageUrl('future outfit', 'FEMALE')).toContain(
+      'sprites/female/future%20outfit.svg?v=18',
+    );
   });
 
-  it('never substitutes another outfit image', () => {
+  it('never substitutes another outfit or gender image', () => {
     for (const outfit of Object.values(OUTFIT_CATALOG).flat()) {
-      expect(outfitImageCandidates(outfit.key)).toEqual([outfitImageUrl(outfit.key)]);
+      expect(outfitImageCandidates(outfit.key, 'MALE')).toEqual([
+        outfitImageUrl(outfit.key, 'MALE'),
+      ]);
+      expect(outfitImageCandidates(outfit.key, 'FEMALE')).toEqual([
+        outfitImageUrl(outfit.key, 'FEMALE'),
+      ]);
     }
 
-    expect(outfitImageCandidates('mage-evoker')[0]).not.toContain('mage-archmage');
-    expect(outfitImageCandidates('warrior-warlord')[0]).not.toContain('warrior-champion');
-    expect(outfitImageCandidates('archer-starshot')[0]).not.toContain('archer-ranger');
+    expect(outfitImageCandidates('mage-evoker', 'MALE')[0]).not.toContain('mage-archmage');
+    expect(outfitImageCandidates('warrior-warlord', 'FEMALE')[0]).not.toContain(
+      'warrior-champion',
+    );
+    expect(outfitImageCandidates('archer-starshot', 'MALE')[0]).not.toContain('archer-ranger');
   });
 });

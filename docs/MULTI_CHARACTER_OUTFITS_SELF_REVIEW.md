@@ -7,8 +7,8 @@
 - The pre-world screen loads the full owned roster and allows switching the selected character.
 - Outfit changes are persisted before entering the world and are accepted only for an owned character and an outfit unlocked at its level.
 - Every class has eleven catalog entries: the starting image at level 1 and a new image every ten levels through level 100.
-- Each outfit key resolves to one exact existing PNG; the client does not recolor a shared base image at runtime.
-- Existing PNGs remain in the legacy `sprites/male` storage directory, but the resolver ignores character gender.
+- Each outfit key resolves to one exact existing SVG sprite sheet for the selected character gender; the client does not recolor a shared base image at runtime.
+- Male and female artwork is stored separately under `sprites/male` and `sprites/female`, and both directories contain 33 unique sheets.
 
 ## Authority and security review
 
@@ -23,10 +23,10 @@
 ## Compatibility review
 
 - Existing accounts keep all character rows and the earliest character remains the initially highlighted selection.
-- Existing outfit keys remain valid.
+- Existing outfit keys remain valid; asset version 18 replaces their cached artwork without changing persisted keys.
 - Existing character creation payloads remain accepted because `outfitKey` is optional server-side; the client saves the chosen level-1 outfit immediately after creation.
 - `world:enter`, movement, combat, trade, inventory, persistence, and skill payloads are unchanged.
-- Stored gender values remain compatible but no longer select a palette or alternate outfit image.
+- Stored gender values remain compatible and now select the corresponding dedicated sprite sheet rather than a recolored shared image.
 
 ## Race and lifecycle review
 
@@ -39,8 +39,8 @@
 ## Tests
 
 - Backend catalog count, uniqueness, default/unlocked rules, maximum roster constant, and Zod schemas.
-- Frontend catalog count, uniqueness, exact ten-level unlock ordering, canonical asset paths, and physical sprite-file existence.
-- Regression coverage verifies a single gender-independent asset URL and rejects cross-outfit fallback substitutions.
+- Frontend catalog count, uniqueness, exact ten-level unlock ordering, gender-specific asset paths, physical sprite-file existence, dimensions, and hashes.
+- Regression coverage verifies 66 unique high-resolution sheets and rejects cross-outfit or cross-gender fallback substitutions.
 
 ## Validation
 
