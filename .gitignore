@@ -21,3 +21,8 @@ frontend/.env.local
 frontend/.env.*.local
 frontend/coverage/
 frontend/*.tsbuildinfo
+
+# Deterministic outfit generator outputs (recreated by predev/prebuild/pretest)
+frontend/public/assets/sprites/male/*.svg
+frontend/public/assets/sprites/female/*.svg
+frontend/public/assets/outfit-audit.json

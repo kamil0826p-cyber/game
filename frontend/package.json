@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "React and PixiJS browser client for the grid MMORPG backend.",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "predev": "npm run outfits:generate && npm --prefix .. run prisma:seed",
     "dev": "vite",
@@ -18,9 +20,28 @@
     "assets:generate": "node scripts/generate-assets.mjs",
     "outfits:generate": "node scripts/generate-outfits.mjs",
     "prebuild": "npm run outfits:generate",
-    "pretest": "npm run outfits:generate"
+    "pretest": "npm run outfits:generate",
+    "outfits:audit": "node scripts/audit-outfits.mjs",
+    "outfits:verify": "npm run outfits:generate && vitest run test/outfit-assets.spec.ts src/mock/outfitCatalog.test.ts"
   },
-  "dependencies": { "firebase": "11.10.0", "pixi.js": "8.11.0", "react": "19.1.1", "react-dom": "19.1.1", "socket.io-client": "4.8.1" },
-  "devDependencies": { "@tailwindcss/vite": "4.1.11", "@types/node": "22.15.30", "@types/react": "19.1.9", "@types/react-dom": "19.1.7", "@vitejs/plugin-react": "4.6.0", "prettier": "3.6.2", "tailwindcss": "4.1.11", "typescript": "5.9.2", "vite": "7.1.1", "vitest": "3.2.4" },
+  "dependencies": {
+    "firebase": "11.10.0",
+    "pixi.js": "8.11.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "socket.io-client": "4.8.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.11",
+    "@types/node": "22.15.30",
+    "@types/react": "19.1.9",
+    "@types/react-dom": "19.1.7",
+    "@vitejs/plugin-react": "4.6.0",
+    "prettier": "3.6.2",
+    "tailwindcss": "4.1.11",
+    "typescript": "5.9.2",
+    "vite": "7.1.1",
+    "vitest": "3.2.4"
+  },
   "packageManager": "npm@10.9.2"
 }
