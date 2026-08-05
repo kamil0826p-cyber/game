@@ -1,6 +1,6 @@
 # Character outfit generator
 
-The repository contains a deterministic dark-fantasy character generator for all 66 player outfit sheets.
+The repository contains a deterministic dark-fantasy SVG generator for 33 male and 33 female player outfit sheets.
 
 ## Run it
 
@@ -10,52 +10,54 @@ From the repository root:
 npm run outfits:generate
 ```
 
-Or directly from the frontend directory:
-
-```bash
-npm run outfits:generate
-```
-
-The command replaces every generated file under:
+The same command is available from `frontend`. It recreates the generated files under:
 
 - `frontend/public/assets/sprites/male/`
 - `frontend/public/assets/sprites/female/`
 
-It also refreshes `frontend/public/assets/manifest.json` and increments the cache-busting asset version used by the client.
+It also refreshes `frontend/public/assets/manifest.json`.
 
-## Generator files
+## Clean rendering rules
 
-- `frontend/scripts/outfit-designs.mjs` contains the hand-authored visual specification for every outfit and gender.
-- `frontend/scripts/outfit-designs/` splits the 33 designs into mage, warrior, and archer catalogs.
-- `frontend/scripts/outfit-generator.mjs` renders the specifications into 4x4 SVG animation sheets.
-- `frontend/scripts/outfit-generator-*.mjs` contain the reusable body, equipment, and utility renderers.
-- `frontend/scripts/generate-outfits.mjs` is the one-command CLI entrypoint.
-- `frontend/scripts/generate-assets.mjs` remains a compatibility entrypoint and calls the same generator.
+Generated sheets now use the `advanced-v5-clean` rendering pass. This pass corrects the visual failures caused by the previous primitive-count-driven overlay.
 
-## How uniqueness is enforced
+The generator enforces the following rules:
 
-Each of the 66 variants defines its own structural combination of:
+- a full helmet or hood suppresses all hair geometry;
+- visible hair uses filled, bounded masses with only a few controlled highlights;
+- no outfit emits head horns;
+- trophy and antler-named back items are rendered as bounded emblems rather than antlers above the head;
+- aura particles remain outside the body silhouette;
+- the advanced overlay does not redraw the head, weapon, back item, or aura;
+- material lines are clipped to the torso instead of crossing the face, helmet, body, or background;
+- random body micro-strokes are disabled;
+- generated SVG metadata records clean occlusion and zero horn geometry.
 
-- body profile;
-- garment construction;
-- headgear, mask, crown, or hairstyle;
-- shoulder silhouette;
-- primary weapon;
-- off-hand item;
-- back item, cape, trophy, wings, or banner;
-- aura or environmental effect;
-- chest emblem and detailing.
+The asset cache version is `22`, so clients do not reuse the broken generated sheets.
 
-The generator fails when two variants share the same structural signature. The frontend asset test also verifies 66 unique component signatures and requires male/female variants of every outfit to differ in at least six construction fields. This prevents a shared base character with palette-only recolors from returning.
+## Relevant generator files
+
+- `frontend/scripts/outfit-designs.mjs` joins the hand-authored visual specifications.
+- `frontend/scripts/outfit-designs/` contains mage, warrior, and archer catalogs.
+- `frontend/scripts/outfit-generator.mjs` builds the 4x4 sheets and rejects forbidden line-noise or horn metadata.
+- `frontend/scripts/outfit-generator-safe-head.mjs` is the authoritative helmet, hood, face, and hair renderer.
+- `frontend/scripts/outfit-generator-safe-parts.mjs` renders bounded auras and back items.
+- `frontend/scripts/outfit-generator-overlay.mjs` adds clipped material construction, controlled arms, belts, and trim without duplicating the character.
+- `frontend/scripts/outfit-generator-body.mjs` and `outfit-generator-equipment.mjs` render the remaining base body and equipment.
+- `frontend/scripts/generate-outfits.mjs` is the command-line entry point.
+
+## Uniqueness
+
+Each variant still defines its own structural combination of body profile, garment, headgear, shoulders, weapon, off-hand item, back item, aura, and detail motif. The generator rejects duplicate structural signatures and duplicate generated SVG contents.
 
 ## Output format
 
 Each generated file is a self-contained `384x576` SVG sprite sheet:
 
-- 4 directions: south, west, east, north;
-- 4 walking frames per direction;
+- four directions: south, west, east, and north;
+- four walking frames per direction;
 - `96x144` source frame;
 - 16 frames total;
-- world scale `0.5`, preserving the existing `48x72` logical-pixel footprint.
+- world scale `0.5`, preserving the existing `48x72` in-game footprint.
 
-The artwork is original dark fantasy designed for a classic browser RPG presentation. It does not require an external image service, API key, font, or binary graphics editor.
+The output is original dark-fantasy artwork intended for a classic browser RPG presentation.
