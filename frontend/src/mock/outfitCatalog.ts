@@ -81,7 +81,7 @@ export const CLASS_PRESENTATION: Readonly<
   },
 };
 
-const OUTFIT_ASSET_VERSION = 20;
+const OUTFIT_ASSET_VERSION = 22;
 
 const outfitAssetDirectory = (gender: CharacterGender): string =>
   `assets/sprites/${gender === 'FEMALE' ? 'female' : 'male'}`;
