@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react';
-import type { CharacterClass, Direction } from '../../contracts/game';
+import type { CharacterClass, CharacterGender, Direction } from '../../contracts/game';
+import {
+  OUTFIT_FRAME_HEIGHT,
+  OUTFIT_FRAME_WIDTH,
+  OUTFIT_SHEET_HEIGHT,
+  OUTFIT_SHEET_WIDTH,
+} from '../../game/engine/outfitSpriteMetrics';
 import { outfitImageUrl } from '../../mock/outfitCatalog';
 
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
@@ -7,6 +13,7 @@ const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, N
 interface OutfitPreviewProps {
   outfitKey: string;
   characterClass: CharacterClass;
+  gender?: CharacterGender;
   direction?: Direction;
   size?: 'small' | 'large';
   animated?: boolean;
@@ -17,6 +24,7 @@ interface OutfitPreviewProps {
 export function OutfitPreview({
   outfitKey,
   characterClass: _characterClass,
+  gender = 'MALE',
   direction = 'SOUTH',
   size = 'large',
   animated = true,
@@ -37,7 +45,7 @@ export function OutfitPreview({
     const mob = outfitKey.startsWith('mob-');
     const sourceUrl = mob
       ? `${import.meta.env.BASE_URL}assets/mobs/${encodeURIComponent(outfitKey)}.svg`
-      : outfitImageUrl(outfitKey);
+      : outfitImageUrl(outfitKey, gender);
     const safeRenderScale = Math.max(0.2, Math.min(3, renderScale));
 
     let frameId = 0;
@@ -51,22 +59,29 @@ export function OutfitPreview({
 
       if (loaded && image.naturalWidth > 0) {
         if (mob) {
-          const scale = Math.min(88 / image.naturalWidth, 112 / image.naturalHeight) * safeRenderScale;
+          const scale =
+            Math.min(88 / image.naturalWidth, 112 / image.naturalHeight) * safeRenderScale;
           const width = image.naturalWidth * scale;
           const height = image.naturalHeight * scale;
-          context.drawImage(image, (96 - width) / 2, 144 - height - 12, width, height);
+          context.drawImage(
+            image,
+            (OUTFIT_FRAME_WIDTH - width) / 2,
+            OUTFIT_FRAME_HEIGHT - height - 12,
+            width,
+            height,
+          );
         } else {
           const frame = animated ? Math.floor((now - start) / 120) % 4 : 0;
           context.drawImage(
             image,
-            frame * 32,
-            directionRows[direction] * 48,
-            32,
-            48,
+            frame * OUTFIT_FRAME_WIDTH,
+            directionRows[direction] * OUTFIT_FRAME_HEIGHT,
+            OUTFIT_FRAME_WIDTH,
+            OUTFIT_FRAME_HEIGHT,
             0,
             0,
-            96,
-            144,
+            OUTFIT_FRAME_WIDTH,
+            OUTFIT_FRAME_HEIGHT,
           );
         }
       }
@@ -76,10 +91,13 @@ export function OutfitPreview({
 
     image.onload = () => {
       if (cancelled) return;
-      const validSheet = mob || (image.naturalWidth === 128 && image.naturalHeight === 192);
+      const validSheet =
+        mob ||
+        (image.naturalWidth === OUTFIT_SHEET_WIDTH &&
+          image.naturalHeight === OUTFIT_SHEET_HEIGHT);
       if (!validSheet) {
         console.error(
-          `Outfit ${outfitKey} has invalid dimensions ${image.naturalWidth}x${image.naturalHeight}. Expected 128x192.`,
+          `Outfit ${outfitKey} has invalid dimensions ${image.naturalWidth}x${image.naturalHeight}. Expected ${OUTFIT_SHEET_WIDTH}x${OUTFIT_SHEET_HEIGHT}.`,
         );
         return;
       }
@@ -101,13 +119,13 @@ export function OutfitPreview({
       image.onload = null;
       image.onerror = null;
     };
-  }, [animated, direction, outfitKey, renderScale]);
+  }, [animated, direction, gender, outfitKey, renderScale]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={96}
-      height={144}
+      width={OUTFIT_FRAME_WIDTH}
+      height={OUTFIT_FRAME_HEIGHT}
       className={`pixelated ${size === 'small' ? 'h-20 w-14' : 'h-36 w-24'} ${className}`}
       aria-label={`${outfitKey} animated outfit preview`}
     />

@@ -3,41 +3,30 @@
 ## Scope
 
 - `MALE` and `FEMALE` remain persisted, server-authoritative character properties.
-- Existing rows continue to use the database default and all socket contracts remain compatible.
-- Gender does not change class templates, combat statistics, loot, movement, progression, or outfit artwork.
-- Character creation and roster views still display the stored gender, but they do not use it to select or recolor sprites.
+- Existing rows continue to use the database default and older clients may omit gender, which resolves to `MALE`.
+- Gender changes presentation only. Class templates, combat statistics, loot, movement, progression, and unlock rules are unchanged.
 
 ## Outfit rendering
 
-- The outfit key is the only runtime input used to resolve player artwork.
-- Every one of the 33 outfit keys resolves to its exact existing PNG under `frontend/public/assets/sprites/male/`.
-- The `male` directory is retained only as the legacy storage location; character gender is not passed to the resolver and does not change the selected file.
-- The character creator, character selection screen, HUD previews, combat previews, and Pixi world renderer share the same canonical resolver.
-- Palette variants and cross-outfit fallback substitutions are not part of the runtime resolution path.
-- A missing outfit image fails visibly instead of silently displaying artwork assigned to another level.
+- Every one of the 33 outfit keys has a dedicated male sheet and a dedicated female sheet.
+- The resolver uses both outfit key and gender and never substitutes another outfit.
+- Texture caches include gender, preventing a previously loaded male texture from being reused for a female character with the same outfit key.
+- Character creator, roster, and Pixi world rendering use the same gender-specific resolver.
+- Callers that omit gender remain compatible and render as `MALE`.
 
-## Security and compatibility
+## Asset properties
 
-- The socket schema still accepts only `MALE` or `FEMALE`.
-- Older creation clients that omit gender continue to default to `MALE`.
-- Outfit unlock validation remains server-side and unchanged.
-- Existing character IDs, gender values, outfit keys, and class values are unchanged.
-- No database migration is required because this change removes client-side presentation behavior only.
-
-## Review findings fixed
-
-- Removed gender from `OutfitPreview` and the Pixi outfit sheet loader.
-- Removed gender from the world renderer's appearance cache key.
-- Removed the fallback that substituted a different outfit image from the same class.
-- Corrected stale frontend tests that expected ten outfits and multiple level-one variants.
-- Added regression coverage proving that all 33 outfit URLs point to existing exact asset files.
+- 66 unique SVG sheets with embedded high-resolution raster artwork: 33 male and 33 female.
+- Each sheet is `384x576`, containing 16 frames of `96x144`.
+- World scale is `0.5`, so the visible size remains `48x72` logical pixels.
+- See `CHARACTER_SPRITE_RESOLUTION_AUDIT.md` for the resolution analysis and generation details.
 
 ## Verification
-
-Run the dependency-backed checks in a normal repository checkout:
 
 ```bash
 npm --prefix frontend run typecheck
 npm --prefix frontend test
 npm --prefix frontend run build
+npm run typecheck
+npm test
 ```

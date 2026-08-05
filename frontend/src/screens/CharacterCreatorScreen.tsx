@@ -145,6 +145,7 @@ export function CharacterCreatorScreen({
                   <OutfitPreview
                     outfitKey={OUTFIT_CATALOG[candidate][0]!.key}
                     characterClass={candidate}
+                    gender={gender}
                     size="small"
                   />
                   <span className={`font-display mt-2 text-xl ${presentation.accent}`}>
@@ -224,7 +225,11 @@ export function CharacterCreatorScreen({
           <div className="relative">
             <p className="eyebrow">{t('character.outfit')}</p>
             <div className="mt-5 flex min-h-72 items-center justify-center rounded-xl border border-white/10 bg-slate-950/45">
-              <OutfitPreview outfitKey={preview.key} characterClass={characterClass} />
+              <OutfitPreview
+                outfitKey={preview.key}
+                characterClass={characterClass}
+                gender={gender}
+              />
             </div>
             <div className="mt-5 flex items-center justify-between gap-3">
               <button

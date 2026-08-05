@@ -4,6 +4,7 @@ import { isGroupMate, subscribeGroupPresence } from '../groups/groupPresence';
 import { isGuildMate, subscribeGuildPresence } from '../guilds/guildPresence';
 import { WORLD_TILE_SIZE } from './constants';
 import { getOutfitSheetFrames, type OutfitSheetFrames } from './OutfitSheetLoader';
+import { OUTFIT_WORLD_SCALE } from './outfitSpriteMetrics';
 
 export const PLAYER_CONTEXT_EVENT = 'game:player-interaction';
 export interface CharacterInteractionPoint { x: number; y: number; }
@@ -28,7 +29,7 @@ export class CharacterView {
   private movementStartedAt = 0;
   private movementDuration = 1;
   private moving = false;
-  private lastOutfitKey = '';
+  private lastAppearanceKey = '';
 
   constructor(
     state: PublicPlayerState,
@@ -54,7 +55,7 @@ export class CharacterView {
     this.shadow = new Graphics().ellipse(0, -2, 17, 7).fill({ color: 0x03040a, alpha: 0.48 });
     this.shadow.zIndex = 0;
     this.sprite.anchor.set(0.5, 1);
-    this.sprite.scale.set(1.5);
+    this.sprite.scale.set(OUTFIT_WORLD_SCALE);
     this.sprite.zIndex = 2;
     this.sprite.visible = false;
 
@@ -83,7 +84,7 @@ export class CharacterView {
     this.startX = this.targetX = x;
     this.startY = this.targetY = y;
     this.container.position.set(x, y);
-    this.loadOutfit(state.outfitKey);
+    this.loadOutfit(state.outfitKey, state.gender ?? 'MALE');
   }
 
   sync(state: PublicPlayerState, stepMs: number, immediate = false): void {
@@ -93,7 +94,10 @@ export class CharacterView {
     this.state = state;
     this.nameText.text = `${state.name}  Lv. ${state.level}`;
     this.updateBadgeStyle();
-    if (state.outfitKey !== this.lastOutfitKey) this.loadOutfit(state.outfitKey);
+    const appearanceKey = `${state.gender ?? 'MALE'}:${state.outfitKey}`;
+    if (appearanceKey !== this.lastAppearanceKey) {
+      this.loadOutfit(state.outfitKey, state.gender ?? 'MALE');
+    }
 
     if (immediate || distance > WORLD_TILE_SIZE * 1.6) {
       this.startX = this.targetX = nextX;
@@ -173,13 +177,17 @@ export class CharacterView {
     if (texture && this.sprite.texture !== texture) this.sprite.texture = texture;
   }
 
-  private loadOutfit(outfitKey: string): void {
-    this.lastOutfitKey = outfitKey;
+  private loadOutfit(
+    outfitKey: string,
+    gender: NonNullable<PublicPlayerState['gender']>,
+  ): void {
+    const appearanceKey = `${gender}:${outfitKey}`;
+    this.lastAppearanceKey = appearanceKey;
     this.frames = undefined;
     this.sprite.visible = false;
 
-    void getOutfitSheetFrames(outfitKey).then((frames) => {
-      if (this.destroyed || this.lastOutfitKey !== outfitKey) return;
+    void getOutfitSheetFrames(outfitKey, gender).then((frames) => {
+      if (this.destroyed || this.lastAppearanceKey !== appearanceKey) return;
       if (!frames) {
         console.error(`Outfit frames failed to load for ${outfitKey}.`);
         return;

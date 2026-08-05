@@ -1,4 +1,4 @@
-import type { CharacterClass } from '../contracts/game';
+import type { CharacterClass, CharacterGender } from '../contracts/game';
 
 export interface ClientOutfitDefinition {
   key: string;
@@ -81,12 +81,18 @@ export const CLASS_PRESENTATION: Readonly<
   },
 };
 
-const OUTFIT_ASSET_VERSION = 17;
-const CANONICAL_OUTFIT_ASSET_DIRECTORY = 'assets/sprites/male';
+const OUTFIT_ASSET_VERSION = 18;
 
-export const outfitImageUrl = (outfitKey: string): string =>
-  `${import.meta.env.BASE_URL}${CANONICAL_OUTFIT_ASSET_DIRECTORY}/${encodeURIComponent(outfitKey)}.png?v=${OUTFIT_ASSET_VERSION}`;
+const outfitAssetDirectory = (gender: CharacterGender): string =>
+  `assets/sprites/${gender === 'FEMALE' ? 'female' : 'male'}`;
 
-export const outfitImageCandidates = (outfitKey: string): readonly string[] => [
-  outfitImageUrl(outfitKey),
-];
+export const outfitImageUrl = (
+  outfitKey: string,
+  gender: CharacterGender = 'MALE',
+): string =>
+  `${import.meta.env.BASE_URL}${outfitAssetDirectory(gender)}/${encodeURIComponent(outfitKey)}.svg?v=${OUTFIT_ASSET_VERSION}`;
+
+export const outfitImageCandidates = (
+  outfitKey: string,
+  gender: CharacterGender = 'MALE',
+): readonly string[] => [outfitImageUrl(outfitKey, gender)];

@@ -1,16 +1,18 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
-import type { Direction } from '../../contracts/game';
+import type { CharacterGender, Direction } from '../../contracts/game';
 import { outfitImageUrl } from '../../mock/outfitCatalog';
+import {
+  OUTFIT_FRAME_HEIGHT,
+  OUTFIT_FRAME_WIDTH,
+  OUTFIT_SHEET_HEIGHT,
+  OUTFIT_SHEET_WIDTH,
+} from './outfitSpriteMetrics';
 
 export interface OutfitSheetFrames {
   frameDurationMs: number;
   frames: Record<Direction, Texture[]>;
 }
 
-const FRAME_WIDTH = 32;
-const FRAME_HEIGHT = 48;
-const SHEET_WIDTH = 128;
-const SHEET_HEIGHT = 192;
 const directionRows: Record<Direction, number> = { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 };
 const frameCache = new Map<string, Promise<OutfitSheetFrames | undefined>>();
 
@@ -27,10 +29,10 @@ const createFrames = (baseTexture: Texture): OutfitSheetFrames => {
             new Texture({
               source: baseTexture.source,
               frame: new Rectangle(
-                column * FRAME_WIDTH,
-                row * FRAME_HEIGHT,
-                FRAME_WIDTH,
-                FRAME_HEIGHT,
+                column * OUTFIT_FRAME_WIDTH,
+                row * OUTFIT_FRAME_HEIGHT,
+                OUTFIT_FRAME_WIDTH,
+                OUTFIT_FRAME_HEIGHT,
               ),
             }),
         ),
@@ -41,14 +43,20 @@ const createFrames = (baseTexture: Texture): OutfitSheetFrames => {
   return { frameDurationMs: 120, frames };
 };
 
-const loadFrames = async (outfitKey: string): Promise<OutfitSheetFrames> => {
-  const sourceUrl = outfitImageUrl(outfitKey);
+const loadFrames = async (
+  outfitKey: string,
+  gender: CharacterGender,
+): Promise<OutfitSheetFrames> => {
+  const sourceUrl = outfitImageUrl(outfitKey, gender);
   const baseTexture = await Assets.load<Texture>(sourceUrl);
 
-  if (baseTexture.source.width !== SHEET_WIDTH || baseTexture.source.height !== SHEET_HEIGHT) {
+  if (
+    baseTexture.source.width !== OUTFIT_SHEET_WIDTH ||
+    baseTexture.source.height !== OUTFIT_SHEET_HEIGHT
+  ) {
     await Assets.unload(sourceUrl);
     throw new Error(
-      `Outfit ${outfitKey} has invalid dimensions ${baseTexture.source.width}x${baseTexture.source.height}. Expected ${SHEET_WIDTH}x${SHEET_HEIGHT}.`,
+      `Outfit ${outfitKey} has invalid dimensions ${baseTexture.source.width}x${baseTexture.source.height}. Expected ${OUTFIT_SHEET_WIDTH}x${OUTFIT_SHEET_HEIGHT}.`,
     );
   }
 
@@ -57,15 +65,17 @@ const loadFrames = async (outfitKey: string): Promise<OutfitSheetFrames> => {
 
 export const getOutfitSheetFrames = (
   outfitKey: string,
+  gender: CharacterGender = 'MALE',
 ): Promise<OutfitSheetFrames | undefined> => {
-  const cached = frameCache.get(outfitKey);
+  const cacheKey = `${gender}:${outfitKey}`;
+  const cached = frameCache.get(cacheKey);
   if (cached) return cached;
 
-  const loading = loadFrames(outfitKey).catch((error: unknown) => {
-    frameCache.delete(outfitKey);
+  const loading = loadFrames(outfitKey, gender).catch((error: unknown) => {
+    frameCache.delete(cacheKey);
     console.error(`Failed to load outfit ${outfitKey}.`, error);
     return undefined;
   });
-  frameCache.set(outfitKey, loading);
+  frameCache.set(cacheKey, loading);
   return loading;
 };
