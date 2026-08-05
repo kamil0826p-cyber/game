@@ -3,9 +3,10 @@ import { access, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promise
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OUTFIT_DESIGNS, OUTFIT_GENDERS } from './outfit-designs.mjs';
-import { aura, back, faceAndHead, garment, legs, shoulders } from './outfit-generator-body.mjs';
+import { garment, legs, shoulders } from './outfit-generator-body.mjs';
 import { detail, offhand, weapon } from './outfit-generator-equipment.mjs';
 import { advancedDetailLayer } from './outfit-generator-overlay.mjs';
+import { aura, back, faceAndHead } from './outfit-generator-safe-parts.mjs';
 import {
   assetVersion,
   componentSignature,
@@ -65,7 +66,7 @@ const spriteSvg = (design, gender) => {
       }),
     )
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="576" viewBox="0 0 384 576" shape-rendering="geometricPrecision" data-outfit="${esc(design.key)}" data-gender="${gender}" data-title="${esc(design.title)}" data-detail-level="advanced-v3" data-component-signature="${esc(componentSignature(design, gender))}"><defs>${definitions}</defs>${frames}</svg>\n`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="576" viewBox="0 0 384 576" shape-rendering="geometricPrecision" data-outfit="${esc(design.key)}" data-gender="${gender}" data-title="${esc(design.title)}" data-detail-level="advanced-v5-clean" data-random-body-strokes="0" data-clean-occlusion="true" data-horn-count="0" data-component-signature="${esc(componentSignature(design, gender))}"><defs>${definitions}</defs>${frames}</svg>\n`;
 };
 
 const manifestOutfits = () =>
@@ -119,8 +120,11 @@ export async function generateOutfitAssets() {
     for (const gender of OUTFIT_GENDERS) {
       const svg = spriteSvg(design, gender);
       const primitiveCount = (svg.match(/<(path|circle|ellipse|rect|polygon)\b/g) ?? []).length;
-      if (primitiveCount < 260) {
-        throw new Error(`${design.key}/${gender} is below the advanced detail floor (${primitiveCount} primitives).`);
+      if (primitiveCount < 120) {
+        throw new Error(`${design.key}/${gender} is below the clean detail floor (${primitiveCount} primitives).`);
+      }
+      if (svg.includes('data-random-strokes="1"') || svg.includes('data-horn-count="1"')) {
+        throw new Error(`${design.key}/${gender} contains forbidden line noise or horn geometry.`);
       }
       await writeFile(resolve(sprites, genderDir[gender], `${design.key}.svg`), svg);
       hashes.push(createHash('sha256').update(svg).digest('hex'));
