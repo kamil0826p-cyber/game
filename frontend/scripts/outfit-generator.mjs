@@ -5,7 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { OUTFIT_DESIGNS, OUTFIT_GENDERS } from './outfit-designs.mjs';
 import { aura, back, faceAndHead, garment, legs, shoulders } from './outfit-generator-body.mjs';
 import { detail, offhand, weapon } from './outfit-generator-equipment.mjs';
-import { assetVersion, componentSignature, esc, frameHeight, frameWidth, metrics } from './outfit-generator-utils.mjs';
+import { advancedDetailLayer } from './outfit-generator-overlay.mjs';
+import {
+  assetVersion,
+  componentSignature,
+  esc,
+  frameHeight,
+  frameWidth,
+  metrics,
+} from './outfit-generator-utils.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const assets = resolve(here, '..', 'public', 'assets');
@@ -30,32 +38,69 @@ const pose = (design, gender, direction) => {
     weapon(variant.weapon, design.characterClass, design.palette),
     offhand(variant.offhand, design.palette),
     detail(variant.detail, design.palette, shape),
+    advancedDetailLayer({
+      design,
+      gender,
+      variant,
+      shape,
+      direction: localDirection,
+      seed,
+    }),
   ].join('');
-  return direction === 'EAST' ? `<g transform="translate(96 0) scale(-1 1)">${content}</g>` : content;
+  return direction === 'EAST'
+    ? `<g transform="translate(96 0) scale(-1 1)">${content}</g>`
+    : content;
 };
 
 const spriteSvg = (design, gender) => {
-  const definitions = directions.map((direction) => `<g id="pose-${direction.toLowerCase()}">${pose(design, gender, direction)}</g>`).join('');
-  const frames = directions.flatMap((direction, row) => Array.from({ length: 4 }, (_, frame) => {
-    const bounce = walk[frame] * 0.35;
-    const lean = frame === 1 ? 0.8 : frame === 3 ? -0.8 : 0;
-    return `<g data-frame="${direction}-${frame}" transform="translate(${frame * frameWidth} ${row * frameHeight})"><g transform="translate(0 ${bounce}) skewX(${lean})"><use href="#pose-${direction.toLowerCase()}"/></g></g>`;
-  })).join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="576" viewBox="0 0 384 576" data-outfit="${esc(design.key)}" data-gender="${gender}" data-title="${esc(design.title)}" data-component-signature="${esc(componentSignature(design, gender))}"><defs>${definitions}</defs>${frames}</svg>\n`;
+  const definitions = directions
+    .map((direction) => `<g id="pose-${direction.toLowerCase()}">${pose(design, gender, direction)}</g>`)
+    .join('');
+  const frames = directions
+    .flatMap((direction, row) =>
+      Array.from({ length: 4 }, (_, frame) => {
+        const bounce = walk[frame] * 0.35;
+        const lean = frame === 1 ? 0.8 : frame === 3 ? -0.8 : 0;
+        return `<g data-frame="${direction}-${frame}" transform="translate(${frame * frameWidth} ${row * frameHeight})"><g transform="translate(0 ${bounce}) skewX(${lean})"><use href="#pose-${direction.toLowerCase()}"/></g></g>`;
+      }),
+    )
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="576" viewBox="0 0 384 576" shape-rendering="geometricPrecision" data-outfit="${esc(design.key)}" data-gender="${gender}" data-title="${esc(design.title)}" data-detail-level="advanced-v3" data-component-signature="${esc(componentSignature(design, gender))}"><defs>${definitions}</defs>${frames}</svg>\n`;
 };
 
-const manifestOutfits = () => Object.fromEntries(OUTFIT_DESIGNS.map((design) => [design.key, {
-  image: `/assets/sprites/male/${design.key}.svg?v=${assetVersion}`,
-  images: { MALE: `/assets/sprites/male/${design.key}.svg?v=${assetVersion}`, FEMALE: `/assets/sprites/female/${design.key}.svg?v=${assetVersion}` },
-  frameWidth, frameHeight, columns: 4, rows: 4, framesPerDirection: 4, frameDurationMs: 120,
-  directionRows: { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 },
-  characterClass: design.characterClass, unlockLevel: design.unlockLevel,
-}]));
+const manifestOutfits = () =>
+  Object.fromEntries(
+    OUTFIT_DESIGNS.map((design) => [
+      design.key,
+      {
+        image: `/assets/sprites/male/${design.key}.svg?v=${assetVersion}`,
+        images: {
+          MALE: `/assets/sprites/male/${design.key}.svg?v=${assetVersion}`,
+          FEMALE: `/assets/sprites/female/${design.key}.svg?v=${assetVersion}`,
+        },
+        frameWidth,
+        frameHeight,
+        columns: 4,
+        rows: 4,
+        framesPerDirection: 4,
+        frameDurationMs: 120,
+        directionRows: { SOUTH: 0, WEST: 1, EAST: 2, NORTH: 3 },
+        characterClass: design.characterClass,
+        unlockLevel: design.unlockLevel,
+      },
+    ]),
+  );
 
 const validate = () => {
-  if (OUTFIT_DESIGNS.length !== 33) throw new Error(`Expected 33 outfits, got ${OUTFIT_DESIGNS.length}.`);
-  const signatures = OUTFIT_DESIGNS.flatMap((design) => OUTFIT_GENDERS.map((gender) => componentSignature(design, gender)));
-  if (new Set(signatures).size !== 66) throw new Error('All 66 variants must have unique structural component signatures.');
+  if (OUTFIT_DESIGNS.length !== 33) {
+    throw new Error(`Expected 33 outfits, got ${OUTFIT_DESIGNS.length}.`);
+  }
+  const signatures = OUTFIT_DESIGNS.flatMap((design) =>
+    OUTFIT_GENDERS.map((gender) => componentSignature(design, gender)),
+  );
+  if (new Set(signatures).size !== 66) {
+    throw new Error('All 66 variants must have unique structural component signatures.');
+  }
 };
 
 export async function generateOutfitAssets() {
@@ -64,17 +109,30 @@ export async function generateOutfitAssets() {
   for (const gender of OUTFIT_GENDERS) {
     const directory = resolve(sprites, genderDir[gender]);
     await mkdir(directory, { recursive: true });
-    for (const file of await readdir(directory)) if (file.endsWith('.png') || file.endsWith('.svg')) await rm(resolve(directory, file));
+    for (const file of await readdir(directory)) {
+      if (file.endsWith('.png') || file.endsWith('.svg')) await rm(resolve(directory, file));
+    }
   }
+
   const hashes = [];
-  for (const design of OUTFIT_DESIGNS) for (const gender of OUTFIT_GENDERS) {
-    const svg = spriteSvg(design, gender);
-    await writeFile(resolve(sprites, genderDir[gender], `${design.key}.svg`), svg);
-    hashes.push(createHash('sha256').update(svg).digest('hex'));
+  for (const design of OUTFIT_DESIGNS) {
+    for (const gender of OUTFIT_GENDERS) {
+      const svg = spriteSvg(design, gender);
+      const primitiveCount = (svg.match(/<(path|circle|ellipse|rect|polygon)\b/g) ?? []).length;
+      if (primitiveCount < 260) {
+        throw new Error(`${design.key}/${gender} is below the advanced detail floor (${primitiveCount} primitives).`);
+      }
+      await writeFile(resolve(sprites, genderDir[gender], `${design.key}.svg`), svg);
+      hashes.push(createHash('sha256').update(svg).digest('hex'));
+    }
   }
   if (new Set(hashes).size !== 66) throw new Error('Generated SVG contents are not unique.');
+
   const manifestPath = resolve(assets, 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  await writeFile(manifestPath, `${JSON.stringify({ ...manifest, version: assetVersion, outfits: manifestOutfits() })}\n`);
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ ...manifest, version: assetVersion, outfits: manifestOutfits() }, null, 2)}\n`,
+  );
   return { sheets: 66, uniqueHashes: 66, uniqueStructuralSignatures: 66, assetVersion };
 }
