@@ -35,25 +35,26 @@ The replacement sheets use vector-authored detail inside a `384x576` canvas, wit
 - 11 outfits each for mage, warrior, and archer;
 - 4 directions and 4 walk frames per sheet;
 - distinct silhouettes, hair, armor/robe construction, weapons, palettes, heraldry, and high-tier effects;
-- all old PNG files removed and replaced by self-contained SVG sprite sheets, so no stale sprite file remains under either gender directory.
+- stale generated recolor sheets are removed from source control and recreated by the generator before dev, build, and test.
 
-The committed sheets are self-contained SVG image files generated deterministically by the existing asset script. Each sheet contains 16 vector animation cells, so the source remains sharp at the renderer's DPR cap without introducing a new binary-art pipeline.
+The deterministic second-generation generator uses 66 hand-authored structural specifications rather than a shared body with palette recolors. Every variant independently selects its body profile, garment construction, headgear, shoulders, weapons, back item, aura, and emblem. See `CHARACTER_OUTFIT_GENERATOR.md` for the one-command workflow.
 
 ## Runtime changes
 
-- gender now participates in the sprite URL and texture cache key;
+- gender participates in the sprite URL and texture cache key;
 - world, creator, and roster previews pass the character gender;
 - callers without gender retain the compatible `MALE` fallback;
 - frame slicing uses `96x144` and validates `384x576` sheets;
 - the world sprite scale is `0.5`, preserving the previous on-map size;
-- asset version increased to `18` to invalidate cached legacy sheets.
+- asset version increased to `19` to invalidate cached legacy sheets.
 
 ## Regression coverage
 
 Tests verify that:
 
-- both directories contain exactly 33 SVG sprite files;
+- both generated directories contain exactly 33 SVG sprite files;
 - all sheets are `384x576`;
 - all 66 files have distinct SHA-256 hashes;
-- every outfit has a distinct male and female drawing;
+- all 66 files expose distinct structural component signatures;
+- male and female variants differ in at least six construction fields for every outfit;
 - every URL resolves to the requested gender without cross-outfit fallback.

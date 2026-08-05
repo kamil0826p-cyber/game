@@ -26,13 +26,13 @@ describe('outfit catalog', () => {
     expect(new Set([...malePaths, ...femalePaths]).size).toBe(66);
     expect(malePaths.every((path) => path.includes('assets/sprites/male/'))).toBe(true);
     expect(femalePaths.every((path) => path.includes('assets/sprites/female/'))).toBe(true);
-    expect([...malePaths, ...femalePaths].every((path) => path.endsWith('.svg?v=18'))).toBe(true);
+    expect([...malePaths, ...femalePaths].every((path) => path.endsWith('.svg?v=19'))).toBe(true);
   });
 
   it('encodes outfit keys before building the gender-specific asset URL', () => {
-    expect(outfitImageUrl('future outfit', 'MALE')).toContain('future%20outfit.svg?v=18');
+    expect(outfitImageUrl('future outfit', 'MALE')).toContain('future%20outfit.svg?v=19');
     expect(outfitImageUrl('future outfit', 'FEMALE')).toContain(
-      'sprites/female/future%20outfit.svg?v=18',
+      'sprites/female/future%20outfit.svg?v=19',
     );
   });
 
