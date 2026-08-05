@@ -13,18 +13,18 @@ describe('outfit catalog', () => {
     expect(new Set(keys).size).toBe(33);
   });
 
-  it('builds a distinct version-20 SVG URL for every outfit and gender', () => {
+  it('builds a distinct version-22 SVG URL for every outfit and gender', () => {
     const keys = Object.values(OUTFIT_CATALOG).flat().map((outfit) => outfit.key);
     const urls = keys.flatMap((key) => [outfitImageUrl(key, 'MALE'), outfitImageUrl(key, 'FEMALE')]);
     expect(new Set(urls).size).toBe(66);
-    expect(urls.every((url) => url.endsWith('.svg?v=20'))).toBe(true);
+    expect(urls.every((url) => url.endsWith('.svg?v=22'))).toBe(true);
     expect(urls.filter((url) => url.includes('/male/'))).toHaveLength(33);
     expect(urls.filter((url) => url.includes('/female/'))).toHaveLength(33);
   });
 
   it('encodes keys and never substitutes another outfit or gender', () => {
-    expect(outfitImageUrl('future outfit', 'MALE')).toContain('/male/future%20outfit.svg?v=20');
-    expect(outfitImageUrl('future outfit', 'FEMALE')).toContain('/female/future%20outfit.svg?v=20');
+    expect(outfitImageUrl('future outfit', 'MALE')).toContain('/male/future%20outfit.svg?v=22');
+    expect(outfitImageUrl('future outfit', 'FEMALE')).toContain('/female/future%20outfit.svg?v=22');
     for (const outfit of Object.values(OUTFIT_CATALOG).flat()) {
       expect(outfitImageCandidates(outfit.key, 'MALE')).toEqual([outfitImageUrl(outfit.key, 'MALE')]);
       expect(outfitImageCandidates(outfit.key, 'FEMALE')).toEqual([outfitImageUrl(outfit.key, 'FEMALE')]);
