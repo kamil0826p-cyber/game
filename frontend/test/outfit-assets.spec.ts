@@ -12,6 +12,11 @@ const genders: ReadonlyArray<{ gender: CharacterGender; directory: 'male' | 'fem
 
 const svgText = (path: string): string => readFileSync(path, 'utf8');
 const sha256 = (path: string): string => createHash('sha256').update(svgText(path)).digest('hex');
+const attribute = (svg: string, name: string): string => {
+  const value = svg.match(new RegExp(`${name}="([^"]+)"`))?.[1];
+  if (!value) throw new Error(`Missing ${name} on generated SVG.`);
+  return value;
+};
 
 describe('high-resolution outfit assets', () => {
   const outfits = Object.values(OUTFIT_CATALOG).flat();
@@ -28,7 +33,8 @@ describe('high-resolution outfit assets', () => {
         expect(svg).toContain('width="384" height="576"');
         expect(svg).toContain('viewBox="0 0 384 576"');
         expect(svg).toContain(`data-gender="${gender}"`);
-        expect((svg.match(/<use href="#c"/g) ?? [])).toHaveLength(16);
+        expect((svg.match(/data-frame="/g) ?? [])).toHaveLength(16);
+        expect((svg.match(/data-part="/g) ?? []).length).toBeGreaterThan(25);
         expect(outfitImageCandidates(outfit.key, gender)).toEqual([outfitImageUrl(outfit.key, gender)]);
       }
     }
@@ -41,11 +47,29 @@ describe('high-resolution outfit assets', () => {
     expect(new Set(hashes).size).toBe(66);
   });
 
-  it('uses a distinct male and female drawing for every outfit key', () => {
+  it('uses 66 distinct structural component combinations, not recolors', () => {
+    const signatures = genders.flatMap(({ directory }) =>
+      outfits.map((outfit) =>
+        attribute(
+          svgText(resolve('public/assets/sprites', directory, `${outfit.key}.svg`)),
+          'data-component-signature',
+        ),
+      ),
+    );
+    expect(new Set(signatures).size).toBe(66);
+  });
+
+  it('gives male and female variants substantially different construction', () => {
     for (const outfit of outfits) {
-      expect(sha256(resolve('public/assets/sprites/male', `${outfit.key}.svg`))).not.toBe(
-        sha256(resolve('public/assets/sprites/female', `${outfit.key}.svg`)),
-      );
+      const male = attribute(
+        svgText(resolve('public/assets/sprites/male', `${outfit.key}.svg`)),
+        'data-component-signature',
+      ).split('|');
+      const female = attribute(
+        svgText(resolve('public/assets/sprites/female', `${outfit.key}.svg`)),
+        'data-component-signature',
+      ).split('|');
+      expect(male.filter((component, index) => component !== female[index]).length).toBeGreaterThanOrEqual(6);
     }
   });
 });
