@@ -8,13 +8,14 @@ const material = (value) => has(value, ['plate', 'armor', 'mail', 'scale'])
       ? 'leather'
       : 'cloth';
 
-const torso = (variant, palette, m) => {
+const torso = (variant, palette, m, direction) => {
   const [dark, base, accent, glow] = palette;
   const kind = material(variant.garment);
   const left = Math.round(48 - m.waist - 5);
   const right = Math.round(48 + m.waist + 5);
   const top = Math.round(m.y + 14);
   const bottom = 104;
+  const clipId = `torso-${esc(variant.detail)}-${direction.toLowerCase()}`;
   let pattern = '';
   if (kind === 'metal') {
     pattern = `<path d="M34 ${top + 2}l14 8 14-8M32 ${top + 21}h32M35 ${top + 37}h26M48 ${top + 10}v43" fill="none" stroke="${glow}" stroke-width="1.4" opacity=".7"/>${[[37, top + 18], [59, top + 18], [38, top + 34], [58, top + 34]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.5" fill="${glow}" stroke="${outline}" stroke-width=".6"/>`).join('')}`;
@@ -25,7 +26,7 @@ const torso = (variant, palette, m) => {
   } else {
     pattern = [36, 42, 48, 54, 60].map((x, i) => `<path d="M${x} ${top + 2}q${i % 2 ? 3 : -3} 18 ${i % 2 ? 1 : -1} ${bottom - top - 6}" fill="none" stroke="${i === 2 ? glow : accent}" stroke-width="1.1" opacity=".55"/>`).join('');
   }
-  return `<g data-part="advanced-torso" data-material="${kind}" data-random-strokes="0"><clipPath id="torso-${esc(variant.detail)}"><path d="M${left} ${top}Q48 ${top - 8} ${right} ${top}L${right - 2} ${bottom}Q48 ${bottom + 7} ${left + 2} ${bottom}z"/></clipPath><g clip-path="url(#torso-${esc(variant.detail)})">${pattern}</g><path d="M${left} 94q${48 - left} 5 ${right - left} 0" fill="none" stroke="${outline}" stroke-width="6"/><path d="M${left + 1} 94q${47 - left} 4 ${right - left - 2} 0" fill="none" stroke="${accent}" stroke-width="2.5"/><rect x="43" y="90" width="10" height="10" rx="2" fill="${base}" stroke="${outline}" stroke-width="2"/><rect x="46" y="93" width="4" height="4" fill="${glow}"/></g>`;
+  return `<g data-part="advanced-torso" data-material="${kind}" data-random-strokes="0"><clipPath id="${clipId}"><path d="M${left} ${top}Q48 ${top - 8} ${right} ${top}L${right - 2} ${bottom}Q48 ${bottom + 7} ${left + 2} ${bottom}z"/></clipPath><g clip-path="url(#${clipId})">${pattern}</g><path d="M${left} 94q${48 - left} 5 ${right - left} 0" fill="none" stroke="${outline}" stroke-width="6"/><path d="M${left + 1} 94q${47 - left} 4 ${right - left - 2} 0" fill="none" stroke="${accent}" stroke-width="2.5"/><rect x="43" y="90" width="10" height="10" rx="2" fill="${base}" stroke="${outline}" stroke-width="2"/><rect x="46" y="93" width="4" height="4" fill="${glow}"/></g>`;
 };
 
 const arms = (variant, palette, m, direction) => {
@@ -41,4 +42,4 @@ const trim = (palette, m) => {
 };
 
 export const advancedDetailLayer = ({ variant, shape, direction, design }) =>
-  `<g data-part="advanced-detail-layer" data-style="${esc(variant.detail)}" data-random-strokes="0" data-duplicates-head="0" data-duplicates-weapon="0">${torso(variant, design.palette, shape)}${arms(variant, design.palette, shape, direction)}${trim(design.palette, shape)}</g>`;
+  `<g data-part="advanced-detail-layer" data-style="${esc(variant.detail)}" data-random-strokes="0" data-duplicates-head="0" data-duplicates-weapon="0">${torso(variant, design.palette, shape, direction)}${arms(variant, design.palette, shape, direction)}${trim(design.palette, shape)}</g>`;
