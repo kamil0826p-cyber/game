@@ -6,7 +6,8 @@ import { OUTFIT_DESIGNS, OUTFIT_GENDERS } from './outfit-designs.mjs';
 import { garment, legs, shoulders } from './outfit-generator-body.mjs';
 import { detail, offhand, weapon } from './outfit-generator-equipment.mjs';
 import { advancedDetailLayer } from './outfit-generator-overlay.mjs';
-import { aura, back, faceAndHead } from './outfit-generator-safe-parts.mjs';
+import { aura, back } from './outfit-generator-safe-parts.mjs';
+import { faceAndHead } from './outfit-generator-safe-head.mjs';
 import {
   assetVersion,
   componentSignature,
